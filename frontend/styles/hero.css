@@ -103,31 +103,44 @@
 .tadaima-hero .hero-row__inner[aria-expanded="true"] .hero-row__label::after { transform: scaleX(1); transform-origin: 0% 50%; }
 .tadaima-hero .hero-row__inner:focus-visible { outline: none; }
 
-/* typing an address: the row becomes an underlined field */
-.tadaima-hero .hero-row__inner.is-form { width: min(380px, calc(100vw - 2 * var(--hero-left))); cursor: text; }
-.tadaima-hero .hero-row__field {
+/* typing an address: a field takes the option's place, drawn over it so nothing shifts */
+.tadaima-hero .hero-row--scan,
+.tadaima-hero .hero-row--type { position: relative; }
+/* while the field is open its option label is tucked away, underline included */
+.tadaima-hero .hero-row--type .hero-row__inner[aria-expanded="true"] .hero-row__label::after { opacity: 0; }
+.tadaima-hero .hero-type {
+  position: absolute;
+  z-index: 2;
+  left: 0;
+  top: 0;
   display: flex;
-  flex: 1 1 auto;
   align-items: baseline;
   gap: 12px;
-  min-width: 0;
+  width: min(360px, calc(100vw - 2 * var(--hero-left)));
   padding-bottom: 6px;
-  border-bottom: 1px solid var(--hero-fg);
 }
-.tadaima-hero .hero-row__field input {
+.tadaima-hero .hero-type input {
   flex: 1 1 auto;
   min-width: 0;
   padding: 0;
   border: 0;
   background: none;
   font-family: var(--font-display), system-ui, sans-serif;
-  font-size: 18px;
-  line-height: 24px;
-  letter-spacing: -0.015em;
+  font-size: 17px;
+  line-height: 22px;
+  letter-spacing: -0.01em;
   color: var(--hero-fg);
   outline: none;
 }
-.tadaima-hero .hero-row__field input::placeholder { color: var(--hero-muted); opacity: 0.7; }
+.tadaima-hero .hero-type input::placeholder { color: var(--hero-muted); opacity: 0.85; }
+.tadaima-hero .hero-type__line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 1px;
+  background: var(--hero-fg);
+}
 .tadaima-hero .hero-row__go {
   padding: 0;
   border: 0;
@@ -138,12 +151,24 @@
 }
 .tadaima-hero .hero-row__go:focus-visible { text-decoration: underline; outline: none; }
 
-/* the QR code and errors drop down under the bar */
+/* the QR code drops down under Scan your room; notes drop under the bar */
 .tadaima-hero .hero-error,
 .tadaima-hero .hero-qr {
   position: absolute;
   left: 0;
   top: calc(100% + 22px);
+}
+.tadaima-hero .hero-qr { top: calc(100% + 16px); }
+.tadaima-hero .hero-qr .code { position: relative; overflow: hidden; }
+.tadaima-hero .hero-qr__scan {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--hero-sun), transparent);
+  box-shadow: 0 0 12px 2px rgba(240, 182, 76, 0.55);
+  opacity: 0;
 }
 .tadaima-hero .hero-error {
   width: 260px;

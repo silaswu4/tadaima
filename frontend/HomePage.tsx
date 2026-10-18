@@ -100,7 +100,15 @@ export default function Home() {
   const [address, setAddress] = useState("");
   const [addressError, setAddressError] = useState("");
   const [signInNote, setSignInNote] = useState(false);
+  // the QR panel and the address field stay mounted while they animate out
+  const [qrShown, setQrShown] = useState(false);
+  const [typeShown, setTypeShown] = useState(false);
   const addressRef = useRef<HTMLInputElement>(null);
+  const qrRef = useRef<HTMLDivElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
+  const typeLabelRef = useRef<HTMLSpanElement>(null);
+  const qrAnim = useRef<gsap.core.Timeline | null>(null);
+  const typeAnim = useRef<gsap.core.Timeline | null>(null);
   const reveal = useCallback(() => setRevealed(true), []);
   const finishLoading = useCallback(() => setLoaderGone(true), []);
   useLayoutEffect(() => (arrivedByWipe ? whenWipeLifts(reveal) : undefined), [arrivedByWipe, reveal]);
@@ -121,26 +129,94 @@ export default function Home() {
     return () => ctx.revert();
   }, [revealed, reduced]);
 
+  // make the code up front so the panel can animate it in the moment it opens
+  useLayoutEffect(() => {
+    const url = `${window.location.origin}/capture`;
+    toDataURL(url, { width: 296, margin: 1, color: { dark: "#2B1A10", light: "#F6EBD9" }, errorCorrectionLevel: "M" })
+      .then((data) => {
+        setCaptureUrl(url);
+        setQr(data);
+      })
+      .catch(() => setQr(null));
+  }, []);
+
   const showScan = useCallback(() => {
     // on a phone the camera is right here, so skip the code
     if (window.matchMedia("(pointer: coarse)").matches) {
       wipe("/capture");
       return;
     }
-    setOpen((o) => (o === "scan" ? null : "scan"));
-    const url = `${window.location.origin}/capture`;
-    setCaptureUrl(url);
-    if (!qr) {
-      toDataURL(url, { width: 296, margin: 1, color: { dark: "#2B1A10", light: "#F6EBD9" }, errorCorrectionLevel: "M" })
-        .then(setQr)
-        .catch(() => setQr(null));
+    if (open === "scan") {
+      setOpen(null);
+      return;
     }
-  }, [qr, wipe]);
+    setQrShown(true);
+    setOpen("scan");
+  }, [open, wipe]);
 
   const showType = useCallback(() => {
+    setTypeShown(true);
     setOpen("type");
-    requestAnimationFrame(() => addressRef.current?.focus());
   }, []);
+
+  // QR panel: drops open from the top, the code sharpens in, a scan line sweeps it once
+  useLayoutEffect(() => {
+    const el = qrRef.current;
+    if (!el) return;
+    qrAnim.current?.kill();
+    if (open === "scan") {
+      if (reduced) return;
+      const q = gsap.utils.selector(el);
+      qrAnim.current = gsap
+        .timeline()
+        .fromTo(el, { clipPath: "inset(0% 0% 100% 0%)", y: -8 }, { clipPath: "inset(0% 0% 0% 0%)", y: 0, duration: 0.6, ease: "power3.inOut" })
+        .fromTo(q(".code img"), { scale: 0.92, filter: "blur(6px)", autoAlpha: 0 }, { scale: 1, filter: "blur(0px)", autoAlpha: 1, duration: 0.7, ease: "power3.out" }, 0.15)
+        .fromTo(q(".hero-qr__scan"), { top: "0%", autoAlpha: 1 }, { top: "100%", duration: 0.9, ease: "power2.inOut" }, 0.35)
+        .to(q(".hero-qr__scan"), { autoAlpha: 0, duration: 0.2 }, ">-0.1")
+        .fromTo(q("small"), { y: 6, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: 0.5, ease: "power3.out" }, 0.45);
+    } else if (qrShown) {
+      if (reduced) {
+        gsap.delayedCall(0, () => setQrShown(false));
+        return;
+      }
+      qrAnim.current = gsap
+        .timeline({ onComplete: () => setQrShown(false) })
+        .to(el, { clipPath: "inset(0% 0% 100% 0%)", y: -6, duration: 0.45, ease: "power3.in" });
+    }
+  }, [open, qrShown, reduced]);
+
+  // address field: the label slides up out of view, the underline draws in, the field rises in
+  useLayoutEffect(() => {
+    const form = formRef.current;
+    const label = typeLabelRef.current;
+    if (!form || !label) return;
+    typeAnim.current?.kill();
+    const q = gsap.utils.selector(form);
+    if (open === "type") {
+      addressRef.current?.focus({ preventScroll: true });
+      if (reduced) {
+        gsap.set(label, { yPercent: -140 });
+        return;
+      }
+      typeAnim.current = gsap
+        .timeline()
+        .to(label, { yPercent: -140, duration: 0.45, ease: "power3.in" })
+        .fromTo(q(".hero-type__line"), { scaleX: 0, transformOrigin: "0% 50%" }, { scaleX: 1, duration: 0.7, ease: "power3.inOut" }, 0.1)
+        // opacity, not autoAlpha: a hidden field would drop its focus and close itself
+        .fromTo(q("input, .hero-row__go"), { y: 12, opacity: 0 }, { y: 0, opacity: 1, duration: 0.6, ease: "power3.out", stagger: 0.08 }, 0.3);
+    } else if (typeShown) {
+      if (reduced) {
+        gsap.set(label, { yPercent: 0 });
+        gsap.delayedCall(0, () => setTypeShown(false));
+        return;
+      }
+      typeAnim.current = gsap
+        .timeline({ onComplete: () => setTypeShown(false) })
+        .to(q("input, .hero-row__go"), { y: -8, opacity: 0, duration: 0.25, ease: "power2.in" })
+        .to(q(".hero-type__line"), { scaleX: 0, transformOrigin: "100% 50%", duration: 0.45, ease: "power3.inOut" }, 0.05)
+        .fromTo(label, { yPercent: 140 }, { yPercent: 0, duration: 0.7, ease: "power4.out" }, 0.3);
+    }
+  }, [open, typeShown, reduced]);
 
   const submitAddress = (e: FormEvent) => {
     e.preventDefault();
@@ -191,51 +267,81 @@ export default function Home() {
                 </span>
               </button>
             </li>
-            {ROWS.map((row) => (
-              <li key={row.key} className="hero-row">
-                {row.key === "type" && open === "type" ? (
-                  <form className="hero-row__inner is-form" onSubmit={submitAddress}>
-                    <span className="hero-row__field">
-                      <label htmlFor="hero-address" hidden>
-                        Address
-                      </label>
-                      <input
-                        id="hero-address"
-                        ref={addressRef}
-                        name="address"
-                        type="text"
-                        autoComplete="street-address"
-                        maxLength={512}
-                        aria-describedby={addressError ? "hero-address-error" : undefined}
-                        placeholder="580 Gayley Ave, Los Angeles"
-                        value={address}
-                        onChange={(e) => {
-                          setAddress(e.target.value);
-                          setAddressError("");
-                        }}
-                        onKeyDown={(e) => e.key === "Escape" && setOpen(null)}
-                      />
-                      <button type="submit" className="hero-row__go">
-                        Go
-                      </button>
-                    </span>
-                  </form>
-                ) : row.key === "demo" ? (
-                  <WipeLink href="/rooms" className="hero-row__inner">
-                    <RowText row={row} />
-                  </WipeLink>
-                ) : (
-                  <button
-                    type="button"
-                    className="hero-row__inner"
-                    onClick={row.key === "scan" ? showScan : showType}
-                    aria-expanded={row.key === "scan" ? open === "scan" : undefined}
-                  >
-                    <RowText row={row} />
+            <li className="hero-row hero-row--scan">
+              <button type="button" className="hero-row__inner" onClick={showScan} aria-expanded={open === "scan"}>
+                <RowText row={ROWS[0]} />
+              </button>
+              {qrShown ? (
+                <div className="hero-qr" ref={qrRef}>
+                  <div className="code">
+                    {qr ? (
+                      <>
+                        {/* data URL, so next/image has nothing to optimize */}
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={qr} alt="QR code that opens the capture page on your phone" />
+                      </>
+                    ) : null}
+                    <span className="hero-qr__scan" aria-hidden="true" />
+                  </div>
+                  <small>
+                    Point your phone here, or <a href={captureUrl}>open capture on this device</a>.
+                  </small>
+                </div>
+              ) : null}
+            </li>
+            <li className="hero-row hero-row--type">
+              <button
+                type="button"
+                className="hero-row__inner"
+                onClick={showType}
+                aria-expanded={open === "type"}
+                tabIndex={typeShown ? -1 : 0}
+                aria-hidden={typeShown || undefined}
+              >
+                <span className="hero-row__text">
+                  <span className="hero-row__label" ref={typeLabelRef}>
+                    {ROWS[1].label}
+                  </span>
+                </span>
+              </button>
+              {typeShown ? (
+                <form className="hero-type" ref={formRef} onSubmit={submitAddress}>
+                  <label htmlFor="hero-address" hidden>
+                    Address
+                  </label>
+                  <input
+                    id="hero-address"
+                    ref={addressRef}
+                    name="address"
+                    type="text"
+                    autoComplete="street-address"
+                    maxLength={512}
+                    aria-describedby={addressError ? "hero-address-error" : undefined}
+                    placeholder="580 Gayley Ave, Los Angeles"
+                    value={address}
+                    onChange={(e) => {
+                      setAddress(e.target.value);
+                      setAddressError("");
+                    }}
+                    onKeyDown={(e) => e.key === "Escape" && setOpen(null)}
+                    onBlur={(e) => {
+                      // leaving an empty field puts the option back
+                      const next = e.relatedTarget as Node | null;
+                      if (!address.trim() && !(next && formRef.current?.contains(next))) setOpen(null);
+                    }}
+                  />
+                  <button type="submit" className="hero-row__go">
+                    Go
                   </button>
-                )}
-              </li>
-            ))}
+                  <span className="hero-type__line" aria-hidden="true" />
+                </form>
+              ) : null}
+            </li>
+            <li className="hero-row">
+              <WipeLink href="/rooms" className="hero-row__inner">
+                <RowText row={ROWS[2]} />
+              </WipeLink>
+            </li>
           </ul>
 
           {signInNote ? (
@@ -250,20 +356,6 @@ export default function Home() {
             </small>
           ) : null}
 
-          {open === "scan" && (
-            <div className="hero-qr">
-              {qr ? (
-                <div className="code">
-                  {/* data URL, so next/image has nothing to optimize */}
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={qr} alt="QR code that opens the capture page on your phone" />
-                </div>
-              ) : null}
-              <small>
-                Point your phone here, or <a href={captureUrl}>open capture on this device</a>.
-              </small>
-            </div>
-          )}
         </div>
 
       </DappledLight>
