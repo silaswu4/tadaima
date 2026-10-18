@@ -61,6 +61,8 @@ For visual QA without a headset, open `/dev/vr-ui`. It displays the exact menu c
 
 ## Get the scanned room onto Quest
 
+The owner-authorized cleaned scan is now included in the repository. Open `/rooms/scanned-living-room`, or choose **Scanned living room** from `/rooms`. The model, sanitized geometry and baked lighting ship with a normal checkout/deployment; no capture token is required. The original private imported room and its edits remain separate. See [published scan provenance](../public/demo/scanned-living-room/README.md).
+
 The Mac browser's imported JSON/GLB and IndexedDB storage are **not shared** with the headset browser. Opening `/rooms` alone does not transfer a room imported on the Mac. Import the matching processed reconstruction JSON and optional clean GLB using **Open scan**, or use the private local bridge below. Successful imports persist in the headset browser's private room registry across gallery navigation and refresh. Use matching reconstruction artifacts; do not use the fragmented raw LiDAR mesh as the primary shopping room.
 
 Browser storage is scoped to the origin: `localhost:3017` and `127.0.0.1:3017` have different saved rooms, as do different browsers. Clearing site data removes these local records. There is no account sync in this integration. See [website flow](website-flow.md) for source identity, editable drafts and the preview basket boundary.
@@ -135,11 +137,11 @@ Automated tests cover metric teleport/snap pivot math, user-gesture entry, suppo
 npx tsx --test spatial/tests/test-workspace-xr.mjs
 ```
 
-The updated 30 focused XR checks and five room-action checks cover direct head-relative walking, frame-delta clamping, shared swept collision delegation, focus pause/neutral rearming, simultaneous walk/turn head-pivot preservation, bounded action dispatch and disabled-panel click-through, in addition to the earlier session/teleport/selection cases. These are synthetic Three.js/controller tests.
+The current 35 focused XR checks, eight room-action checks and seven menu checks cover direct head-relative walking, frame-delta clamping, shared swept collision delegation, focus pause/neutral rearming, simultaneous walk/turn head-pivot preservation, bounded action dispatch and disabled-panel click-through, in addition to the earlier session/teleport/selection cases. These are synthetic Three.js/controller tests.
 
 Physical Quest 3S connection is now confirmed: USB device authorized, browser version `154.0.0.45.15.1092497976`, local scan JSON/model reachable, JSON SHA-256 matching the saved room, and 28 captured objects. A wearer confirmed the room works; a local headset framebuffer capture showed stereo rendering of the measured room, furniture selection and controller rays. This establishes physical room rendering, not headset frame rate, shopping completion or the updated walking/controller feel. The remaining checklist requires wearer verification. Losing controller tracking or opening immersive browser/system UI cancels an armed teleport; it is not treated as a deliberate stick release.
 
-The current clean-room artifact measured 5,426,232 bytes, 75,124 triangles, 61 glTF meshes, 102 material primitives, and four embedded images. These are asset counts, not a headset frame-rate measurement. Prefer the clean room over the recovered 85 MB raw mesh, use the lighter shadow configuration, and check performance on the actual Quest 3S before increasing texture resolution or adding many products.
+The published clean-room artifact measures 8,553,012 bytes, 75,124 triangles, 61 glTF meshes, 102 material primitives and 5 embedded images. These are asset counts, not a headset frame-rate measurement. Prefer this cleaned room over the recovered raw mesh; keep the lighter Quest shadow configuration and verify actual device performance before increasing texture resolution or adding many products.
 
 ## Renderer integration
 
