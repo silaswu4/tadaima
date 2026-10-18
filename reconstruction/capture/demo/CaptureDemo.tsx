@@ -1,8 +1,11 @@
 "use client";
 
+import gsap from "gsap";
 import Image from "next/image";
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
+import mark from "@/spatial/assets/tadaima-mark.png";
+import { WipeLink } from "@/spatial/components/PageWipe";
 import {
   buildCaptureZip,
   captureFrame,
@@ -41,6 +44,11 @@ export default function CaptureDemo() {
   const cameraEpoch = useRef(0);
   const photoRef = useRef(photos);
   const alive = useRef(true);
+  // motion only: refs the GSAP layer reads, nothing in the capture flow depends on them
+  const root = useRef<HTMLElement>(null);
+  const stepBar = useRef<HTMLSpanElement>(null);
+  const lastSaved = useRef<CaptureWall | null>(null);
+  const firstStep = useRef(true);
 
   const closeCamera = useCallback(() => {
     cameraEpoch.current++;
@@ -136,6 +144,7 @@ export default function CaptureDemo() {
       },
     };
     photoRef.current = next;
+    lastSaved.current = targetWall;
     setPhotos(next);
     setNotice(
       `Wall ${targetWall.toUpperCase()} saved. ${qualityWarnings(result.photo).join(" ")}`,
@@ -188,6 +197,57 @@ export default function CaptureDemo() {
   }
 
   const photoCount = walls.filter((key) => photos[key]).length;
+
+  const reduced = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  // the page sets in: headline lines rise, then the rest staggers up
+  useLayoutEffect(() => {
+    if (!root.current || reduced()) return;
+    const ctx = gsap.context(() => {
+      gsap
+        .timeline({ defaults: { ease: "power3.out" } })
+        .fromTo(".capture-header > *", { y: -8, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: 0.6, stagger: 0.06 })
+        .fromTo(".capture-eyebrow", { y: 10, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: 0.6 }, 0.1)
+        .fromTo(".capture-line > span", { yPercent: 110 }, { yPercent: 0, duration: 1.05, ease: "power4.out", stagger: 0.1 }, 0.15)
+        .fromTo(".capture-lede, .capture-steps, .capture-localNote", { y: 14, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: 0.8, stagger: 0.08 }, 0.45)
+        .fromTo(".capture-stage > *", { y: 24, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: 0.9, stagger: 0.1 }, 0.65);
+    }, root);
+    return () => ctx.revert();
+  }, []);
+
+  // the step indicator slides under the current step; the new step's content eases in
+  useLayoutEffect(() => {
+    const bar = stepBar.current;
+    const current = root.current?.querySelector<HTMLElement>(".capture-steps button[aria-current]");
+    if (!bar || !current) return;
+    const to = { x: current.offsetLeft, width: current.offsetWidth };
+    if (firstStep.current || reduced()) {
+      gsap.set(bar, to);
+    } else {
+      gsap.to(bar, { ...to, duration: 0.7, ease: "power3.inOut" });
+      gsap.fromTo(".capture-stage > *", { y: 18, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: 0.7, ease: "power3.out", stagger: 0.08 });
+    }
+    firstStep.current = false;
+  }, [step]);
+
+  // switching walls rolls the big letter
+  useLayoutEffect(() => {
+    if (!root.current || reduced()) return;
+    const letter = root.current.querySelector(".capture-wallLetter");
+    if (letter) gsap.fromTo(letter, { yPercent: 60, autoAlpha: 0 }, { yPercent: 0, autoAlpha: 1, duration: 0.6, ease: "power3.out" });
+  }, [wall]);
+
+  // a saved photo wipes up into its tile
+  useLayoutEffect(() => {
+    const key = lastSaved.current;
+    if (!key || !root.current || reduced()) return;
+    lastSaved.current = null;
+    const img = root.current.querySelector(`[data-wall="${key}"] img`);
+    if (img)
+      gsap.fromTo(img, { clipPath: "inset(100% 0% 0% 0%)", scale: 1.08 }, { clipPath: "inset(0% 0% 0% 0%)", scale: 1, duration: 0.8, ease: "power3.inOut", clearProps: "clipPath" });
+  }, [photos]);
+
+  const markStyle = { WebkitMaskImage: `url(${mark.src})`, maskImage: `url(${mark.src})` } as CSSProperties;
 
   function navigate(next: number) {
     if (next === 1 && photoCount !== 4) return;
@@ -252,21 +312,28 @@ export default function CaptureDemo() {
   }
 
   return (
-    <main className="capture-page">
+    <main className="capture-shell" ref={root}>
+     <div className="capture-page">
       <header className="capture-header">
-        <Link href="/" className="capture-brand">
-          tadaima / capture
-        </Link>
-        <Link href="/rooms" className="capture-brand">Back to rooms</Link>
+        <WipeLink href="/" className="capture-brand" aria-label="tadaima home">
+          <span className="capture-brand__mark" style={markStyle} aria-hidden="true" />
+          tadaima
+        </WipeLink>
+        <WipeLink href="/rooms" className="capture-link">
+          Back to rooms
+        </WipeLink>
       </header>
       <section className="capture-intro">
-        <p className="capture-eyebrow">mobile room capture</p>
-        <h1>
-          Start with the room
-          <br />
-          you already have.
+        <p className="capture-eyebrow">Room capture</p>
+        <h1 aria-label="Start with the room you already have.">
+          <span className="capture-line" aria-hidden="true">
+            <span>Start with the room</span>
+          </span>
+          <span className="capture-line" aria-hidden="true">
+            <span>you already have.</span>
+          </span>
         </h1>
-        <p>Capture four views for an AI room draft. No measurements needed.</p>
+        <p className="capture-lede">Capture four views for an AI room draft. No measurements needed.</p>
       </section>
       <nav className="capture-steps" aria-label="Capture steps">
         {steps.map((name, index) => (
@@ -281,13 +348,14 @@ export default function CaptureDemo() {
             {name}
           </button>
         ))}
+        <span className="capture-steps__bar" ref={stepBar} aria-hidden="true" />
       </nav>
       <div className="capture-localNote">
         Photos stay in this tab. Nothing is uploaded. Download your capture
         before closing it.
       </div>
       {step === 0 ? (
-        <section className="capture-captureGrid">
+        <section className="capture-captureGrid capture-stage">
           <div>
             <div className="capture-sectionTitle">
               <h2>Wall {wall.toUpperCase()}</h2>
@@ -310,7 +378,9 @@ export default function CaptureDemo() {
               />
               {!cameraOn ? (
                 <div className="capture-cameraPlaceholder">
-                  <span>{wall.toUpperCase()}</span>
+                  <span className="capture-wallLetter" key={wall}>
+                    {wall.toUpperCase()}
+                  </span>
                   <p>
                     Face this wall.
                     <br />
@@ -375,6 +445,7 @@ export default function CaptureDemo() {
                 <button
                   type="button"
                   key={key}
+                  data-wall={key}
                   className={
                     wall === key ? "capture-selectedPhoto" : "capture-photo"
                   }
@@ -423,7 +494,7 @@ export default function CaptureDemo() {
         </section>
       ) : null}
       {step === 1 ? (
-        <section className="capture-reviewGrid">
+        <section className="capture-reviewGrid capture-stage">
           <div>
             <h2>Your room, ready for a draft.</h2>
             <label className="capture-roomName">
@@ -513,6 +584,7 @@ export default function CaptureDemo() {
           {notice}
         </p>
       ) : null}
+     </div>
     </main>
   );
 }
