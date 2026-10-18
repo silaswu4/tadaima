@@ -1,16 +1,22 @@
 import * as THREE from "three";
 import { XRControllerModelFactory } from "three/examples/jsm/webxr/XRControllerModelFactory.js";
-import type { RoomPlan } from "../../backend/contracts";
+import type { FurnitureCategory, ProductCandidate, RoomPlan, Vector3Meters } from "../../backend/contracts";
 import { createXRMenu, XR_MENU_INK } from "./workspace-xr-menu";
+import type { XRMenuRuntime } from "./workspace-xr-menu";
 import { insideFloor } from "./window-daylight";
 
 export type WorkspaceXRSupport = { supported: boolean; reason: string };
 /** Display-only offers supplied by the application's shopping state. */
-export type WorkspaceXROffer = { id: string; label: string; detail?: string };
+export type WorkspaceXROffer = { id: string; label: string; detail?: string; product?: ProductCandidate; fits?: boolean; withinBudget?: boolean | null; problems?: string[]; source?: "catalog" | "live" };
+export type WorkspaceXRItem = { id: string; label: string; category?: FurnitureCategory; dimensions: Vector3Meters | null; priceMinor?: number | null; currency?: string | null; imageUrl?: string | null; stored?: boolean; locked?: boolean; selected?: boolean };
 export type WorkspaceXRAction = { id: string; label: string; detail?: string; disabled?: boolean };
 export type WorkspaceXRLocomotion = "walk" | "teleport";
 export type WorkspaceXRShopping = {
   offers: WorkspaceXROffer[];
+  inventory?: WorkspaceXRItem[];
+  basket?: WorkspaceXRItem[];
+  basketTotal?: string;
+  roomLabel?: string;
   actions?: WorkspaceXRAction[];
   selectedItemLabel?: string;
   status?: string;
@@ -22,6 +28,8 @@ export type WorkspaceXRShopping = {
   agent?: { available: boolean; status: string; caption?: string; listening: boolean; connected: boolean; error?: string; activity?: string; transcript?: string };
 };
 export type WorkspaceXROptions = {
+  /** Test/diagnostic adapter; production uses the real React DOM surface. */
+  menuRuntime?: XRMenuRuntime;
   renderer: THREE.WebGLRenderer;
   scene: THREE.Scene;
   camera: THREE.PerspectiveCamera;
@@ -165,7 +173,7 @@ export function createWorkspaceXR(options: WorkspaceXROptions) {
     },
     onExit: () => { void activeSession?.end().catch(() => options.onError?.("Use the Quest browser controls to exit VR.")); },
     onClose: () => { hudVisible = false; hud.visible = false; },
-  });
+  }, options.menuRuntime);
   // This is the wearer's menu, rendered as an overlay so nearby room geometry
   // cannot cut holes through the controls. World selection remains occluded.
   menu.mesh.material.depthTest = false;
@@ -217,7 +225,9 @@ export function createWorkspaceXR(options: WorkspaceXROptions) {
     if (!hud.visible) return null;
     controller.updateWorldMatrix(true, false); hud.updateWorldMatrix(true, true);
     ray.setFromXRController(controller);
-    return ray.intersectObject(menu.mesh, false)[0] ?? null;
+    const hit = ray.intersectObject(menu.mesh, false)[0];
+    // Only painted UI owns the ray; the transparent gaps between cards show (and select) the room.
+    return hit?.uv && menu.covers(hit.uv) ? hit : null;
   }
 
   function updateMenuPointers() {
@@ -382,24 +392,33 @@ export function createWorkspaceXR(options: WorkspaceXROptions) {
     /** Read-only semantic hit regions for interaction/QA adapters, in menu pixels. */
     get menuTargets() { return menu.targets; },
     get menuTab() { return menu.activeTab; },
+    /** Resolve after the React layout and its matching texture are ready. */
+    menuWhenIdle() { return menu.whenIdle(); },
     setShoppingState(state: WorkspaceXRShopping) {
       if (disposed) return;
-      // The HUD displays a bounded subset, rather than cloning a full search
-      // result or allocating textures from unbounded merchant text.
-      const offers = state.offers.slice(0, 3).filter((offer, i, list) => offer.id && offer.id.length <= 256
+      // The shared UI can scroll its catalog. Bound merchant data while keeping
+      // the active preview reachable even when it came from Fetch.
+      const offerView = (offer: WorkspaceXROffer): WorkspaceXROffer => ({ ...offer,
+        label: offer.label.slice(0, 200), detail: offer.detail?.slice(0, 300), problems: offer.problems?.slice(0, 3).map((problem) => problem.slice(0, 200)),
+      });
+      const offers = state.offers.slice(0, 24).filter((offer, i, list) => offer.id && offer.id.length <= 256
         && list.findIndex((other) => other.id === offer.id) === i)
-        .map((offer) => ({ id: offer.id, label: offer.label.slice(0, 200), detail: offer.detail?.slice(0, 300) }));
+        .map(offerView);
       const selectedOffer = state.offers.find((offer) => offer.id === state.pendingOfferId && offer.id.length <= 256);
       if (selectedOffer && !offers.some((offer) => offer.id === selectedOffer.id)) {
-        if (offers.length === 3) offers.pop();
-        offers.push({ id: selectedOffer.id, label: selectedOffer.label.slice(0, 200), detail: selectedOffer.detail?.slice(0, 300) });
+        if (offers.length === 24) offers.pop();
+        offers.push(offerView(selectedOffer));
       }
       const pendingOfferId = offers.some((offer) => offer.id === state.pendingOfferId) ? state.pendingOfferId : null;
-      const next = { offers, selectedItemLabel: state.selectedItemLabel?.slice(0, 200), status: state.status?.slice(0, 300),
+      const itemView = (item: WorkspaceXRItem): WorkspaceXRItem => ({ ...item, label: item.label.slice(0, 200) });
+      const next: WorkspaceXRShopping = { offers,
+        inventory: state.inventory?.slice(0, 100).map(itemView), basket: state.basket?.slice(0, 100).map(itemView),
+        basketTotal: state.basketTotal?.slice(0, 80), roomLabel: state.roomLabel?.slice(0, 160),
+        selectedItemLabel: state.selectedItemLabel?.slice(0, 200), status: state.status?.slice(0, 300),
         pendingOfferId, canConfirm: !!pendingOfferId && state.canConfirm === true,
         basketLabel: state.basketLabel?.slice(0, 80), selectedItemLocked: state.selectedItemLocked === true, busy: state.busy === true,
         agent: state.agent ? { available: state.agent.available === true, status: state.agent.status.slice(0, 120), caption: state.agent.caption?.slice(0, 600), listening: state.agent.listening === true, connected: state.agent.connected === true, error: state.agent.error?.slice(0, 300), activity: state.agent.activity?.slice(0, 160), transcript: state.agent.transcript?.slice(0, 300) } : undefined,
-        actions: (state.actions ?? []).slice(0, 8).filter((action, i, list) => action.id && action.id.length <= 80 && list.findIndex((other) => other.id === action.id) === i)
+        actions: (state.actions ?? []).slice(0, 256).filter((action, i, list) => action.id && action.id.length <= 280 && list.findIndex((other) => other.id === action.id) === i)
           .map((action) => ({ id: action.id, label: action.label.slice(0, 80), detail: action.detail?.slice(0, 140), disabled: action.disabled === true })) };
       const key = JSON.stringify(next);
       if (key === shoppingKey) return;
@@ -458,6 +477,8 @@ export function createWorkspaceXR(options: WorkspaceXROptions) {
       }
       let held = false;
       let turn = 0;
+      let panelScroll = 0;
+      let menuStickHeld = false;
       let walk = { right: 0, forward: 0 };
       for (const controller of controllers) {
         const source = sourceByController.get(controller);
@@ -474,12 +495,20 @@ export function createWorkspaceXR(options: WorkspaceXROptions) {
           const hit = pick(controller);
           teleportTarget = hit?.kind === "floor" ? hit.point : null;
         }
-        if (source.handedness === "right") turn = x;
+        if (source.handedness === "right") {
+          // Aiming at the panel makes the right stick scroll it. Never turn the
+          // room while the wearer is trying to browse; left-stick walking stays available.
+          if (menuHit(controller)) {
+            menuStickHeld = Math.hypot(x, y) > .3;
+            if (Math.abs(y) > .2) panelScroll = y;
+          } else turn = x;
+        }
       }
       if (resumeNeutral) {
-        if (Math.hypot(walk.forward, walk.right) > 0 || Math.abs(turn) > .3) { followHud(deltaSeconds); updateMenuPointers(); return; }
+        if (Math.hypot(walk.forward, walk.right) > 0 || Math.abs(turn) > .3 || menuStickHeld) { followHud(deltaSeconds); updateMenuPointers(); return; }
         resumeNeutral = false;
       }
+      if (panelScroll) menu.scroll(panelScroll * 520 * Math.min(Math.max(deltaSeconds, 0), .05));
       if (locomotion === "walk") walkXR(rig, headPosition(), headOrientation(), walk, deltaSeconds, validFloor, options.moveFloor);
       reticle.visible = held && !!teleportTarget;
       if (reticle.visible && teleportTarget) reticle.position.copy(teleportTarget).add(new THREE.Vector3(0, .015, 0));

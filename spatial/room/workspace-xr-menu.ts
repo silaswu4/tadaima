@@ -1,328 +1,273 @@
 import * as THREE from "three";
+import { mountXRPanel } from "../components/RoomXRPanel";
+import type { XRPanelProps, XRPanelTab } from "../components/RoomXRPanel";
 import type { WorkspaceXRShopping, WorkspaceXRLocomotion } from "./workspace-xr";
 
 export const XR_MENU_WIDTH = 1440;
 export const XR_MENU_HEIGHT = 1000;
-export type XRMenuTab = "shop" | "room" | "agent" | "controls";
-export type XRMenuTarget = {
-  id: string; x: number; y: number; width: number; height: number; disabled: boolean;
-};
-export type XRMenuCallbacks = {
-  onPreviewOffer(id: string): void;
-  onConfirmOffer(): void;
-  onAction(id: string): void;
-  onLocomotionToggle(): void;
-  onExit(): void;
-  onClose(): void;
-};
-
-type MenuState = WorkspaceXRShopping & {
-  basketLabel?: string; selectedItemLocked?: boolean; busy?: boolean;
-};
-type Icon = "chair" | "rug" | "lamp" | "box";
-// Match RoomsPage.css and RoomExperience.css, with opaque surfaces for VR contrast.
 export const XR_MENU_INK = "#2b1a10";
-const C = {
-  paper: "#f5f2eb", ink: XR_MENU_INK, muted: "#8a6e4e", line: "rgba(43, 26, 16, 0.14)",
-  white: "#fbf8f2", inkHover: "#46301f", well: "#ebe5d9",
-  hover: "#e8e1d5", disabled: "#ebe5d9", disabledInk: "#927f6d", danger: "#9b3a24",
+export type XRMenuTab = XRPanelTab;
+export type XRMenuTarget = { id: string; x: number; y: number; width: number; height: number; disabled: boolean };
+export type XRMenuCallbacks = {
+  onPreviewOffer(id: string): void; onConfirmOffer(): void; onAction(id: string): void;
+  onLocomotionToggle(): void; onExit(): void; onClose(): void;
 };
-const FALLBACK_FONT = 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-const clean = (text: string | undefined, max = 240) => (text ?? "").replace(/\s+/g, " ").trim().slice(0, max);
+/** Injectable DOM/capture boundary; production mounts and captures the real React UI. */
+export type XRMenuRuntime = {
+  document?: Document; mountPanel?: typeof mountXRPanel;
+  capture?: (host: HTMLElement) => Promise<HTMLCanvasElement>;
+  minCaptureIntervalMs?: number;
+};
+type TargetRecord = { target: XRMenuTarget; button: HTMLElement };
+type Rect = { x: number; y: number; width: number; height: number };
+// The website's room overlay at its own CSS sizes, upscaled 2.25x so 11–13px text stays legible in the headset.
+const HOST_SCALE = XR_MENU_WIDTH / 640, HOST_WIDTH = 640, HOST_HEIGHT = Math.round(XR_MENU_HEIGHT / HOST_SCALE);
+const TABS: readonly XRMenuTab[] = ["agent", "shop", "room", "basket", "controls"];
+let nextHostId = 0;
 
-/** One unlit draw call. All hit regions use the same pixel layout as the texture. */
-export function createXRMenu(callbacks: XRMenuCallbacks) {
-  const canvas = document.createElement("canvas");
-  canvas.width = XR_MENU_WIDTH; canvas.height = XR_MENU_HEIGHT;
-  const context = canvas.getContext("2d");
-  if (!context) throw new Error("The VR menu needs a 2D canvas context.");
-  const ctx = context;
-  // Canvas text cannot resolve CSS var() expressions itself. Use the same
-  // Next.js font families as the site, then repaint after those faces load.
-  const style = document.defaultView?.getComputedStyle(document.documentElement);
-  const bodyFont = style?.getPropertyValue("--font-body").trim() || FALLBACK_FONT;
-  const displayFont = style?.getPropertyValue("--font-display").trim() || bodyFont;
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  texture.anisotropy = 4;
-  texture.generateMipmaps = false;
-  texture.minFilter = THREE.LinearFilter;
-  const material = new THREE.MeshBasicMaterial({
-    map: texture, transparent: true, depthTest: true, depthWrite: false, toneMapped: false,
+async function captureDOM(host: HTMLElement) {
+  const { default: html2canvas } = await import("html2canvas");
+  const identity = host.getAttribute("data-tadaima-xr-host");
+  return html2canvas(host, {
+    width: HOST_WIDTH, height: HOST_HEIGHT, scale: HOST_SCALE,
+    useCORS: true, allowTaint: false, backgroundColor: null, logging: false,
+    // Match the live viewport so media queries lay the clone out like the measured buttons.
+    imageTimeout: 1500, scrollX: 0, scrollY: 0, windowWidth: host.ownerDocument.defaultView?.innerWidth ?? 1440,
+    windowHeight: host.ownerDocument.defaultView?.innerHeight ?? 900,
+    ignoreElements: (element) => element.tagName === "CANVAS" && !host.contains(element),
+    onclone(document) {
+      const clone = document.querySelector<HTMLElement>(`[data-tadaima-xr-host="${identity}"]`);
+      if (clone) { clone.style.left = "0"; clone.style.top = "0"; clone.style.transform = "none"; }
+      document.documentElement.style.color = XR_MENU_INK; document.body.style.color = XR_MENU_INK;
+      const style = document.createElement("style");
+      style.textContent = "[data-tadaima-xr-host], [data-tadaima-xr-host] * { animation: none !important; transition: none !important; caret-color: transparent !important; }";
+      document.head.appendChild(style);
+    },
   });
+}
+
+/** One stable plane and texture, with ray targets measured from actual DOM buttons. */
+export function createXRMenu(callbacks: XRMenuCallbacks, runtime: XRMenuRuntime = {}) {
+  const doc = runtime.document ?? document;
+  const host = doc.createElement("div");
+  host.setAttribute("data-tadaima-xr-host", String(++nextHostId)); host.setAttribute("aria-hidden", "true");
+  Object.assign(host.style, {
+    position: "fixed", left: "-12000px", top: "0", width: `${HOST_WIDTH}px`, height: `${HOST_HEIGHT}px`,
+    overflow: "hidden", pointerEvents: "none", zIndex: "-1", isolation: "isolate", color: XR_MENU_INK, background: "transparent",
+  });
+  doc.body.appendChild(host);
+  const canvas = doc.createElement("canvas"); canvas.width = XR_MENU_WIDTH; canvas.height = XR_MENU_HEIGHT;
+  const context = canvas.getContext("2d");
+  if (!context) { host.remove(); throw new Error("The VR menu needs a 2D canvas context."); }
+  // html2canvas measures font baselines in its own hidden body child using a
+  // 1px inline image. Tailwind's image reset makes that probe a block, moving
+  // every captured text baseline. Target only that measurement shape, in the
+  // original document where CanvasRenderer creates it, never product images.
+  const metricsStyle = doc.createElement("style");
+  metricsStyle.setAttribute("data-tadaima-xr-font-metrics", "");
+  metricsStyle.textContent = 'body > div[style*="visibility: hidden"][style*="white-space: nowrap"] > img[width="1"][height="1"] { display: inline-block !important; max-width: none !important; }';
+  doc.head.appendChild(metricsStyle);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace; texture.anisotropy = 4;
+  texture.generateMipmaps = false; texture.minFilter = THREE.LinearFilter;
+  const material = new THREE.MeshBasicMaterial({ map: texture, transparent: true, depthTest: true, depthWrite: false, toneMapped: false });
   const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1.04, 1.04 * XR_MENU_HEIGHT / XR_MENU_WIDTH), material);
-  mesh.name = "workspace-xr-menu";
-  mesh.renderOrder = 20;
-  let state: MenuState = { offers: [] };
-  let locomotion: WorkspaceXRLocomotion = "walk";
-  let tab: XRMenuTab = "agent";
-  let targets: XRMenuTarget[] = [];
-  let hovered = new Set<string>();
-  let disposed = false;
+  mesh.name = "workspace-xr-menu"; mesh.renderOrder = 20;
 
-  function rounded(x: number, y: number, width: number, height: number, radius = 22) {
-    const r = Math.min(radius, width / 2, height / 2);
-    ctx.beginPath(); ctx.moveTo(x + r, y);
-    ctx.lineTo(x + width - r, y); ctx.quadraticCurveTo(x + width, y, x + width, y + r);
-    ctx.lineTo(x + width, y + height - r); ctx.quadraticCurveTo(x + width, y + height, x + width - r, y + height);
-    ctx.lineTo(x + r, y + height); ctx.quadraticCurveTo(x, y + height, x, y + height - r);
-    ctx.lineTo(x, y + r); ctx.quadraticCurveTo(x, y, x + r, y); ctx.closePath();
+  let state: WorkspaceXRShopping = { offers: [] };
+  let locomotion: WorkspaceXRLocomotion = "walk", tab: XRMenuTab = "agent";
+  let hoveredIds: string[] = [], stateKey = "";
+  let stateEpoch = 0, committedEpoch = -1, paintedState = -1;
+  let layoutEpoch = 0, paintedLayout = -1, layoutKey = "";
+  let paintRequest = 0, lastStarted = -Infinity;
+  let disposed = false, capturing = false, dirty = false, failed = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let records: TargetRecord[] = [], solids: Rect[] = [], panel: ReturnType<typeof mountXRPanel> | undefined;
+  const waiters = new Set<() => void>();
+  const interval = Math.max(0, runtime.minCaptureIntervalMs ?? 100), capture = runtime.capture ?? captureDOM;
+
+  function buttonDisabled(button: HTMLElement) {
+    return (button as HTMLButtonElement).disabled === true || button.getAttribute("aria-disabled") === "true";
   }
 
-  function box(x: number, y: number, width: number, height: number, fill: string, stroke?: string, radius = 22) {
-    rounded(x, y, width, height, radius); ctx.fillStyle = fill; ctx.fill();
-    if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = 2; ctx.stroke(); }
-  }
-
-  function fit(text: string, width: number) {
-    if (ctx.measureText(text).width <= width) return text;
-    let end = text.length;
-    while (end > 0 && ctx.measureText(`${text.slice(0, end)}…`).width > width) end--;
-    return end ? `${text.slice(0, end)}…` : "";
-  }
-
-  function text(value: string, x: number, y: number, size = 34, color = C.ink, width = 1260, weight = 400, display = false) {
-    ctx.font = `${weight} ${size}px ${display ? displayFont : bodyFont}`; ctx.textBaseline = "middle";
-    ctx.fillStyle = color; ctx.fillText(fit(value, width), x, y);
-  }
-
-  function paragraph(value: string, x: number, y: number, width: number, size = 30, color = C.muted, maxLines = 2) {
-    ctx.font = `400 ${size}px ${bodyFont}`;
-    const words = value.split(" "); let line = "", row = 0;
-    for (let index = 0; index < words.length; index++) {
-      const candidate = line ? `${line} ${words[index]}` : words[index];
-      if (ctx.measureText(candidate).width > width && line && row < maxLines - 1) {
-        text(line, x, y + row * size * 1.35, size, color, width); row++; line = words[index];
-      } else line = candidate;
-    }
-    text(line, x, y + row * size * 1.35, size, color, width);
-  }
-
-  function target(id: string, x: number, y: number, width: number, height: number, disabled = false) {
-    targets.push({ id, x, y, width, height, disabled });
-    return !disabled && hovered.has(id);
-  }
-
-  function button(id: string, label: string, x: number, y: number, width: number, height: number,
-    options: { disabled?: boolean; primary?: boolean; danger?: boolean; selected?: boolean } = {}) {
-    const over = target(id, x, y, width, height, !!options.disabled);
-    const dark = options.primary || options.selected;
-    box(x, y, width, height, options.disabled ? C.disabled : dark ? over ? C.inkHover : C.ink : over ? C.hover : C.white,
-      dark || options.disabled ? undefined : C.line, height / 2);
-    ctx.font = `500 34px ${bodyFont}`;
-    const labelWidth = Math.min(width - 42, ctx.measureText(label).width);
-    text(label, x + (width - labelWidth) / 2, y + height / 2, 34,
-      options.disabled ? C.disabledInk : dark ? C.white : options.danger ? C.danger : C.ink, width - 42, 500);
-  }
-
-  function icon(kind: Icon, x: number, y: number, size = 70) {
-    ctx.save(); ctx.translate(x, y); ctx.scale(size / 70, size / 70);
-    ctx.strokeStyle = C.ink; ctx.lineWidth = 4; ctx.lineCap = "round"; ctx.lineJoin = "round";
-    ctx.beginPath();
-    if (kind === "chair") {
-      ctx.moveTo(15, 38); ctx.lineTo(15, 12); ctx.quadraticCurveTo(35, 5, 55, 12); ctx.lineTo(55, 38);
-      ctx.moveTo(10, 39); ctx.lineTo(60, 39); ctx.lineTo(60, 48); ctx.lineTo(10, 48); ctx.closePath();
-      ctx.moveTo(16, 48); ctx.lineTo(13, 65); ctx.moveTo(54, 48); ctx.lineTo(57, 65);
-    } else if (kind === "rug") {
-      ctx.moveTo(12, 15); ctx.lineTo(58, 15); ctx.lineTo(58, 55); ctx.lineTo(12, 55); ctx.closePath();
-      ctx.moveTo(22, 24); ctx.lineTo(48, 24); ctx.lineTo(48, 46); ctx.lineTo(22, 46); ctx.closePath();
-      for (let i = 15; i <= 55; i += 10) { ctx.moveTo(i, 9); ctx.lineTo(i, 15); ctx.moveTo(i, 55); ctx.lineTo(i, 61); }
-    } else if (kind === "lamp") {
-      ctx.moveTo(23, 10); ctx.lineTo(47, 10); ctx.lineTo(59, 34); ctx.lineTo(11, 34); ctx.closePath();
-      ctx.moveTo(35, 34); ctx.lineTo(35, 61); ctx.moveTo(21, 62); ctx.lineTo(49, 62);
-    } else {
-      ctx.moveTo(35, 8); ctx.lineTo(60, 22); ctx.lineTo(60, 50); ctx.lineTo(35, 64); ctx.lineTo(10, 50); ctx.lineTo(10, 22); ctx.closePath();
-      ctx.moveTo(10, 22); ctx.lineTo(35, 36); ctx.lineTo(60, 22); ctx.moveTo(35, 36); ctx.lineTo(35, 64);
-    }
-    ctx.stroke(); ctx.restore();
-  }
-
-  function action(id: string) { return state.actions?.find((item) => item.id === id); }
-  function actionDisabled(id: string) { const item = action(id); return !!state.busy || !item || !!item.disabled; }
-  function category(label: string): Icon {
-    return /chair|seat|stool|sofa/i.test(label) ? "chair" : /rug|carpet/i.test(label) ? "rug" : /lamp|light/i.test(label) ? "lamp" : "box";
-  }
-
-  function shop() {
-    text("Add furniture", 64, 286, 42, C.ink, 1110, 500, true);
-    const categories = [{ id: "search-chair", label: "Chairs", kind: "chair" }, { id: "search-rug", label: "Rugs", kind: "rug" }, { id: "search-lamp", label: "Lamps", kind: "lamp" }] as const;
-    categories.forEach((item, index) => {
-      const x = 64 + index * 444, id = `action:${item.id}`, disabled = actionDisabled(item.id);
-      const over = target(id, x, 328, 424, 92, disabled);
-      box(x, 328, 424, 92, disabled ? C.disabled : over ? C.hover : C.white, disabled ? undefined : C.line, 46);
-      icon(item.kind, x + 24, 351, 46);
-      text(item.label, x + 94, 374, 34, disabled ? C.disabledInk : C.ink, 300, 500);
+  function measure(): TargetRecord[] {
+    const bounds = host.getBoundingClientRect();
+    if (bounds.width <= 0 || bounds.height <= 0) return [];
+    const seen = new Set<string>();
+    return [...host.querySelectorAll<HTMLElement>("[data-xr-id]")].flatMap((button) => {
+      const id = button.getAttribute("data-xr-id"), style = doc.defaultView?.getComputedStyle(button);
+      if (!id || seen.has(id) || !button.isConnected || style?.display === "none" || style?.visibility === "hidden") return [];
+      const rect = button.getBoundingClientRect(), scroll = button.closest<HTMLElement>("[data-xr-scroll]")?.getBoundingClientRect();
+      const left = Math.max(bounds.left, rect.left, scroll?.left ?? -Infinity), top = Math.max(bounds.top, rect.top, scroll?.top ?? -Infinity);
+      const right = Math.min(bounds.right, rect.right, scroll?.right ?? Infinity), bottom = Math.min(bounds.bottom, rect.bottom, scroll?.bottom ?? Infinity);
+      if (right <= left || bottom <= top) return [];
+      seen.add(id);
+      return [{ button, target: { id, x: (left - bounds.left) / bounds.width * XR_MENU_WIDTH,
+        y: (top - bounds.top) / bounds.height * XR_MENU_HEIGHT, width: (right - left) / bounds.width * XR_MENU_WIDTH,
+        height: (bottom - top) / bounds.height * XR_MENU_HEIGHT, disabled: buttonDisabled(button) } }];
     });
-    if (!state.offers.length) {
-      box(64, 444, 1312, 354, C.well);
-      icon("chair", 674, 476, 90);
-      text(state.busy ? "Finding pieces for your room…" : "Find furniture that fits", 104, 616, 38, C.ink, 1232, 500);
-      paragraph(state.busy ? "You can keep looking around. Results will appear here." : "Point at a clear floor spot, then choose Chairs, Rugs or Lamps above.", 104, 676, 1210, 32);
-    } else {
-      state.offers.slice(0, 3).forEach((offer, index) => {
-        const y = 440 + index * 124, selected = state.pendingOfferId === offer.id;
-        const over = target(`preview:${offer.id}`, 64, y, 1312, 112, !!state.busy);
-        box(64, y, 1312, 112, selected ? C.well : over ? C.hover : C.white, selected ? C.ink : C.line);
-        box(80, y + 14, 84, 84, C.paper, undefined, 14); icon(category(offer.label), 94, y + 27, 56);
-        text(offer.label, 188, y + 37, 35, state.busy ? C.disabledInk : C.ink, 884, 500);
-        text(offer.detail || "View a sized preview in your room", 188, y + 80, 32, C.muted, 884);
-        text(selected ? "Previewing" : "Try in room", 1100, y + 56, 32, C.ink, 248, 500);
-      });
-    }
   }
-
-  function room() {
-    text("Your room", 64, 286, 42, C.ink, 1240, 500, true);
-    box(64, 332, 1312, 158, C.well);
-    text(state.selectedItemLabel ? "SELECTED PIECE" : "YOUR ROOM", 104, 374, 25, C.muted, 1200, 500);
-    text(state.selectedItemLabel || "Point at any piece to select it", 104, 431, 39, C.ink, 1200, 500);
-    const locked = !!state.selectedItemLocked;
-    button("action:rotate-selected", "Rotate 45°", 64, 522, 640, 112,
-      { disabled: locked || actionDisabled("rotate-selected") });
-    button("action:store-selected", "Put in storage", 736, 522, 640, 112,
-      { disabled: locked || actionDisabled("store-selected") });
-    box(64, 670, 1312, 128, C.white, C.line);
-    paragraph(locked ? "This piece is locked. Unlock it on the room’s website before changing its placement." :
-      state.selectedItemLabel ? "Rotate or store the selected piece. Your scanned room and shopping basket stay in sync." :
-      "Aim your controller at furniture and pull the trigger. Your selection appears here.", 104, 714, 1224, 32);
+  function measurementKey(items: TargetRecord[]) {
+    return JSON.stringify(items.map(({ target }) => [target.id, target.x, target.y, target.width, target.height, target.disabled]));
   }
-
-  function agent() {
-    const voice = state.agent, recommendation = state.offers.find((offer) => offer.id === state.pendingOfferId);
-    text(recommendation ? "Tadaima recommends" : "Tell Tadaima what you need", 64, 286, 42, C.ink, 1240, 500, true);
-    box(64, 332, 1312, 138, C.well);
-    text(recommendation?.label || (voice?.available ? voice.activity || voice.status || "Ready to talk" : "Your room agent isn’t connected yet"), 104, 378, 38, C.ink, 1210, 500);
-    text(recommendation?.detail || (voice?.listening ? "Microphone on · tap Finish speaking when you’re done" :
-      voice?.available ? "Describe what you want. Tadaima handles the search and fit." : "Agent setup is needed. You can still browse in Shop."), 104, 434, 30, C.muted, 1210);
-    const toggle = action("voice-toggle"), stop = action("voice-stop");
-    button("action:voice-toggle", voice?.listening ? "Finish speaking" : "Talk to Tadaima", 64, 502, 640, 100,
-      { primary: !recommendation, disabled: !voice?.available || !toggle || !!toggle.disabled });
-    button("action:voice-stop", "End conversation", 736, 502, 640, 100,
-      { disabled: !stop || !!stop.disabled });
-    box(64, 636, 1312, 162, C.white, C.line);
-    const explanation = voice?.error || (voice?.activity ? `${voice.activity}…` : voice?.caption) ||
-      (recommendation ? "This piece is previewed in your room. Say ‘place it’ to add it, or ask Tadaima for another option." : voice?.transcript ? `You asked: ${voice.transcript}` : voice?.available ? "Try: ‘Find me a comfortable chair under $200.’ Tadaima searches, checks fit and shows you a recommendation before adding anything." :
-      "Voice is unavailable on this server. Once connected, the agent can search, preview and rearrange this room with your approval.");
-    paragraph(explanation, 104, 676, 1224, 30, voice?.error ? C.danger : C.muted, 3);
+  /** Painted UI surfaces. The texture is transparent elsewhere, so rays pass through to the room. */
+  function measureSolids(): Rect[] {
+    const bounds = host.getBoundingClientRect();
+    if (bounds.width <= 0 || bounds.height <= 0) return [];
+    return [...host.querySelectorAll<HTMLElement>("[data-xr-solid], [data-xr-id]")].flatMap((element) => {
+      const rect = element.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) return [];
+      return [{ x: (rect.left - bounds.left) / bounds.width * XR_MENU_WIDTH, y: (rect.top - bounds.top) / bounds.height * XR_MENU_HEIGHT,
+        width: rect.width / bounds.width * XR_MENU_WIDTH, height: rect.height / bounds.height * XR_MENU_HEIGHT }];
+    });
   }
-
-  function controls() {
-    text("Your controls", 64, 286, 42, C.ink, 1240, 500, true);
-    box(64, 332, 1312, 148, C.well);
-    text(locomotion === "walk" ? "Walking is on" : "Teleport is on", 104, 378, 38, C.ink, 690, 500);
-    text(locomotion === "walk" ? "Left stick walks and strafes" : "Aim at floor, release left stick", 104, 434, 30, C.muted, 700);
-    button("locomotion", locomotion === "walk" ? "Use teleport" : "Use walking", 928, 360, 416, 92, { disabled: !!state.busy });
-    box(64, 514, 1312, 178, C.white, C.line);
-    text("RIGHT STICK", 104, 554, 25, C.muted, 500, 500); text("Snap-turn your view", 104, 610, 34, C.ink, 580, 500);
-    text("LEFT GRIP", 770, 554, 25, C.muted, 500, 500); text("Bring this menu to you", 770, 610, 34, C.ink, 560, 500);
-    button("exit", "Exit VR", 64, 714, 1312, 90, { danger: true });
+  function refreshLayout() {
+    solids = measureSolids();
+    const items = measure(), key = measurementKey(items);
+    if (key !== layoutKey) { layoutKey = key; layoutEpoch++; }
+    return items;
   }
-
-  function footer() {
-    ctx.fillStyle = C.line; ctx.fillRect(64, 828, 1312, 2);
-    if (state.pendingOfferId) {
-      const pending = state.offers.find((offer) => offer.id === state.pendingOfferId);
-      text(state.canConfirm && !state.busy ? "Ready to place" : state.busy ? "Updating your room…" : "Placement needs attention", 64, 868, 32, C.ink, 438, 500);
-      text(!state.canConfirm && state.status ? state.status : pending?.label || "Furniture preview", 64, 913, 28, C.muted, 438);
-      button("action:cancel-preview", "Cancel preview", 526, 856, 358, 92,
-        { disabled: actionDisabled("cancel-preview") });
-      button("confirm", "Confirm placement", 908, 856, 468, 92,
-        { primary: true, disabled: !state.canConfirm || !!state.busy });
-    } else {
-      paragraph(state.status || (state.busy ? "Updating your room…" : "Your room, your pace. Choose a piece to get started."), 64, 875, 1280, 30, C.muted, 2);
-      text("Preview and placement only · checkout stays on the website", 64, 953, 25, C.muted, 1280);
-    }
+  function settle() {
+    if (!disposed && (capturing || timer || dirty || committedEpoch !== stateEpoch)) return;
+    for (const resolve of waiters) resolve(); waiters.clear();
   }
-
-  function draw() {
+  function requestPaint() {
     if (disposed) return;
-    targets = [];
-    ctx.clearRect(0, 0, XR_MENU_WIDTH, XR_MENU_HEIGHT);
-    box(4, 4, XR_MENU_WIDTH - 8, XR_MENU_HEIGHT - 8, C.paper, C.line, 44);
-    text("tadaima", 64, 84, 54, C.ink, 380, 500, true);
-    if (state.basketLabel) {
-      box(838, 48, 390, 72, C.well, undefined, 36);
-      text(state.basketLabel, 866, 84, 32, C.ink, 336, 500);
+    dirty = true; paintRequest++;
+    if (capturing || timer || committedEpoch !== stateEpoch) return;
+    timer = setTimeout(() => { timer = undefined; void paint(); }, Math.max(0, interval - (Date.now() - lastStarted)));
+  }
+  function drawFailure() {
+    records = []; paintedState = paintedLayout = -1;
+    context!.clearRect(0, 0, XR_MENU_WIDTH, XR_MENU_HEIGHT);
+    context!.fillStyle = "#f5f2eb"; context!.fillRect(0, 0, XR_MENU_WIDTH, XR_MENU_HEIGHT);
+    context!.fillStyle = XR_MENU_INK; context!.font = "500 42px system-ui, sans-serif";
+    context!.fillText("The room menu could not render.", 80, 430); context!.font = "32px system-ui, sans-serif";
+    context!.fillText("Exit and enter VR to try again.", 80, 490); texture.needsUpdate = true;
+  }
+  async function paint() {
+    if (disposed || capturing || !dirty || committedEpoch !== stateEpoch) { settle(); return; }
+    dirty = false; capturing = true; lastStarted = Date.now();
+    const items = refreshLayout(), request = paintRequest, expectedState = stateEpoch, expectedLayout = layoutEpoch;
+    try {
+      const result = await capture(host);
+      if (disposed) return;
+      refreshLayout();
+      if (expectedState !== stateEpoch) { dirty = true; return; }
+      // A held scroll stick changes layout every XR frame. Showing completed
+      // frames keeps scrolling visible; only matching layout snapshots may be
+      // interactive. New tabs, products, prices or other state never reuse an
+      // older capture, even when the visible button IDs happen to match.
+      context!.clearRect(0, 0, XR_MENU_WIDTH, XR_MENU_HEIGHT); context!.drawImage(result, 0, 0, XR_MENU_WIDTH, XR_MENU_HEIGHT);
+      texture.needsUpdate = true; failed = false;
+      if (request === paintRequest && expectedLayout === layoutEpoch) {
+        records = items; paintedState = expectedState; paintedLayout = expectedLayout;
+      } else {
+        records = []; paintedState = paintedLayout = -1; dirty = true;
+      }
+    } catch {
+      if (!disposed && request === paintRequest && expectedState === stateEpoch) { failed = true; drawFailure(); }
+    } finally {
+      capturing = false; if (dirty && !disposed) requestPaint(); settle();
     }
-    button("close", "×", 1284, 40, 92, 92);
-    (["shop", "room", "agent", "controls"] as const).forEach((item, index) => {
-      button(`tab-${item}`, item[0].toUpperCase() + item.slice(1), 64 + index * 332, 154, 316, 92, { selected: tab === item });
-    });
-    if (tab === "shop") shop(); else if (tab === "room") room(); else if (tab === "agent") agent(); else controls();
-    footer();
-    texture.needsUpdate = true;
   }
+  function navigate(next: XRMenuTab) {
+    if (disposed || !TABS.includes(next)) return;
+    if (tab === next) { if (failed) requestPaint(); return; }
+    tab = next; hoveredIds = []; stateEpoch++; render();
+  }
+  function props(): XRPanelProps {
+    const epoch = stateEpoch;
+    return {
+      state, locomotion, tab, hoveredIds, onNavigate: navigate,
+      onAction(id) {
+        const action = state.actions?.find((item) => item.id === id);
+        if (!disposed && action && !action.disabled && (!state.busy || id.startsWith("voice-"))) callbacks.onAction(id);
+      },
+      onPreviewOffer(id) { if (!disposed && !state.busy && state.offers.some((offer) => offer.id === id)) callbacks.onPreviewOffer(id); },
+      onConfirmOffer() { if (!disposed && !state.busy && state.canConfirm && state.pendingOfferId && state.offers.some((offer) => offer.id === state.pendingOfferId)) callbacks.onConfirmOffer(); },
+      onLocomotionToggle() { if (!disposed && !state.busy) callbacks.onLocomotionToggle(); },
+      onExit() { if (!disposed) callbacks.onExit(); }, onClose() { if (!disposed) callbacks.onClose(); },
+      onLayout() { if (disposed || epoch !== stateEpoch) return; committedEpoch = epoch; refreshLayout(); requestPaint(); },
+    };
+  }
+  function render() { if (!disposed) panel?.update(props()); }
+  function layoutChanged() { if (!disposed && committedEpoch === stateEpoch) { refreshLayout(); requestPaint(); } }
+  host.addEventListener("load", layoutChanged, true); host.addEventListener("error", layoutChanged, true); host.addEventListener("scroll", layoutChanged, true);
+  const ResizeObserverClass = doc.defaultView?.ResizeObserver;
+  const observer = ResizeObserverClass ? new ResizeObserverClass(layoutChanged) : undefined;
+  observer?.observe(host);
+  try { panel = (runtime.mountPanel ?? mountXRPanel)(host, props()); }
+  catch (error) {
+    disposed = true; if (timer) clearTimeout(timer); observer?.disconnect();
+    host.removeEventListener("load", layoutChanged, true); host.removeEventListener("error", layoutChanged, true); host.removeEventListener("scroll", layoutChanged, true);
+    host.remove(); metricsStyle.remove(); mesh.geometry.dispose(); material.dispose(); texture.dispose(); throw error;
+  }
+  doc.fonts?.addEventListener("loadingdone", layoutChanged);
+  if (doc.fonts?.ready) void doc.fonts.ready.then(layoutChanged, () => {});
 
-  function hit(uv: THREE.Vector2) {
-    if (![uv.x, uv.y].every(Number.isFinite) || uv.x < 0 || uv.x > 1 || uv.y < 0 || uv.y > 1) return;
+  function covers(uv: THREE.Vector2) {
+    if (disposed || failed) return !disposed;
+    if (![uv.x, uv.y].every(Number.isFinite) || uv.x < 0 || uv.x > 1 || uv.y < 0 || uv.y > 1) return false;
     const x = uv.x * XR_MENU_WIDTH, y = (1 - uv.y) * XR_MENU_HEIGHT;
-    return targets.find((item) => x >= item.x && x <= item.x + item.width && y >= item.y && y <= item.y + item.height);
+    return solids.some((rect) => x >= rect.x && x <= rect.x + rect.width && y >= rect.y && y <= rect.y + rect.height);
   }
-
-  function visibleKey() {
-    const footerState = state.pendingOfferId ? [state.pendingOfferId, state.canConfirm, state.busy,
-      !state.canConfirm ? state.status : state.offers.find((offer) => offer.id === state.pendingOfferId)?.label,
-      action("cancel-preview")?.disabled] : [state.status, state.busy];
-    const body = tab === "shop" ? [state.offers, state.pendingOfferId, state.busy,
-      ["search-chair", "search-rug", "search-lamp"].map(actionDisabled)] : tab === "room" ?
-      [state.selectedItemLabel, state.selectedItemLocked, actionDisabled("rotate-selected"), actionDisabled("store-selected")] : tab === "agent" ?
-      [state.agent, state.pendingOfferId, state.offers.find((offer) => offer.id === state.pendingOfferId), action("voice-toggle")?.disabled, action("voice-stop")?.disabled] : [locomotion, state.busy];
-    return JSON.stringify([tab, state.basketLabel, body, footerState]);
-  }
-
-  draw();
-  if (document.fonts?.load) {
-    void Promise.allSettled([
-      document.fonts.load(`400 34px ${bodyFont}`),
-      document.fonts.load(`500 34px ${bodyFont}`),
-      document.fonts.load(`500 54px ${displayFont}`),
-    ]).then(() => draw()); // draw() ignores completion after disposal.
+  function hit(uv: THREE.Vector2) {
+    if (disposed || ![uv.x, uv.y].every(Number.isFinite) || uv.x < 0 || uv.x > 1 || uv.y < 0 || uv.y > 1) return;
+    const x = uv.x * XR_MENU_WIDTH, y = (1 - uv.y) * XR_MENU_HEIGHT;
+    return records.find(({ target }) => x >= target.x && x <= target.x + target.width && y >= target.y && y <= target.y + target.height);
   }
   return {
     mesh,
-    get targets(): readonly XRMenuTarget[] { return targets; },
-    get activeTab(): XRMenuTab { return tab; },
-    focusAgent() { if (!disposed && tab !== "agent") { tab = "agent"; hovered.clear(); draw(); } },
+    get targets(): readonly XRMenuTarget[] { return records.map(({ target }) => target); },
+    get activeTab(): XRMenuTab { return tab; }, focusAgent() { navigate("agent"); },
+    /** Whether a ray at this UV lands on painted UI (and so must not reach the room behind). */
+    covers,
     setState(next: WorkspaceXRShopping, nextLocomotion: WorkspaceXRLocomotion) {
       if (disposed) return;
-      const input = next as MenuState;
-      const offers = input.offers.slice(0, 3).map((offer) => ({ id: offer.id, label: clean(offer.label, 160), detail: clean(offer.detail) }));
-      const pendingOfferId = offers.some((offer) => offer.id === input.pendingOfferId) ? input.pendingOfferId : null;
-      const projected: MenuState = {
-        offers,
-        actions: (input.actions ?? []).filter((item) => ["search-chair", "search-rug", "search-lamp", "rotate-selected", "store-selected", "cancel-preview", "voice-toggle", "voice-stop"].includes(item.id))
-          .map((item) => ({ id: item.id, label: "", disabled: !!item.disabled })),
-        selectedItemLabel: clean(input.selectedItemLabel, 160), status: clean(input.status),
-        pendingOfferId, canConfirm: !!pendingOfferId && !!input.canConfirm,
-        agent: input.agent ? { available: !!input.agent.available, status: clean(input.agent.status, 120), caption: clean(input.agent.caption, 600), listening: !!input.agent.listening, connected: !!input.agent.connected, error: clean(input.agent.error, 300), activity: clean(input.agent.activity, 160), transcript: clean(input.agent.transcript, 300) } : undefined,
-        basketLabel: clean(input.basketLabel, 80), selectedItemLocked: !!input.selectedItemLocked, busy: !!input.busy,
-      };
-      const before = visibleKey();
-      state = projected; locomotion = nextLocomotion;
-      if (visibleKey() !== before) { hovered.clear(); draw(); }
+      const offers = next.offers.filter((offer, index, all) => !!offer.id && all.findIndex((other) => other.id === offer.id) === index).slice(0, 24);
+      const pending = next.offers.find((offer) => offer.id === next.pendingOfferId);
+      if (pending && !offers.some((offer) => offer.id === pending.id)) { if (offers.length === 24) offers.pop(); offers.push(pending); }
+      const pendingOfferId = offers.some((offer) => offer.id === next.pendingOfferId) ? next.pendingOfferId : null;
+      const projected = { ...next, offers, pendingOfferId, canConfirm: !!pendingOfferId && next.canConfirm === true };
+      const key = JSON.stringify([projected, nextLocomotion]);
+      if (key === stateKey) return;
+      stateKey = key; state = projected; locomotion = nextLocomotion; stateEpoch++; render();
     },
     setHovered(uvs: readonly THREE.Vector2[]) {
-      if (disposed) return;
-      const next = new Set(uvs.map(hit).filter((item): item is XRMenuTarget => !!item && !item.disabled).map((item) => item.id));
-      if (next.size === hovered.size && [...next].every((id) => hovered.has(id))) return;
-      hovered = next; draw();
+      if (disposed || paintedState !== stateEpoch || paintedLayout !== layoutEpoch) return;
+      const ids = [...new Set(uvs.map(hit).filter((item): item is TargetRecord => !!item && !item.target.disabled).map(({ target }) => target.id))].sort();
+      if (JSON.stringify(ids) === JSON.stringify(hoveredIds)) return;
+      hoveredIds = ids; render();
     },
     activate(uv: THREE.Vector2) {
-      if (disposed) return;
+      if (disposed || paintedState !== stateEpoch || paintedLayout !== layoutEpoch) return;
       const item = hit(uv);
-      if (!item || item.disabled) return;
-      if (item.id.startsWith("tab-")) { tab = item.id.slice(4) as XRMenuTab; hovered.clear(); draw(); }
-      else if (item.id.startsWith("preview:")) callbacks.onPreviewOffer(item.id.slice(8));
-      else if (item.id.startsWith("action:")) callbacks.onAction(item.id.slice(7));
-      else if (item.id === "confirm") callbacks.onConfirmOffer();
-      else if (item.id === "locomotion") callbacks.onLocomotionToggle();
-      else if (item.id === "exit") callbacks.onExit();
-      else if (item.id === "close") callbacks.onClose();
+      if (!item || item.target.disabled || buttonDisabled(item.button) || !item.button.isConnected || !host.contains(item.button)) return;
+      const current = measure().find(({ target, button }) => button === item.button && target.id === item.target.id);
+      if (!current || measurementKey([current]) !== measurementKey([item])) { refreshLayout(); requestPaint(); return; }
+      item.button.click();
+    },
+    scroll(delta: number) {
+      if (disposed || !Number.isFinite(delta) || !delta) return;
+      const scroller = host.querySelector<HTMLElement>("[data-xr-scroll]");
+      if (!scroller) return;
+      const before = scroller.scrollTop;
+      scroller.scrollTop = Math.max(0, Math.min(scroller.scrollHeight - scroller.clientHeight, before + delta));
+      if (scroller.scrollTop !== before) layoutChanged();
+    },
+    whenIdle(): Promise<void> {
+      if (disposed || (!capturing && !timer && !dirty && committedEpoch === stateEpoch)) return Promise.resolve();
+      return new Promise((resolve) => waiters.add(resolve));
     },
     dispose() {
       if (disposed) return;
-      disposed = true; mesh.removeFromParent(); mesh.geometry.dispose(); material.dispose(); texture.dispose();
-      targets = []; hovered.clear();
+      disposed = true; if (timer) clearTimeout(timer); timer = undefined;
+      observer?.disconnect();
+      doc.fonts?.removeEventListener("loadingdone", layoutChanged);
+      host.removeEventListener("load", layoutChanged, true); host.removeEventListener("error", layoutChanged, true); host.removeEventListener("scroll", layoutChanged, true);
+      panel?.dispose(); panel = undefined; host.remove(); metricsStyle.remove(); records = []; solids = [];
+      mesh.removeFromParent(); mesh.geometry.dispose(); material.dispose(); texture.dispose(); settle();
     },
   };
 }

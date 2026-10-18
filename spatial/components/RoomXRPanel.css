@@ -1,0 +1,85 @@
+/*
+ * The room website's overlay (RoomExperience.css, RoomVoice.css) laid out on a fixed
+ * 640 × 444 raster that floats over the room in VR. Only placement, motion and hover
+ * differ from the website: html2canvas cannot see :hover or backdrop blur, so the
+ * controller's hover is mirrored through [data-xr-hover] and glass is a little denser.
+ */
+.room-x.room-x--vr {
+  --paper-glass: rgba(245, 242, 235, 0.94);
+  --drawer: 312px;
+  position: relative;
+  inset: auto;
+  width: 640px;
+  height: 444px;
+  background: transparent;
+}
+.room-x--vr *,
+.room-x--vr *::before,
+.room-x--vr *::after {
+  animation: none !important;
+  transition: none !important;
+}
+
+/* top bar: always shown; no viewport-relative widths */
+.room-x--vr .room-x__bar { padding: 12px 14px; opacity: 1; transform: none; }
+.room-x--vr .room-x__title { max-width: 260px; }
+.room-x--vr .room-x__help { width: 38px; padding: 0; }
+/* with a drawer open, the bar's pills sit beside it so every drawer stays one press away */
+.room-x--vr[data-drawer] .room-x__bar { right: calc(var(--drawer) + 8px); grid-template-columns: auto 1fr auto; }
+.room-x--vr[data-drawer] .room-x__title { visibility: hidden; }
+
+/* glass surfaces without backdrop blur */
+.room-x--vr .room-x__carry,
+.room-x--vr .room-x__results { background: var(--paper-glass); }
+.room-x--vr .room-x__hotbar { background: rgba(43, 26, 16, 0.32); }
+
+/* drawers: open, in place, never sliding */
+.room-x--vr .room-x__panel {
+  top: 8px;
+  right: 8px;
+  bottom: 8px;
+  width: var(--drawer);
+  visibility: visible;
+  transform: none;
+}
+.room-x--vr .room-x__chips { flex-wrap: wrap; overflow: visible; }
+.room-x--vr .room-x__products,
+.room-x--vr .room-x__lines { min-height: 0; overflow-y: auto; scrollbar-width: none; }
+.room-x--vr .room-x__products { gap: 16px 12px; padding: 14px 20px 20px; }
+.room-x--vr .room-x__basket-foot { flex-direction: row; flex-wrap: wrap; align-items: center; }
+.room-x--vr .room-x__basket-foot .room-x__total { flex: 1 0 100%; }
+
+/* overlay cards: centered in the open room, or in the space beside a drawer */
+.room-x--vr .room-x__bottom,
+.room-x--vr .room-x__placement,
+.room-x--vr .room-x__carry,
+.room-x--vr .room-x__toolbar[data-docked] { left: 50%; width: auto; }
+.room-x--vr[data-side] .room-x__bottom,
+.room-x--vr[data-side] .room-x__placement,
+.room-x--vr[data-side] .room-x__carry,
+.room-x--vr[data-side] .room-x__toolbar[data-docked] { left: calc((100% - var(--drawer) - 8px) / 2); }
+.room-x--vr .room-x__bottom { bottom: 12px; }
+.room-x--vr .room-x__placement { bottom: 126px; width: 300px; }
+.room-x--vr .room-x__carry { bottom: 126px; }
+.room-x--vr .room-x__toolbar[data-docked] { bottom: 196px; grid-template-columns: repeat(2, auto); justify-items: center; }
+/* search results take the drawer's column, so nothing overlaps the centered tools */
+.room-x--vr .room-x__results { top: 62px; right: 8px; bottom: auto; width: var(--drawer); max-height: calc(100% - 70px); overflow: hidden; }
+.room-x--vr[data-side] .room-x__slot { width: 30px; height: 30px; }
+.room-x--vr[data-side] .room-x__slot-glyph { width: 18px; height: 18px; }
+.room-x--vr .room-x__slot-n { font-size: 9px; }
+
+/* the controller's hover is the website's :hover */
+.room-x--vr .room-x__pill[data-xr-hover]:not(:disabled) { border-color: var(--line-strong); background: var(--paper); }
+.room-x--vr .room-x__pill--ink[data-xr-hover]:not(:disabled) { border-color: #46301f; background: #46301f; }
+.room-x--vr .room-x__pill--ink[aria-pressed="true"] { border-color: #46301f; background: #46301f; }
+.room-x--vr .room-x__icon-btn[data-xr-hover] { background: var(--well); }
+.room-x--vr .room-x__chip[data-xr-hover]:not([aria-pressed="true"]) { border-color: var(--line-strong); background: rgba(43, 26, 16, 0.05); }
+.room-x--vr .room-x__chip-btn[data-xr-hover]:not(:disabled) { border-color: var(--line-strong); }
+.room-x--vr .room-x__chip-btn--ink[data-xr-hover]:not(:disabled) { border-color: #46301f; background: #46301f; }
+.room-x--vr .room-x__text-btn[data-xr-hover] { color: var(--ink); }
+.room-x--vr .room-x__tool[data-xr-hover]:not(:disabled) { background: rgba(43, 26, 16, 0.08); }
+.room-x--vr .room-x__slot[data-xr-hover]:not(:disabled) { background: rgba(255, 255, 255, 0.9); transform: translateY(-3px); }
+.room-x--vr .room-x__tool:disabled,
+.room-x--vr .room-x__chip:disabled,
+.room-x--vr .room-x__slot:disabled { opacity: 0.42; }
+.room-x--vr .room-voice .room-voice__btn[data-xr-hover] { background: linear-gradient(180deg, rgba(255, 255, 255, 0.66), rgba(255, 255, 255, 0.32)); }

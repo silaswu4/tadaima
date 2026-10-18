@@ -2,9 +2,9 @@ import type { FurnitureCategory, ProductCandidate, ShopRequest, ShopResult } fro
 
 /** Keep an active preview reachable even when it came from Fetch or a later result. */
 export function roomXRProducts(results: readonly ShopResult[], pending: ProductCandidate | null): Array<{ product: ProductCandidate; source?: ShopResult["source"] }> {
-  const visible: Array<{ product: ProductCandidate; source?: ShopResult["source"] }> = results.filter((entry) => entry.fits).slice(0, 3).map(({ product, source }) => ({ product, source }));
+  const visible: Array<{ product: ProductCandidate; source?: ShopResult["source"] }> = results.filter((entry) => entry.fits).slice(0, 24).map(({ product, source }) => ({ product, source }));
   if (pending && !visible.some((entry) => entry.product.id === pending.id)) {
-    if (visible.length === 3) visible.pop();
+    if (visible.length === 24) visible.pop();
     visible.push({ product: pending, source: results.find((entry) => entry.product.id === pending.id)?.source });
   }
   return visible;
@@ -20,9 +20,15 @@ type XRActionState = {
 };
 
 const PRESETS = [
+  { id: "search-sofa", category: "sofa", label: "Find sofas", maxPriceUsd: 1000 },
   { id: "search-chair", category: "chair", label: "Find chairs", maxPriceUsd: 300 },
   { id: "search-rug", category: "rug", label: "Find rugs", maxPriceUsd: 300 },
   { id: "search-lamp", category: "lamp", label: "Find lamps", maxPriceUsd: 150 },
+  { id: "search-table", category: "table", label: "Find tables", maxPriceUsd: 300 },
+  { id: "search-storage", category: "storage", label: "Find storage", maxPriceUsd: 500 },
+  { id: "search-desk", category: "desk", label: "Find desks", maxPriceUsd: 500 },
+  { id: "search-bed", category: "bed", label: "Find beds", maxPriceUsd: 1000 },
+  { id: "search-decor", category: "decor", label: "Find decor", maxPriceUsd: 150 },
 ] as const satisfies readonly { id: string; category: FurnitureCategory; label: string; maxPriceUsd: number }[];
 
 /** Explicit preset arguments avoid React's setCategory/then-search stale-state race. */
