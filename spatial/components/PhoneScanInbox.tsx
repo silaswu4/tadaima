@@ -31,20 +31,22 @@ export function PhoneScanInbox({ onImported }: { onImported: (room: RoomRecord) 
   const [openedAt] = useState(() => Date.now());
 
   useEffect(() => {
-    let live = true, timer = 0;
+    let live = true, timer = 0, locked = false;
     const poll = async () => {
       try {
         const response = await fetch("/api/scans", { cache: "no-store" });
         if (!live) return;
         // 401: a deployed site that needs the scan key. 503: the service is off; stay out of the way.
-        setLocked(response.status === 401);
+        locked = response.status === 401;
+        setLocked(locked);
         if (!response.ok) { setScans(null); return; }
         const { scans: all } = await response.json() as { scans: PhoneScan[] };
         if (live) setScans(all.filter((scan) => Date.now() - Date.parse(scan.createdAt) < RECENT_MS));
       } catch { if (live) setScans(null); }
-      finally { if (live && !document.hidden) timer = window.setTimeout(poll, POLL_MS); }
+      // Locked: wait for the key form (it bumps `attempt`) instead of logging a 401 every few seconds.
+      finally { if (live && !locked && !document.hidden) timer = window.setTimeout(poll, POLL_MS); }
     };
-    const resume = () => { if (!document.hidden) { window.clearTimeout(timer); poll(); } };
+    const resume = () => { if (!document.hidden && !locked) { window.clearTimeout(timer); poll(); } };
     poll();
     document.addEventListener("visibilitychange", resume);
     return () => { live = false; window.clearTimeout(timer); document.removeEventListener("visibilitychange", resume); };
