@@ -131,7 +131,7 @@ export async function getPlan(projectId: string): Promise<RoomPlan | null> {
   if (plan) return plan;
   const seed = seedFor(projectId);
   if (!seed) return null;
-  await db().setIfAbsent(planKey(projectId), seed);
+  if (await db().setIfAbsent(planKey(projectId), seed)) await db().set(revKey(projectId, seed.revision), seed);
   return db().get<RoomPlan>(planKey(projectId));
 }
 
@@ -139,6 +139,7 @@ export async function resetPlan(projectId: string): Promise<RoomPlan | null> {
   const seed = seedFor(projectId);
   if (!seed) return null;
   await db().set(planKey(projectId), seed);
+  await db().set(revKey(projectId, seed.revision), seed);
   return structuredClone(seed);
 }
 
