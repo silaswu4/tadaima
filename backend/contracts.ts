@@ -199,7 +199,75 @@ export interface ResearchJobOutput {
   costUsd: number | null;
 }
 
-// ---------- cart ----------
+// ---------- cart and checkout ----------
+
+/** The basket derived from the plan's proposed purchases. `digest` fingerprints exactly what would be paid for. */
+export interface Cart {
+  projectId: string;
+  planRevision: number;
+  merchants: Array<{ merchant: string; lines: CartLine[]; subtotal: Money }>;
+  subtotal: Money;
+  /** Lines whose price isn't established; they block checkout. */
+  unpricedProductIds: string[];
+  unknownCosts: Array<"shipping" | "tax" | "assembly">;
+  digest: string;
+}
+
+export interface RecheckLine {
+  productId: string;
+  label: string;
+  status: "ok" | "price_changed" | "unavailable" | "unverified";
+  catalogPrice: Money | null;
+  observedPrice: Money | null;
+  note: string | null;
+}
+
+export interface Recheck {
+  projectId: string;
+  /** Cart digest this recheck was run against. */
+  cartDigest: string;
+  lines: RecheckLine[];
+  allOk: boolean;
+  checkedAt: string;
+}
+
+export interface PaymentMethod {
+  id: string;
+  provider: "stripe_test";
+  brand: string;
+  last4: string;
+  expMonth: number;
+  expYear: number;
+}
+
+/** What the shopper approved. The agent can spend within it and nothing else. */
+export interface Mandate {
+  id: string;
+  projectId: string;
+  cartDigest: string;
+  maxAmount: Money;
+  merchants: string[];
+  paymentMethodId: string;
+  approvedAt: string;
+  expiresAt: string;
+  status: "active" | "used" | "revoked";
+}
+
+export interface Order {
+  id: string;
+  projectId: string;
+  mandateId: string;
+  cartDigest: string;
+  lines: CartLine[];
+  amount: Money;
+  payment: { provider: "stripe_test"; paymentIntentId: string; status: "succeeded" | "failed"; card: string };
+  /** Retailer orders are simulated in this build; nothing is placed with IKEA or Target. */
+  merchantOrders: Array<{ merchant: string; status: "simulated"; note: string }>;
+  testMode: true;
+  createdAt: string;
+}
+
+// ---------- merchant cart preparation ----------
 
 export interface CartLine {
   productId: string;

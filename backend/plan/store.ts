@@ -118,6 +118,12 @@ export async function saveProposal(p: PlanProposal) {
   await db().set(proposalKey(p.projectId, p.id), p, PROPOSAL_TTL_S);
 }
 
+/** Small per-project records (checkout state). Keys are namespaced by project. */
+export const projectKv = {
+  get: <T>(projectId: string, name: string) => db().get<T>(`kv:${projectId}:${name}`),
+  set: (projectId: string, name: string, value: unknown, ttlS?: number) => db().set(`kv:${projectId}:${name}`, value, ttlS),
+};
+
 const jobKey = (projectId: string, id: string) => `job:${projectId}:${id}`;
 const JOB_TTL_S = 24 * 60 * 60;
 
