@@ -1239,6 +1239,12 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
     throw new Error("No free floor space fits this piece. Put another piece away or choose a smaller product.");
   }
 
+  /** A shopper's own key press on their own piece is all the permission it needs: unlock it rather than ignore them. */
+  function handsOn(id: string) {
+    const item = entries.get(id)?.item;
+    if (item?.locked) setLocked(id, false);
+  }
+
   function setLocked(id: string, locked: boolean) {
     const item = entries.get(id)?.item ?? storedItems.get(id);
     if (!item || item.locked === locked) return;
@@ -1863,10 +1869,10 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
       case "KeyR":
         // Carrying: a quarter turn, Shift for a fine 15 degree step. In place: the toolbar's 45 degrees.
         if (moving) rotate(moving.id, event.shiftKey ? TURN_STEP : CARRY_QUARTER);
-        else if (target) rotate(target, Math.PI / 4);
+        else if (target) { handsOn(target); rotate(target, Math.PI / 4); }
         break;
       case "KeyG":
-        if (!event.repeat && selectedId && !moving) beginMove(selectedId);
+        if (!event.repeat && selectedId && !moving) { handsOn(selectedId); beginMove(selectedId); }
         break;
       case "Enter":
       case "NumpadEnter":
@@ -1883,6 +1889,7 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
       case "Backspace":
         if (selectedId && !event.repeat) {
           event.preventDefault();
+          handsOn(selectedId);
           discard(selectedId);
         }
         break;

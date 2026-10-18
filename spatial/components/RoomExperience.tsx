@@ -41,8 +41,8 @@ const LOADING_STEPS = ["Laying the floor", "Raising the walls", "Placing your fu
 
 /** Keys the engine listens for; held back while a panel is open so they do not act on the room. */
 const HOTBAR_SLOTS = 9;
-/** Bump to give every browser a fresh server room (v2: demo rooms start with an empty basket and nothing locked). */
-const ROOM_SESSION_VERSION = 2;
+/** Bump to give every browser a fresh server room (v3: empty basket, nothing locked, pieces can sit 3 cm apart). */
+const ROOM_SESSION_VERSION = 3;
 
 /** A small line drawing per kind of piece, for inventory slots. */
 function CategoryGlyph({ category }: { category: FurnitureCategory }) {
