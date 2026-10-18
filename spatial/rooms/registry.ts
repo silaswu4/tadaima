@@ -6,6 +6,9 @@ import type { CapturedRoomBinding } from "../room/textured-model";
 const DATABASE = "tadaima-private-rooms";
 const STORE = "rooms";
 const DRAFT_STORE = "catalog-drafts";
+/** Bump when demo rooms change shape (v2: pieces are the shopper's own and unlocked), so old drafts are ignored. */
+const DRAFT_VERSION = 2;
+const draftKey = (id: string) => `${id}@v${DRAFT_VERSION}`;
 const CHANGE_EVENT = "tadaima:rooms-changed";
 const CHANNEL = "tadaima-private-rooms";
 const MAX_EDITED_BYTES = 4 * 1024 * 1024;
@@ -264,21 +267,21 @@ export function validateRoomDraft(candidate: RoomPlan): RoomPlan {
 export async function getRoomDraft(id: string): Promise<RoomPlan | null> {
   catalogId(id);
   const db = await database(), transaction = db.transaction(DRAFT_STORE, "readonly");
-  const draft = await requestValue(transaction.objectStore(DRAFT_STORE).get(id)) as { id: string; plan: RoomPlan } | undefined;
+  const draft = await requestValue(transaction.objectStore(DRAFT_STORE).get(draftKey(id))) as { id: string; plan: RoomPlan } | undefined;
   if (!draft) return null;
-  if (draft.id !== id) return fail("this draft belongs to another room.");
+  if (draft.id !== draftKey(id)) return fail("this draft belongs to another room.");
   return validateRoomDraft(draft.plan);
 }
 export async function saveRoomDraft(id: string, candidate: RoomPlan): Promise<void> {
   catalogId(id);
   const plan = validateRoomDraft(candidate), db = await database();
   const transaction = db.transaction(DRAFT_STORE, "readwrite"), done = completed(transaction), store = transaction.objectStore(DRAFT_STORE);
-  const previous = await requestValue(store.get(id)) as { plan: RoomPlan } | undefined;
+  const previous = await requestValue(store.get(draftKey(id))) as { plan: RoomPlan } | undefined;
   if (previous && (previous.plan.projectId !== plan.projectId || previous.plan.revision > plan.revision
     || (previous.plan.revision === plan.revision && !jsonEqual(previous.plan, plan)))) {
     transaction.abort(); await done.catch(() => {}); return fail("a different or newer room draft is already saved. Reopen the room before editing.");
   }
-  store.put({ id, plan, updatedAt: new Date().toISOString() }); await done; changed();
+  store.put({ id: draftKey(id), plan, updatedAt: new Date().toISOString() }); await done; changed();
 }
 
 async function boundedResponse(response: Response, maximum: number,
