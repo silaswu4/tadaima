@@ -18,7 +18,7 @@ export type WorkspaceXRShopping = {
   basketLabel?: string;
   selectedItemLocked?: boolean;
   busy?: boolean;
-  agent?: { available: boolean; status: string; caption?: string; listening: boolean; connected: boolean; error?: string };
+  agent?: { available: boolean; status: string; caption?: string; listening: boolean; connected: boolean; error?: string; activity?: string; transcript?: string };
 };
 export type WorkspaceXROptions = {
   renderer: THREE.WebGLRenderer;
@@ -385,7 +385,7 @@ export function createWorkspaceXR(options: WorkspaceXROptions) {
       const next = { offers, selectedItemLabel: state.selectedItemLabel?.slice(0, 200), status: state.status?.slice(0, 300),
         pendingOfferId, canConfirm: !!pendingOfferId && state.canConfirm === true,
         basketLabel: state.basketLabel?.slice(0, 80), selectedItemLocked: state.selectedItemLocked === true, busy: state.busy === true,
-        agent: state.agent ? { available: state.agent.available === true, status: state.agent.status.slice(0, 120), caption: state.agent.caption?.slice(0, 600), listening: state.agent.listening === true, connected: state.agent.connected === true, error: state.agent.error?.slice(0, 300) } : undefined,
+        agent: state.agent ? { available: state.agent.available === true, status: state.agent.status.slice(0, 120), caption: state.agent.caption?.slice(0, 600), listening: state.agent.listening === true, connected: state.agent.connected === true, error: state.agent.error?.slice(0, 300), activity: state.agent.activity?.slice(0, 160), transcript: state.agent.transcript?.slice(0, 300) } : undefined,
         actions: (state.actions ?? []).slice(0, 8).filter((action, i, list) => action.id && action.id.length <= 80 && list.findIndex((other) => other.id === action.id) === i)
           .map((action) => ({ id: action.id, label: action.label.slice(0, 80), detail: action.detail?.slice(0, 140), disabled: action.disabled === true })) };
       const key = JSON.stringify(next);
@@ -413,6 +413,7 @@ export function createWorkspaceXR(options: WorkspaceXROptions) {
         await renderer.xr.setSession(session);
         if (disposed || activeSession !== session) { await session.end().catch(() => {}); restore(); return; }
         presenting = true;
+        menu.focusAgent();
         for (const controller of controllers) for (const child of controller.children) child.visible = true;
         options.onSessionChange?.(true);
       } catch (error) {

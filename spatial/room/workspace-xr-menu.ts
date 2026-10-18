@@ -55,7 +55,7 @@ export function createXRMenu(callbacks: XRMenuCallbacks) {
   mesh.renderOrder = 20;
   let state: MenuState = { offers: [] };
   let locomotion: WorkspaceXRLocomotion = "walk";
-  let tab: XRMenuTab = "shop";
+  let tab: XRMenuTab = "agent";
   let targets: XRMenuTarget[] = [];
   let hovered = new Set<string>();
   let disposed = false;
@@ -188,21 +188,22 @@ export function createXRMenu(callbacks: XRMenuCallbacks) {
   }
 
   function agent() {
-    const voice = state.agent;
-    text("Your room agent", 64, 286, 42, C.ink, 1240, 500, true);
+    const voice = state.agent, recommendation = state.offers.find((offer) => offer.id === state.pendingOfferId);
+    text(recommendation ? "Tadaima recommends" : "Tell Tadaima what you need", 64, 286, 42, C.ink, 1240, 500, true);
     box(64, 332, 1312, 138, C.well);
-    text(voice?.available ? voice.status || "Ready to talk" : "Voice unavailable on this server", 104, 378, 38, C.ink, 1210, 500);
-    text(voice?.listening ? "Microphone on · tap Send to agent when you’re done" :
-      voice?.available ? "Uses your headset microphone. Tap Talk to start." : "You can still find and place furniture in Shop.", 104, 434, 30, C.muted, 1210);
-    // Microphone controls remain reachable while an agent tool edits the room.
+    text(recommendation?.label || (voice?.available ? voice.activity || voice.status || "Ready to talk" : "Your room agent isn’t connected yet"), 104, 378, 38, C.ink, 1210, 500);
+    text(recommendation?.detail || (voice?.listening ? "Microphone on · tap Finish speaking when you’re done" :
+      voice?.available ? "Describe what you want. Tadaima handles the search and fit." : "Agent setup is needed. You can still browse in Shop."), 104, 434, 30, C.muted, 1210);
     const toggle = action("voice-toggle"), stop = action("voice-stop");
-    button("action:voice-toggle", voice?.listening ? "Send to agent" : "Talk to agent", 64, 502, 640, 100,
-      { primary: true, disabled: !voice?.available || !toggle || !!toggle.disabled });
+    button("action:voice-toggle", voice?.listening ? "Finish speaking" : "Talk to Tadaima", 64, 502, 640, 100,
+      { primary: !recommendation, disabled: !voice?.available || !toggle || !!toggle.disabled });
     button("action:voice-stop", "End conversation", 736, 502, 640, 100,
       { disabled: !stop || !!stop.disabled });
     box(64, 636, 1312, 162, C.white, C.line);
-    paragraph(voice?.error || voice?.caption || (voice?.available ? "Try: ‘Find a chair for this room under $200.’ The agent uses this room’s layout and furniture." :
-      "The room service needs voice credentials before you can speak with the agent here."), 104, 676, 1224, 30, voice?.error ? C.danger : C.muted, 3);
+    const explanation = voice?.error || (voice?.activity ? `${voice.activity}…` : voice?.caption) ||
+      (recommendation ? "This piece is previewed in your room. Say ‘place it’ to add it, or ask Tadaima for another option." : voice?.transcript ? `You asked: ${voice.transcript}` : voice?.available ? "Try: ‘Find me a comfortable chair under $200.’ Tadaima searches, checks fit and shows you a recommendation before adding anything." :
+      "Voice is unavailable on this server. Once connected, the agent can search, preview and rearrange this room with your approval.");
+    paragraph(explanation, 104, 676, 1224, 30, voice?.error ? C.danger : C.muted, 3);
   }
 
   function controls() {
@@ -265,7 +266,7 @@ export function createXRMenu(callbacks: XRMenuCallbacks) {
     const body = tab === "shop" ? [state.offers, state.pendingOfferId, state.busy,
       ["search-chair", "search-rug", "search-lamp"].map(actionDisabled)] : tab === "room" ?
       [state.selectedItemLabel, state.selectedItemLocked, actionDisabled("rotate-selected"), actionDisabled("store-selected")] : tab === "agent" ?
-      [state.agent, action("voice-toggle")?.disabled, action("voice-stop")?.disabled] : [locomotion, state.busy];
+      [state.agent, state.pendingOfferId, state.offers.find((offer) => offer.id === state.pendingOfferId), action("voice-toggle")?.disabled, action("voice-stop")?.disabled] : [locomotion, state.busy];
     return JSON.stringify([tab, state.basketLabel, body, footerState]);
   }
 
@@ -281,6 +282,7 @@ export function createXRMenu(callbacks: XRMenuCallbacks) {
     mesh,
     get targets(): readonly XRMenuTarget[] { return targets; },
     get activeTab(): XRMenuTab { return tab; },
+    focusAgent() { if (!disposed && tab !== "agent") { tab = "agent"; hovered.clear(); draw(); } },
     setState(next: WorkspaceXRShopping, nextLocomotion: WorkspaceXRLocomotion) {
       if (disposed) return;
       const input = next as MenuState;
@@ -292,11 +294,10 @@ export function createXRMenu(callbacks: XRMenuCallbacks) {
           .map((item) => ({ id: item.id, label: "", disabled: !!item.disabled })),
         selectedItemLabel: clean(input.selectedItemLabel, 160), status: clean(input.status),
         pendingOfferId, canConfirm: !!pendingOfferId && !!input.canConfirm,
-        agent: input.agent ? { available: !!input.agent.available, status: clean(input.agent.status, 120), caption: clean(input.agent.caption, 600), listening: !!input.agent.listening, connected: !!input.agent.connected, error: clean(input.agent.error, 300) } : undefined,
+        agent: input.agent ? { available: !!input.agent.available, status: clean(input.agent.status, 120), caption: clean(input.agent.caption, 600), listening: !!input.agent.listening, connected: !!input.agent.connected, error: clean(input.agent.error, 300), activity: clean(input.agent.activity, 160), transcript: clean(input.agent.transcript, 300) } : undefined,
         basketLabel: clean(input.basketLabel, 80), selectedItemLocked: !!input.selectedItemLocked, busy: !!input.busy,
       };
       const before = visibleKey();
-      if (projected.pendingOfferId && projected.pendingOfferId !== state.pendingOfferId) tab = "shop";
       state = projected; locomotion = nextLocomotion;
       if (visibleKey() !== before) { hovered.clear(); draw(); }
     },

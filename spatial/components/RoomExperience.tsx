@@ -224,6 +224,7 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
   const xrActionRef = useRef<(id: string) => void>(() => {});
   const xrActionPending = useRef(false);
   const voiceControls = useRef<RoomVoiceControls | null>(null);
+  const immersiveMode = useRef(false);
   const [voiceState, setVoiceState] = useState<RoomVoiceState>({ status: "Talk", listening: false, connected: false });
   const registerVoiceControls = useCallback((controls: RoomVoiceControls | null) => { voiceControls.current = controls; }, []);
   const [panel, setPanel] = useState<Panel>(null);
@@ -464,7 +465,18 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
       onExplodeChange(value) { if (!cancelled) { setExploded(value); setPending(null); } },
       onWindowBlindsChange(value) { if (!cancelled) setBlindsRaised(value); },
       onCarryStatus(status) { if (!cancelled) setCarry(status); },
-      onShoppingFloor(spot) { if (!cancelled) { setFloorSpot(spot); setNotice("Shopping spot selected. Checking pieces that fit here."); searchRef.current(spot, false); } },
+      onShoppingFloor(spot) {
+        if (cancelled) return;
+        setFloorSpot(spot);
+        if (immersiveMode.current) {
+          // A floor trigger supplies context to the agent, not an unsolicited
+          // category search. A new intent will search this spot automatically.
+          shoppingRef.current.stopSearch(); walkRef.current?.cancelProductPreview();
+          setPending(null); setPendingPlacement(null); setSearchSpot(null); setSwapTarget(null);
+          setNotice("Spot selected. Tell Tadaima what you’d like here.");
+        } else { setNotice("Shopping spot selected. Checking pieces that fit here."); searchRef.current(spot, false); }
+      },
+      onXRChange(value) { immersiveMode.current = value; },
       onPreviewOffer(id) { const product = resultsRef.current.find((result) => result.product.id === id)?.product; if (product) previewRef.current(product); },
       onConfirmOffer() { confirmRef.current(); },
       onXRAction(id) { if (!cancelled) xrActionRef.current(id); },
@@ -858,7 +870,7 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
       busy: blocked, basketLabel: `Basket ${basket.length} · ${basketTotal}`,
       actions: xrActions,
       agent: { available: voiceAvailable, ...voiceState },
-      status: blocked ? "Updating your room…" : notice ?? shopping.job?.stage ?? "Point at clear floor to choose where you shop.",
+      status: blocked ? "Updating your room…" : notice ?? shopping.job?.stage ?? "Tell Tadaima what you want to add or change.",
     });
   }, [status, results, selected, pending, notice, blocked, shopping.job, shopping.session, moving, basket.length, basketTotal, xrActions, voiceAvailable, voiceState]);
 
@@ -998,7 +1010,7 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
             <span className="room-x__tools-text">Undo</span>
           </button>
           <RoomVoice key={shopping.session?.plan.projectId ?? "offline"}
-            plan={shopping.session?.plan ?? null} selectedId={selected?.id ?? null} job={shopping.job} results={results}
+            plan={shopping.session?.plan ?? null} selectedId={selected?.id ?? null} previewedProductId={pending?.id ?? null} job={shopping.job} results={results}
             available={Boolean(shopping.session?.capabilities.voice)} liveSearch={Boolean(shopping.session?.capabilities.liveSearch)}
             getSpot={assistantSpot} onRefresh={shopping.refresh} onPropose={proposeByVoice}
             onApply={applyByVoice} getProposal={() => agentProposalRef.current} onSetBudget={shopping.setBudget}

@@ -98,6 +98,11 @@ function pointMenu(controller, xr, scene, id) {
   pointMenuPixel(controller, xr, scene, target.x + target.width / 2, target.y + target.height / 2);
 }
 
+function openShop(env, xr) {
+  pointMenu(env.controllers[1], xr, env.options.scene, "tab-shop");
+  assert.equal(xr.menuTab, "shop");
+}
+
 test("metric teleport compensates tracked physical head offset without changing height or scale", () => {
   const rig = new THREE.Group(); rig.position.set(2, 0, 4);
   teleportXR(rig, new THREE.Vector3(2.4, 1.7, 3.8), new THREE.Vector3(8, -.1, -3));
@@ -131,6 +136,7 @@ test("session entry spawns at floor scale, and exit restores the exact desktop c
   const xr = createWorkspaceXR(env.options);
   await xr.enter(); xr.update();
   assert.equal(xr.active, true);
+  assert.equal(xr.menuTab, "agent", "the existing voice agent is the default VR interface");
   assert.equal(env.options.camera.position.y, 0); // tracked 1.72m, never another 1.6m added
   assert.ok(Math.abs(env.head.position.x - 1) < 1e-10);
   assert.ok(Math.abs(env.head.position.z - 2) < 1e-10);
@@ -189,6 +195,7 @@ test("in-headset shopping buttons call preview and explicit placement confirmati
   xr.setShoppingState({ offers: [{ id: "sku-1", label: "Measured chair", detail: "$80 / 0.5m wide" }], pendingOfferId: "sku-1", canConfirm: true });
   await xr.enter(); xr.update();
   const controller = env.controllers[1];
+  openShop(env, xr);
   pointMenu(controller, xr, env.options.scene, "preview:sku-1");
   assert.deepEqual(previews, ["sku-1"]);
   assert.deepEqual(confirmations, []);
@@ -401,12 +408,13 @@ test("HUD bounds large result sets and text, suppresses unbound confirmation, an
   const hud = env.options.scene.getObjectByName("workspace-xr-shopping");
   const panel = hud.getObjectByName("workspace-xr-menu"), texture = panel.material.map;
   assert.equal(hud.children.length, 3); // one menu texture + two pointer dots
+  await xr.enter(); xr.update(); openShop(env, xr);
   assert.equal(xr.menuTargets.filter((target) => target.id.startsWith("preview:")).length, 3);
   assert.ok(!xr.menuTargets.some((target) => target.id === "confirm"));
   assert.ok(drawnText.every((text) => text.length <= 300));
   const version = texture.version; xr.setShoppingState(state);
   assert.equal(texture.version, version); // no redraws for identical state
-  await xr.enter(); xr.update(); pointMenu(env.controllers[1], xr, env.options.scene, "preview:sku-2");
+  pointMenu(env.controllers[1], xr, env.options.scene, "preview:sku-2");
   assert.deepEqual(confirms, []);
   let disposedGeometry = 0; panel.geometry.addEventListener("dispose", () => disposedGeometry++);
   xr.setShoppingState({ offers: [], canConfirm: true });
@@ -419,7 +427,7 @@ test("a valid desktop-selected offer beyond the first three remains visible and 
   env.options.onPreviewOffer = (id) => previews.push(id); env.options.onConfirmOffer = () => confirms.push(true);
   const xr = createWorkspaceXR(env.options);
   xr.setShoppingState({ offers: Array.from({ length: 6 }, (_, i) => ({ id: `sku-${i}`, label: `Chair ${i}` })), pendingOfferId: "sku-5", canConfirm: true });
-  await xr.enter(); xr.update();
+  await xr.enter(); xr.update(); openShop(env, xr);
   assert.ok(xr.menuTargets.some((target) => target.id === "preview:sku-5"));
   pointMenu(env.controllers[1], xr, env.options.scene, "preview:sku-5");
   assert.deepEqual(previews, ["sku-5"]); assert.deepEqual(confirms, []);
@@ -524,7 +532,7 @@ test("headset actions are bounded, disabled buttons block click-through, and mov
   const env = environment(); const actions = []; env.options.onAction = (id) => actions.push(id);
   const xr = createWorkspaceXR(env.options);
   xr.setShoppingState({ offers: [], actions: [{ id: "search-chair", label: "Find chairs" }, { id: "search-rug", label: "Find rugs", disabled: true }, ...Array.from({ length: 1000 }, (_, i) => ({ id: `action-${i}`, label: "Unknown action" }))] });
-  await xr.enter(); xr.update();
+  await xr.enter(); xr.update(); openShop(env, xr);
   assert.ok(xr.menuTargets.length <= 10);
   pointMenu(env.controllers[1], xr, env.options.scene, "action:search-chair");
   assert.deepEqual(actions, ["search-chair"]);
@@ -625,7 +633,7 @@ test("pitched tracked controller beam, menu cursor and activated target share th
   env.options.onPreviewOffer = (id) => previews.push(id);
   const xr = createWorkspaceXR(env.options);
   xr.setShoppingState({ offers: [{ id: "sku:pitch-test", label: "Measured chair" }] });
-  await xr.enter(); xr.update();
+  await xr.enter(); xr.update(); openShop(env, xr);
   const controller = env.controllers[1];
   controller.dispatchEvent({ type: "connected", data: { handedness: "right", gamepad: { axes: [0, 0, 0, 0] } } });
   const rig = env.options.scene.getObjectByName("workspace-xr-rig");
@@ -662,4 +670,21 @@ test("pitched tracked controller beam, menu cursor and activated target share th
   xr.update();
   assert.equal(line.scale.z, 6); assert.equal(line.material.depthTest, true); assert.equal(line.renderOrder, 0);
   assert.equal(dot.visible, false); xr.dispose();
+});
+
+
+test("Agent remains the default VR interface and confirms an arriving placement without navigating to Shop", async () => {
+  const env = environment(), confirmations = [];
+  env.options.onConfirmOffer = () => confirmations.push(true);
+  const xr = createWorkspaceXR(env.options);
+  await xr.enter(); xr.update();
+  assert.equal(xr.menuTab, "agent");
+  xr.setShoppingState({ offers: [{ id: "agent:chair", label: "Agent-selected chair" }],
+    pendingOfferId: "agent:chair", canConfirm: true });
+  assert.equal(xr.menuTab, "agent", "an agent placement preview never redirects the wearer to manual catalog browsing");
+  const confirm = xr.menuTargets.find((target) => target.id === "confirm");
+  assert.ok(confirm && !confirm.disabled, "the placement confirmation is available directly in Agent");
+  pointMenu(env.controllers[1], xr, env.options.scene, "confirm");
+  assert.deepEqual(confirmations, [true]);
+  assert.equal(xr.menuTab, "agent"); xr.dispose();
 });

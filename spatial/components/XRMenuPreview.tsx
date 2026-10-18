@@ -19,7 +19,7 @@ function fixture(scenario: Scenario, voice: { connected: boolean; listening: boo
     agent: { available: true, ...voice, status: voice.listening ? "Listening" : voice.connected ? "Ready" : "Tap to speak", caption: voice.connected ? "Example response: I can find furniture that fits this room." : undefined },
     basketLabel: "Basket 0 · $0.00",
     selectedItemLabel: "Your lounge chair", selectedItemLocked: scenario === "locked",
-    status: scenario === "start" ? "Point at a floor spot, then choose a category." : "3 pieces fit this spot. Choose one to try in the room.",
+    status: scenario === "start" ? "Tell Tadaima what you want to add or change." : "Your room stays in context while Tadaima works.",
     pendingOfferId: scenario === "placement" ? "chair" : null, canConfirm: scenario === "placement" };
 }
 

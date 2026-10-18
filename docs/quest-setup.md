@@ -37,7 +37,7 @@ Keep the development server and USB connection active. The physical boundary rem
 | Left controller grip | Bring the shopping panel in front of the wearer |
 | Right controller grip | Hide/show the shopping panel; showing it also repositions it |
 | Trigger on a product row in Shop | Choose a product preview supplied by the application |
-| Trigger on a valid floor spot | Choose a shopping placement spot; position the local preview when a product is selected. This does not teleport. |
+| Trigger on a valid floor spot | Give the agent a spot for the next request, clearing an older preview. This does not teleport or start a category search. |
 | Trigger on Confirm placement | Confirm that preview through the application's callback; this does not purchase furniture |
 | Find chairs / rugs / lamps | Search the saved retailer catalog at your current floor spot, without leaving VR |
 | Rotate 45° / Put in storage | Edit the selected unlocked piece through the same canonical server queue |
@@ -46,11 +46,13 @@ Keep the development server and USB connection active. The physical boundary rem
 
 Controller rays respect the nearest supplied wall or furnishing. Trigger selection and locomotion are separate. Walking is the default; the headset menu retains teleport for comfort. Walking uses the existing swept desktop navigation solver at 1.3 meters/second, with thumbstick dead-zone/diagonal normalization, a capped frame delta, wall/furniture sliding and unchanged tracked eye height. Browser/system UI pauses input; center the sticks before locomotion resumes. Teleport destinations use the same room clearance checks. Moving your physical head is still physical movement, so the app's navigation checks do not replace the Quest boundary.
 
+The agent is the primary VR flow. Shop remains optional browsing; choosing a floor spot supplies context without starting a category search. An arriving recommendation stays on Agent with its name, price and approval controls. Placement approval is bound to the previewed product, search job, room revision, price and pose; changed/cancelled previews require fresh review.
+
 The headset menu is actual Three.js scene geometry; ordinary DOM controls are not visible inside immersive VR. It uses one 1440 × 1000 canvas texture on a level 1.04-meter panel, positioned 1.25 meters ahead and slightly below eye center. It follows physical movement and joystick translation immediately, follows larger head-yaw changes with damping and a 12-degree aiming deadzone, and recenters immediately after snap turns or teleporting. Head pitch does not tilt the panel. Its warm paper (`#f5f2eb`), brown ink (`#2b1a10`), pill controls and Inter/Inter Tight type match the room/gallery website. The canvas resolves the existing Next.js font variables and repaints after the faces load; it uses opaque surfaces for headset readability. Four tabs keep the tasks separate:
 
 - **Shop:** Chairs/Rugs/Lamps saved-catalog presets and up to three current offers with supplied prices/details. The selected preview stays in the visible result subset.
 - **Room:** Selected furniture, Rotate 45° and Put in storage. Locked furniture stays protected and explains how to unlock it on the website.
-- **Agent:** Talk / Send to agent / End conversation, with real voice status, replies and errors. It uses the same ElevenLabs session and current scanned-room tools as the website. Voice requires configured ElevenLabs credentials and browser microphone permission; unavailable voice never disables catalog shopping. End conversation remains reachable during a shopping tool.
+- **Agent (opens first):** Talk / Finish speaking / End conversation, with the request transcript, actual tool progress, replies and errors. The agent searches, ranks fitting in-budget pieces and shows a noncommitting preview automatically. Approve the recommendation by voice or the existing Confirm placement control, or ask for an alternative without browsing product categories. It uses the same ElevenLabs session and current scanned-room tools as the website. Voice requires configured ElevenLabs credentials and browser microphone permission; unavailable voice never disables catalog shopping. End conversation remains reachable during a shopping tool.
 - **Controls:** Walking/teleport choice, controller hints and Exit VR.
 
 Basket count/total stay in the header. A pending preview keeps Cancel preview and Confirm placement in the footer on every tab. Search/loading/error status comes from the surrounding application. Rays terminate at the exact menu cursor/hit, and share its transparent overlay rendering order; the complete menu rectangle blocks clicks through to the room, including disabled buttons and whitespace. The menu is drawn above nearby room geometry so furniture cannot clip its controls. Close or right grip hides it; left grip brings it back in front of you.
@@ -137,7 +139,7 @@ Automated tests cover metric teleport/snap pivot math, user-gesture entry, suppo
 npx tsx --test spatial/tests/test-workspace-xr.mjs
 ```
 
-The current 35 focused XR checks, eight room-action checks and seven menu checks cover direct head-relative walking, frame-delta clamping, shared swept collision delegation, focus pause/neutral rearming, simultaneous walk/turn head-pivot preservation, bounded action dispatch and disabled-panel click-through, in addition to the earlier session/teleport/selection cases. These are synthetic Three.js/controller tests.
+The focused XR, room-action and menu checks cover direct head-relative walking, frame-delta clamping, shared swept collision delegation, focus pause/neutral rearming, simultaneous walk/turn head-pivot preservation, bounded action dispatch and disabled-panel click-through, in addition to the earlier session/teleport/selection cases. These are synthetic Three.js/controller tests.
 
 Physical Quest 3S connection is now confirmed: USB device authorized, browser version `154.0.0.45.15.1092497976`, local scan JSON/model reachable, JSON SHA-256 matching the saved room, and 28 captured objects. A wearer confirmed the room works; a local headset framebuffer capture showed stereo rendering of the measured room, furniture selection and controller rays. This establishes physical room rendering, not headset frame rate, shopping completion or the updated walking/controller feel. The remaining checklist requires wearer verification. Losing controller tracking or opening immersive browser/system UI cancels an armed teleport; it is not treated as a deliberate stick release.
 
@@ -150,3 +152,18 @@ The published clean-room artifact measures 8,553,012 bytes, 75,124 triangles, 61
 The XR ArrayCamera pose is read directly from its `matrixWorld` after `WebXRManager.updateCamera()`: calling `getWorldPosition()` / `getWorldQuaternion()` on that unparented camera recomputes and discards the rig-adjusted pose. Regression fixtures keep tracking-local coordinates separate from world coordinates, matching Three.js.
 
 The camera is reparented at entry and starts at local origin under the rig: `local-floor` supplies the measured head height, so no additional desktop 1.6-meter camera offset is added. The original camera parent, pose, scale, FOV, and aspect are restored on exit. Controller events, panel textures, and geometries are released on disposal. Canonical furniture coordinates and purchase state are never changed by this module.
+
+
+## Activate the real room agent
+
+The code uses the existing ElevenLabs conversational agent and Matthew's canonical room tools. No local catalog macro is presented as an AI agent. Add `ELEVENLABS_API_KEY` and `ELEVENLABS_AGENT_ID` to the ignored `.env.local`; add `BROWSER_USE_API_KEY` for live retailer research. `ANTHROPIC_API_KEY` enables separate room-planning requests. Never commit these credentials.
+
+After changing the agent prompt/tools, synchronize the hosted ElevenLabs configuration (editing this repository alone does not update a hosted agent):
+
+```bash
+npx tsx --env-file=.env.local backend/voice/setup-agent.ts
+```
+
+If only the API key is configured, that script creates an agent and prints its ID to save locally. Restart or reload the backend environment as appropriate, then reload the room to refresh its capabilities before entering VR. The wearer explicitly starts the microphone; browser microphone permission and live audio still require a physical check.
+
+Say “find a comfortable chair under $200 for this room.” The agent calls the existing room search, fit/ranking and preview tools. It explains the preview and asks once before adding the approved piece. Live store research is used only when configured; saved catalog observations are identified as such. The agent never treats a preview as approval or executes payment.

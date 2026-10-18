@@ -7,7 +7,7 @@ import "./RoomVoice.css";
 
 /** Shared by the flat-screen pill and the immersive Agent tab. No second session. */
 export type RoomVoiceControls = { toggleListening(): void; stop(): void };
-export type RoomVoiceState = { status: string; listening: boolean; connected: boolean; caption?: string; error?: string };
+export type RoomVoiceState = { status: string; listening: boolean; connected: boolean; caption?: string; error?: string; activity?: string; transcript?: string };
 
 export type RoomAgentVoiceProps = {
   projectId: string;
@@ -24,6 +24,13 @@ export function RoomAgentVoice(props: RoomAgentVoiceProps) {
   return <ConversationProvider key={props.projectId}><VoiceSession {...props} /></ConversationProvider>;
 }
 
+const TOOL_ACTIVITY: Record<string, string> = {
+  get_room: "Reading your room", shop_here: "Searching and checking fit", check_search: "Reviewing search results",
+  preview_product: "Preparing a room preview", place_product: "Placing your approved piece",
+  propose_change: "Planning your room", apply_proposal: "Applying your approved changes",
+  set_budget: "Updating your budget", move_here: "Checking and moving furniture", put_away: "Storing your piece",
+  get_cart: "Checking your basket",
+};
 const PTT_KEY = "Space";
 /** A press shorter than this is a tap: it latches the mic open (phones, headsets) until the next tap. */
 const TAP_MS = 250;
@@ -45,6 +52,10 @@ function VoiceSession({ getTools, disabled = false, update, onControls, onStateC
   const [error, setError] = useState("");
   const [caption, setCaption] = useState("");
   const [working, setWorking] = useState(0);
+  const [requestingToken, setRequestingToken] = useState(false);
+  const [activity, setActivity] = useState("");
+  const [transcript, setTranscript] = useState("");
+  const activeTools = useRef(new Map<number, string>()), nextToolId = useRef(0);
   const conversation = useConversation({ micMuted: !open });
   const convo = useRef(conversation);
   const latest = useRef({ getTools, disabled });
@@ -66,6 +77,7 @@ function VoiceSession({ getTools, disabled = false, update, onControls, onStateC
   async function connect() {
     if (connecting.current || convo.current.status === "connected" || convo.current.status === "connecting") return;
     connecting.current = true;
+    setRequestingToken(true);
     const attempt = ++connectionAttempt.current;
     setError("");
     try {
@@ -79,11 +91,17 @@ function VoiceSession({ getTools, disabled = false, update, onControls, onStateC
         Object.entries(tools).map(([name, tool]) => [
           name,
           async (params: Record<string, unknown>) => {
+            if (attempt !== connectionAttempt.current) return "Not completed: this agent conversation has ended.";
+            const toolId = ++nextToolId.current;
+            activeTools.current.set(toolId, TOOL_ACTIVITY[name] ?? "Working on your request");
+            setActivity(activeTools.current.get(toolId)!);
             setWorking((n) => n + 1);
             lastUse.current = Date.now();
             try {
               return await tool(params);
             } finally {
+              activeTools.current.delete(toolId);
+              setActivity([...activeTools.current.values()].at(-1) ?? "");
               setWorking((n) => Math.max(0, n - 1));
             }
           },
@@ -94,6 +112,8 @@ function VoiceSession({ getTools, disabled = false, update, onControls, onStateC
         connectionType: "webrtc",
         clientTools,
         onMessage: (m) => {
+          if (attempt !== connectionAttempt.current) return;
+          if (m.source === "user") { setTranscript(m.message.trim()); return; }
           if (m.source !== "ai") return;
           const text = m.message.replace(/\[[a-z][a-z ]{0,24}\]\s*/gi, "").trim();
           if (!text) return;
@@ -103,11 +123,14 @@ function VoiceSession({ getTools, disabled = false, update, onControls, onStateC
           captionTimer.current = setTimeout(() => setCaption(""), 9000);
         },
         onError: (message) => {
+          if (attempt !== connectionAttempt.current) return;
           setOpen(false);
           setLatched(false);
           setError(/permission|notallowed|denied/i.test(message) ? "Microphone blocked. Allow it in the browser to talk." : "Voice was interrupted. Press again to reconnect.");
         },
         onDisconnect: (details) => {
+          if (attempt !== connectionAttempt.current) return;
+          activeTools.current.clear(); setActivity("");
           setOpen(false);
           setLatched(false);
           setWorking(0);
@@ -121,17 +144,18 @@ function VoiceSession({ getTools, disabled = false, update, onControls, onStateC
       setOpen(false);
       setLatched(false);
     } finally {
-      if (attempt === connectionAttempt.current) connecting.current = false;
+      if (attempt === connectionAttempt.current) { connecting.current = false; setRequestingToken(false); }
     }
   }
 
   function stop() {
     ++connectionAttempt.current;
     connecting.current = false;
+    setRequestingToken(false);
     pressedAt.current = 0;
     setOpen(false);
     setLatched(false);
-    setWorking(0);
+    setWorking(0); activeTools.current.clear(); setActivity("");
     void convo.current.endSession();
   }
 
@@ -260,11 +284,11 @@ function VoiceSession({ getTools, disabled = false, update, onControls, onStateC
     return { gather: g.value, offset: Math.sin(now / 520) * 0.75 * g.value, stretch: Math.abs(Math.cos(now / 520)) * 0.3, heldLevel: 0.55 };
   };
 
-  const label = pending || (open && !live) ? "Connecting" : open ? "Listening" : working ? "Working" : conversation.isSpeaking ? "Speaking" : "Talk";
+  const label = requestingToken || pending || (open && !live) ? "Connecting" : open ? "Listening" : working ? "Working" : conversation.isSpeaking ? "Speaking" : "Talk";
 
   useEffect(() => {
-    onStateChange?.({ status: label, listening: open, connected: live, caption: caption || undefined, error: error || undefined });
-  }, [onStateChange, label, open, live, caption, error]);
+    onStateChange?.({ status: activity || label, listening: open, connected: live, caption: caption || undefined, error: error || undefined, activity: activity || undefined, transcript: transcript || undefined });
+  }, [onStateChange, label, open, live, caption, error, activity, transcript]);
 
   return (
     <div className="room-voice" data-tour="talk">

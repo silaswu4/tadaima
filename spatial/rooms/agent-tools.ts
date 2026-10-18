@@ -1,6 +1,6 @@
 import type { FloorSpot, FurnitureCategory, Job, PlanProposal, RoomPlan, ShopJobOutput, ShopRequest, ShopResult } from "../../backend/contracts";
 
-export type AgentContext = { plan: RoomPlan; selectedId: string | null; job: Job<ShopJobOutput> | null; results: ShopResult[] };
+export type AgentContext = { plan: RoomPlan; selectedId: string | null; job: Job<ShopJobOutput> | null; results: ShopResult[]; previewedProductId?: string | null };
 type Options = {
   projectId: string;
   active(): boolean;
@@ -32,6 +32,13 @@ const dollars = (minor: number) => `$${Math.round(minor / 100).toLocaleString("e
  * spoken yes (the shopper may be in first person with no free pointer).
  * Payments stay an on-screen approval. */
 export function createRoomAgentTools(options: Options): Record<string, (params: Record<string, unknown>) => Promise<string>> {
+  let previewPin: { jobId: string; productId: string; revision: number; approvalKey: string } | null = null;
+  let placementPending = false;
+  let searchEpoch = 0;
+  const eligible = (result: ShopResult) => result.fits && !!result.placement && result.withinBudget !== false;
+  // Approval covers this product, observed price and pose, never a changing result index.
+  const approvalKey = (result: ShopResult) => JSON.stringify([result.product.price?.amountMinor, result.product.price?.currency,
+    result.product.dimensions, result.placement?.roomId, result.placement?.position, result.placement?.rotationY]);
   function context() {
     const value = options.context();
     if (!options.active() || value.plan.projectId !== options.projectId) throw new Error("This room assistant session has ended.");
@@ -41,14 +48,49 @@ export function createRoomAgentTools(options: Options): Record<string, (params: 
     try { context(); return await run(params); }
     catch (cause) { return `Not completed: ${cause instanceof Error ? cause.message : "The room service could not finish this action."}`; }
   };
-  function resultText() {
+  function searchContext(jobId?: unknown) {
     const value = context();
-    if (!value.job) return "No search yet. Ask what kind of furniture the shopper wants.";
-    if (value.job.projectId !== options.projectId) throw new Error("These results belong to another room.");
-    const choices = value.results.slice(0, 6).map((result, i) => `${i + 1}) ${result.product.label}: ${result.product.price ? money(result.product.price.amountMinor, result.product.price.currency) : "price unknown"}; ${result.fits ? "fits this spot" : result.problems.join("; ") || "fit unverified"}${result.withinBudget === false && result.overBudgetUsd != null ? `; ${dollars(Math.ceil(result.overBudgetUsd) * 100)} over the room budget` : ""}.`);
-    const live = value.job.output?.live;
-    return `${value.job.stage}. ${choices.join(" ") || "No results yet."} ${live === "running" ? "Live store research is still running." : live === "failed" ? "Live research failed; these are saved catalog observations." : live === "skipped" ? "Saved catalog observations; no live store search was performed." : ""}`;
+    if (!value.job || value.job.projectId !== options.projectId || (jobId != null && jobId !== value.job.id)) throw new Error("That search is no longer selected. Search this room again.");
+    return value as AgentContext & { job: Job<ShopJobOutput> };
   }
+  function choose(value: AgentContext, choice: unknown, productId: unknown): ShopResult {
+    if (choice != null && (typeof choice !== "number" || !Number.isInteger(choice) || choice < 1)) throw new Error("Choose a result by its whole option number.");
+    if (productId != null && (typeof productId !== "string" || !productId)) throw new Error("Choose a current product ID.");
+    const byNumber = typeof choice === "number" ? value.results[choice - 1] : undefined;
+    const byId = typeof productId === "string" ? value.results.find((entry) => entry.product.id === productId) : undefined;
+    if ((choice != null && !byNumber) || (productId != null && !byId) || (byId && byNumber && byId.product.id !== byNumber.product.id)) throw new Error("That choice changed. Preview the current product again.");
+    const result = byId ?? byNumber;
+    if (!result) throw new Error("Choose a result to preview first.");
+    return result;
+  }
+  function previewText(value: AgentContext & { job: Job<ShopJobOutput> }, result: ShopResult) {
+    return `Previewing ${result.product.label}, ${result.product.price ? money(result.product.price.amountMinor, result.product.price.currency) : "price unknown"}; fits this spot${value.plan.constraints.budget ? " and the room budget" : ""}. product_id=${result.product.id}; job_id=${value.job.id}. This is a preview only: nothing is placed or added to the basket. Explain this recommendation in one sentence and ask for approval. Call place_product with these exact IDs only after the shopper agrees.`;
+  }
+  function showPreview(value: AgentContext & { job: Job<ShopJobOutput> }, result: ShopResult) {
+    if (!eligible(result)) throw new Error(`${result.product.label} cannot be recommended: ${result.withinBudget === false ? "over the room budget" : result.problems.join("; ") || "no verified fit"}. Nothing placed.`);
+    previewPin = null;
+    if (!options.preview(result)) throw new Error("The room could not show this preview. Nothing placed; try again when the room is ready.");
+    previewPin = { jobId: value.job.id, productId: result.product.id, revision: value.plan.revision, approvalKey: approvalKey(result) };
+    return previewText(value, result);
+  }
+  function resultText() {
+    const value = searchContext();
+    const choices = value.results.slice(0, 6).map((result, i) => `${i + 1}) ${result.product.label}: ${result.product.price ? money(result.product.price.amountMinor, result.product.price.currency) : "price unknown"}; product_id=${result.product.id}; ${result.fits ? "fits this spot" : result.problems.join("; ") || "fit unverified"}${result.withinBudget === false && result.overBudgetUsd != null ? `; ${dollars(Math.ceil(result.overBudgetUsd) * 100)} over the room budget` : ""}.`);
+    const live = value.job.output?.live;
+    const current = previewPin?.jobId === value.job.id ? value.results.find((entry) => entry.product.id === previewPin?.productId) : undefined;
+    const samePreview = current && eligible(current) && previewPin?.revision === value.plan.revision && previewPin.approvalKey === approvalKey(current)
+      && (value.previewedProductId === undefined || value.previewedProductId === current.product.id);
+    let recommendation: string;
+    if (samePreview) recommendation = previewText(value, current);
+    else {
+      previewPin = null;
+      // The shopping service already ranks by fit, budget, request words and price.
+      const best = value.results.find(eligible);
+      recommendation = best ? showPreview(value, best) : "No verified in-budget match is available to preview. Nothing placed. Ask whether to try a different style, location or price limit; never raise the budget automatically.";
+    }
+    return `${value.job.stage}. job_id=${value.job.id}. ${recommendation} Alternatives: ${choices.join(" ") || "No results yet."} ${live === "running" ? "Live store research is still running." : live === "failed" ? "Live research failed; these are saved catalog observations." : live === "skipped" ? "Saved catalog observations; no live store search was performed." : ""}`;
+  }
+
   return {
     get_room: guard(async () => {
       await options.refresh();
@@ -79,30 +121,44 @@ export function createRoomAgentTools(options: Options): Record<string, (params: 
       if (!categories.has(category as FurnitureCategory)) throw new Error("Choose a furniture category.");
       if (max_price_usd != null && (typeof max_price_usd !== "number" || !Number.isFinite(max_price_usd) || max_price_usd <= 0 || max_price_usd > 100000)) throw new Error("Choose a price cap between $0.01 and $100,000.");
       if (style != null && (typeof style !== "string" || style.length > 300)) throw new Error("Keep the furniture description under 300 characters.");
+      if (placementPending) throw new Error("Wait for the approved placement to finish before starting another search.");
+      const epoch = ++searchEpoch;
+      previewPin = null;
       const before = context().job?.id;
       await options.search({ category: category as FurnitureCategory, maxPriceUsd: max_price_usd as number | undefined, request: typeof style === "string" ? style : undefined, live: options.liveSearch });
       // the catalog pass answers within a second; wait for it so there's something to say
-      for (let i = 0; i < 40 && (context().job?.id ?? before) === before; i++) await new Promise((r) => setTimeout(r, 150));
+      for (let i = 0; i < 40 && epoch === searchEpoch && (context().job?.id ?? before) === before; i++) await new Promise((r) => setTimeout(r, 150));
+      if (epoch !== searchEpoch || context().job?.id === before) throw new Error("That search did not produce current results. Try again.");
       return resultText();
     }),
     check_search: guard(({ job_id }) => {
-      if (job_id && job_id !== context().job?.id) throw new Error("That search is no longer selected. Use the current search results.");
+      searchContext(job_id);
+      if (placementPending) throw new Error("Wait for the approved placement to finish.");
       return resultText();
     }),
-    place_product: guard(async ({ choice, job_id }) => {
-      const value = context();
-      if (!value.job || value.job.projectId !== options.projectId || (job_id && job_id !== value.job.id)) throw new Error("Search this room again before choosing a result.");
-      if (typeof choice !== "number" || !Number.isInteger(choice) || choice < 1) throw new Error("Choose a result by its whole option number.");
-      const result = value.results[choice - 1];
-      if (!result) throw new Error(`There's no option ${choice}.`);
+    preview_product: guard(({ choice, product_id, job_id }) => {
+      if (placementPending) throw new Error("Wait for the approved placement to finish.");
+      const value = searchContext(job_id);
+      return showPreview(value, choose(value, choice, product_id));
+    }),
+    place_product: guard(async ({ choice, product_id, job_id }) => {
+      if (placementPending) throw new Error("This placement is already being saved.");
+      const value = searchContext(job_id), pin = previewPin;
+      if (!pin || pin.jobId !== value.job.id) throw new Error("Preview a current recommendation and ask for approval before placing it.");
+      if (product_id != null && product_id !== pin.productId) throw new Error("That is not the previewed product. Preview it and ask for approval first.");
+      const result = choose(value, choice, product_id ?? pin.productId);
+      if (result.product.id !== pin.productId || (value.previewedProductId !== undefined && value.previewedProductId !== pin.productId)) throw new Error("That preview was cancelled or changed. Preview it and ask for approval again.");
       if (!result.fits || !result.placement) throw new Error(`${result.product.label} doesn't fit there: ${result.problems.join(" ") || "no verified placement"}`);
       const budget = value.plan.constraints.budget;
-      if (result.withinBudget === false && budget && result.overBudgetUsd != null) {
-        // say the exact numbers so the agent doesn't do budget math out loud
-        const needed = Math.ceil((budget.amountMinor + Math.round(result.overBudgetUsd * 100)) / 5000) * 5000;
-        return `Not placed: it's ${dollars(Math.ceil(result.overBudgetUsd) * 100)} over the ${dollars(budget.amountMinor)} budget. Offer to raise the budget to ${dollars(needed)}; if they agree, call set_budget with ${needed / 100} and then place_product again.`;
+      if (result.withinBudget === false) {
+        const detail = budget && result.overBudgetUsd != null ? `it's ${dollars(Math.ceil(result.overBudgetUsd) * 100)} over the ${dollars(budget.amountMinor)} budget` : "it exceeds the current room budget";
+        return `Not placed: ${detail}. Ask whether the shopper wants a cheaper match or a new budget; never raise it automatically. Preview again after any change.`;
       }
-      await options.place(result, value.job);
+      if (pin.revision !== value.plan.revision || pin.approvalKey !== approvalKey(result)) throw new Error("The room, price or placement changed since this preview. Preview it and ask for approval again.");
+      placementPending = true;
+      try { await options.place(result, value.job); }
+      finally { placementPending = false; }
+      previewPin = null;
       const { plan } = context();
       const spent = plan.items.filter((item) => item.origin === "proposed_purchase" && !item.stored).reduce((n, item) => n + (plan.products.find((p) => p.id === item.productId)?.price?.amountMinor ?? 0), 0);
       return `ok: ${result.product.label} is in the room and the basket. New purchases now ${money(spent)}${plan.constraints.budget ? ` of ${money(plan.constraints.budget.amountMinor)}` : ""}.`;

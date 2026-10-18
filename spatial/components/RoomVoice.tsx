@@ -11,6 +11,7 @@ const Session = dynamic(() => import("./RoomAgentVoice"), { ssr: false });
 type Props = {
   plan: RoomPlan | null;
   selectedId: string | null;
+  previewedProductId?: string | null;
   job: Job<ShopJobOutput> | null;
   results: ShopResult[];
   liveSearch: boolean;
@@ -49,7 +50,7 @@ export function RoomVoice(props: Props) {
       context: () => {
         const value = p();
         if (!value.plan) throw new Error("This room is no longer connected.");
-        return { plan: value.plan, selectedId: value.selectedId, job: value.job, results: value.results };
+        return { plan: value.plan, selectedId: value.selectedId, job: value.job, results: value.results, previewedProductId: value.previewedProductId };
       },
       refresh: () => p().onRefresh(),
       propose: (request) => p().onPropose(request),

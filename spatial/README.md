@@ -223,6 +223,15 @@ Use the existing namespaced plain `.css` pattern for spatial components. The cur
 
 ### Compact headset menu in the canonical room
 
-`/rooms/[roomId]` uses `workspace-xr-menu.ts` for a single CanvasTexture panel with Shop, Room and Controls tabs, controller hover/cursors, a basket header and a placement-confirmation footer shared across tabs. It consumes the same `RoomExperience` state and mutation callbacks as desktop. Locked/busy actions stay guarded, and the panel captures its full rectangle before world picking. The original scanned room, lighting and navigation solver remain shared.
+`/rooms/[roomId]` uses `workspace-xr-menu.ts` for a single CanvasTexture panel opening to Agent, with Shop, Room and Controls as optional tabs, controller hover/cursors, a basket header and a placement-confirmation footer shared across tabs. It consumes the same `RoomExperience` state and mutation callbacks as desktop. Locked/busy actions stay guarded, and the panel captures its full rectangle before world picking. The original scanned room, lighting and navigation solver remain shared.
 
 `/dev/vr-ui` is a synthetic, non-mutating visual QA view of that exact canvas. The spatial suite includes menu layout bounds, stable resources, hover deduplication, preview/confirm separation, tab navigation, locked/busy states and invalid-offer guards. See [Quest setup](../docs/quest-setup.md) for controls and physical verification limits.
+
+
+### Agent-led VR shopping
+
+The primary headset flow is an intent spoken to Tadaima, followed by actual room search, fit/ranking and a noncommitting recommendation preview. The agent explains one candidate and asks once before adding it; the shopper can approve by voice or Confirm placement, or ask for an alternative. The current recommendation and approval controls remain on Agent. Search, preview, store and placement activity comes from actual client tool execution, alongside transcription/captions.
+
+`rooms/agent-tools.ts` pins approval to product/job identity, room revision, price and pose. Live ranking cannot silently change the approved item; stale/cancelled previews and duplicate commits are rejected. The existing server queue, locked-item rules and fit/budget validation still apply. The agent does not execute checkout.
+
+Voice requires local ElevenLabs credentials and synchronization of the hosted prompt/tool configuration; live retailer research additionally requires Browser Use. Missing configuration is displayed honestly. See [activate the real room agent](../docs/quest-setup.md#activate-the-real-room-agent). No hosted conversation success is claimed by offline tool tests.

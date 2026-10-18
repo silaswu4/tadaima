@@ -3,7 +3,7 @@ import test from "node:test";
 import * as THREE from "three";
 import { createXRMenu, XR_MENU_WIDTH, XR_MENU_HEIGHT } from "../room/workspace-xr-menu.ts";
 
-function fixture(documentOverrides = {}) {
+function fixture(documentOverrides = {}, initialTab = "shop") {
   let draws = 0;
   const fontsUsed = [];
   const context = new Proxy({ clearRect() { draws++; }, fillText() { fontsUsed.push(this.font); }, measureText(text) { return { width: text.length * 15 }; } }, { get: (target, key) => key in target ? target[key] : () => {} });
@@ -13,6 +13,7 @@ function fixture(documentOverrides = {}) {
   const state = { offers: [{ id: "sku:chair", label: "Chair", detail: "$99 · IKEA · catalog" }], actions: ["search-chair", "search-rug", "search-lamp", "rotate-selected", "store-selected", "cancel-preview"].map((id) => ({ id, label: id })), basketLabel: "Basket 0 · $0.00", selectedItemLabel: "Your chair", status: "Choose a piece." };
   menu.setState(state, "walk");
   const uv = (id) => { const target = menu.targets.find((item) => item.id === id); assert.ok(target, id); return new THREE.Vector2((target.x + target.width / 2) / XR_MENU_WIDTH, 1 - (target.y + target.height / 2) / XR_MENU_HEIGHT); };
+  if (initialTab === "shop") menu.activate(uv("tab-shop"));
   return { menu, state, calls, uv, draws: () => draws, fontsUsed };
 }
 
@@ -62,7 +63,8 @@ test("locked edits and busy actions are disabled while close and tabs remain usa
   menu.setState({ ...state, selectedItemLocked: true }, "walk"); menu.activate(uv("tab-room"));
   menu.activate(uv("action:rotate-selected")); menu.activate(uv("action:store-selected")); assert.deepEqual(calls, []);
   menu.setState({ ...state, busy: true, pendingOfferId: "sku:chair", canConfirm: true }, "walk");
-  assert.equal(menu.activeTab, "shop"); menu.activate(uv("confirm")); menu.activate(uv("action:search-chair"));
+  assert.equal(menu.activeTab, "room"); menu.activate(uv("confirm"));
+  menu.activate(uv("tab-shop")); menu.activate(uv("action:search-chair"));
   menu.activate(uv("tab-controls")); menu.activate(uv("locomotion")); assert.deepEqual(calls, []);
   menu.activate(uv("close")); assert.deepEqual(calls, [["close"]]); menu.dispose();
 });
@@ -97,4 +99,15 @@ test("Agent tab uses real supplied state and keeps microphone stop controls acti
   menu.setState({ ...state, agent: { available: false, connected: false, listening: false, status: "Unavailable" }, actions: [...state.actions, { ...voiceActions[0], disabled: true }, { ...voiceActions[1], disabled: true }] }, "walk");
   menu.activate(uv("action:voice-toggle")); menu.activate(uv("action:voice-stop"));
   assert.equal(calls.length, 2); menu.dispose();
+});
+
+
+test("VR starts with the agent and keeps its recommendation and approval on that tab", () => {
+  const { menu, state, uv } = fixture({}, "agent");
+  assert.equal(menu.activeTab, "agent");
+  menu.setState({ ...state, pendingOfferId: "sku:chair", canConfirm: true, agent: { available: true, listening: false, connected: true, status: "Talk", activity: "Checking fit", transcript: "Find a chair under $200" } }, "walk");
+  assert.equal(menu.activeTab, "agent");
+  assert.ok(menu.targets.some((target) => target.id === "confirm" && !target.disabled));
+  assert.ok(!menu.targets.some((target) => target.id.startsWith("preview:")));
+  menu.activate(uv("tab-shop")); menu.focusAgent(); assert.equal(menu.activeTab, "agent"); menu.dispose();
 });
