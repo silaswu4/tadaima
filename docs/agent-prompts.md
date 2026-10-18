@@ -2,7 +2,7 @@
 
 These prompts reflect both ownership swaps: **Matthew owns backend, the project lead owns reconstruction, Silas owns spatial, and Angelina owns product frontend**. Earlier chat prompts assigning Matthew to reconstruction are superseded. Each prompt is standalone. Read the current repository before assuming the first milestone is still unfinished.
 
-The initial geometry-to-Blender/GLB milestone is now implemented; Matthew can consume the local processor and Silas can consume its artifacts. See [reconstruction status and interfaces](../reconstruction/README.md). The reconstruction prompt below remains the initial acceptance target; inspect completed work before repeating it.
+Local geometry-to-Blender/GLB, address evidence processing, and browser-photo inference now exist. Matthew can consume their boundaries and Silas their artifacts. The user also approved an optional scan-only SwiftUI/RoomPlan companion for iPhone 14 Pro; see [native scan status](native-scan.md) and [reconstruction interfaces](../reconstruction/README.md). Inspect completed work before repeating an earlier milestone.
 
 ## Matthew: backend and agents
 
@@ -32,16 +32,16 @@ You own reconstruction for https://github.com/silaswu4/tadaima. Matthew owns bac
 
 Read AGENTS.md, docs/team-ownership.md, reconstruction/README.md, docs/capture-and-reconstruction.md, backend/contracts.ts, and reconstruction/contracts.ts first. Inspect current work before implementing anything already completed.
 
-Work primarily in reconstruction/. Your first milestone is a deterministic geometry-to-Blender pipeline:
-1. Create a clearly labeled synthetic room fixture using the shared geometry contract.
-2. Validate geometry and generate editable, named walls, floor, doors, and windows.
-3. Export an editable .blend and correctly scaled GLB.
-4. Return artifact references tied to the project, job, generator version, and input revision.
-5. Document installation, execution, and verification using a known measurement.
+Work primarily in reconstruction/. Continue the existing local input and artifact pipelines:
+1. Preserve validated geometry-to-editable-Blender/GLB generation and its shared contract.
+2. Keep address evidence, actual photo bytes, inferred dimensions, and user confirmation distinct.
+3. Finish the approved thin SwiftUI/RoomPlan companion under reconstruction/ios/ and validated importer under reconstruction/roomplan/; inspect docs/native-scan.md for current status before rebuilding completed work.
+4. Preserve private source data, stable IDs, project/job/revision binding, and reviewable failures across all inputs.
+5. Verify native compilation, importer/export behavior, and a real iPhone 14 Pro capture separately; report exactly which ran.
 
-Start with controlled procedural geometry before adding neural reconstruction or address research. Keep reference scan geometry separate from the editable shell. The product is web-only: no required native RoomPlan or assumed iPhone WebXR scanning, and no unsupported measurement claims.
+Keep reference scan geometry separate from the editable shell. Shopping, design, and Quest remain web-based; the optional scan-only native companion is the specific approved exception. Retain browser photos and address research without requiring tape measurements. Never represent browser photos as LiDAR, vision estimates as measured dimensions, or RoomPlan surfaces as measured wall thickness or guaranteed physical accuracy.
 
-Angelina owns camera/capture UI; you own processing. Matthew owns upload authorization, persistence, shared contracts, and job coordination. Silas owns browser rendering and Quest interactions. Coordinate boundary changes; do not duplicate room types or commit private captures/large generated artifacts.
+Angelina owns product capture screens; you own processing and the thin native scan companion. Matthew owns upload authorization, persistence, shared contracts, and job coordination. Silas owns browser rendering and Quest interactions. Coordinate boundary changes; do not duplicate room types or commit private captures/large generated artifacts.
 
 The user requests reconstruction work directly on main. Preserve unrelated changes, fetch before publishing, run relevant checks, commit, and push without force-pushing. Report the commit, input/output contract, verified scale/export behavior, and integration instructions.
 ```
@@ -75,7 +75,7 @@ You own the product frontend for https://github.com/silaswu4/tadaima.
 Read AGENTS.md, docs/team-ownership.md, frontend/README.md, docs/product.md, docs/platforms-and-ux.md, and backend/contracts.ts first. Inspect existing work before starting.
 
 Work primarily in frontend/. Your first milestone is a coherent desktop/mobile flow using clearly labeled fixture data:
-1. Connect the landing CTA to address/unit research or iPhone guided capture.
+1. Connect the landing CTA to address/unit research or iPhone photo capture, with an optional native-scan handoff where implemented. Photo-only capture must not require tape measurements.
 2. Build evidence/layout confirmation and budget/style/keep-item inputs.
 3. Build workspace panels for selected furniture, alternatives, locks, and budget.
 4. Show revision differences and an exact basket with known versus unknown costs.

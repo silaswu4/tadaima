@@ -1,6 +1,6 @@
 # Product thesis and scope
 
-Documentation baseline: October 17, 2026. This document distinguishes the user's requirements from proposals that still need a product decision. It describes the intended product; it does not imply that the current repository implements these flows.
+Documentation updated October 18, 2026. This document distinguishes the user's requirements from proposals that still need a product decision. It describes the intended product; it does not imply that the current repository implements every flow.
 
 ## The product in one sentence
 
@@ -24,10 +24,10 @@ The central product claim should be **a room plan grounded in measurements and c
 
 | Status | Requirement or decision |
 | --- | --- |
-| Confirmed by the user | Stay web only. The product must work on desktop web and mobile web. |
+| Confirmed by the user | Keep the complete shopping/design experience on desktop and mobile web; the approved native exception is an optional scan-only companion. |
 | Confirmed by the user | Support Meta Quest 3S as an immersive way to inspect and shop the room. |
-| Confirmed by the user | Offer two starting paths: address and unit research, or mobile web room capture. |
-| Confirmed by the user | The available scanning phone is an iPhone. |
+| Confirmed by the user | Retain address/unit research and browser-photo capture without requiring tape measurements; also offer the optional native scan input. |
+| Confirmed by the user | The available scanning phone is an iPhone 14 Pro; add a thin SwiftUI/RoomPlan capture companion. |
 | Confirmed by the user | Investigate meaningful roles for Paper, Browser Use, Visa, Fetch, ElevenLabs, and Solana. |
 | Confirmed by the user | Use Homebuddy as inspiration while making the experience more ambitious and distinctive. |
 | Explicitly rejected | x402 agent payments as the project's Solana hook. Do not bring this back as the default. |
@@ -62,7 +62,7 @@ This creates a visible test of intelligence: the agent must preserve locked item
 
 The user supplies an address and optional unit number. The system searches public property manager pages, accessible listings, brochures, and floor plans. It presents candidate evidence instead of assuming the first search result belongs to that exact unit.
 
-Every candidate needs an applicability label: exact unit, apartment type, building-level reference, or unknown. The user confirms the correct layout, including mirrored variants. Missing evidence leads to photo upload or manual measurements, not an invented apartment.
+Every candidate needs an applicability label: exact unit, apartment type, building-level reference, or unknown. The user confirms the correct layout, including mirrored variants. Missing evidence leads to photo capture or the optional native scan, not an invented apartment or a required tape-measure step.
 
 An address is a research starting point, not a universal floor plan API. For example, Zillow's documented rentals feed is a publisher integration, not a general-purpose API that returns arbitrary unit plans. [Zillow Rentals Feed integrations](https://www.zillowgroup.com/developers/api/rentals/rentals-feed-integrations/)
 
@@ -70,11 +70,13 @@ If a complete unit plan is available, the system may establish the structural ou
 
 ## Input path B: Capture my room
 
-The user opens the mobile website on an iPhone, grants camera permission, and follows guided capture instructions. The baseline gathers photos or a supported video recording, uploads the material, and asks for a small number of anchor measurements. Server-side processing proposes a room model for review.
+The user can open the mobile website on an iPhone, grant camera permission, and gather guided room photos. The local capture pipeline supports a vision proposal from actual photo bytes without requiring numeric measurements. It keeps the raw capture separate from the inferred rectangular shell, preserves uncertainty, and requests more photos when the scene is unclear. The browser currently exports a private bundle; hosted upload/job integration is pending.
 
 This must not be advertised as native Apple RoomPlan or a guaranteed LiDAR scan. RoomPlan is a native Apple framework. iPhone Safari camera capture does not itself provide the same semantic room model, tracked camera poses, or dimensional guarantees. [Apple RoomPlan](https://developer.apple.com/augmented-reality/roomplan/), [WebKit MediaRecorder support](https://webkit.org/blog/11353/mediarecorder-api/), [WebKit's iOS WebXR discussion](https://bugs.webkit.org/show_bug.cgi?id=309550)
 
-The mobile path should remain useful when camera permission is denied: allow existing photos and manual dimensions. An AR or tracking enhancement can be evaluated later without making it a dependency of the core flow.
+The user has also approved an optional **SwiftUI/RoomPlan companion for iPhone 14 Pro**. It captures native sensor-derived room surfaces for import into the same reconstruction worker, then returns the user to the web product for design and shopping. This is the specific exception to the earlier web-only input decision. See [native scanning](native-scan.md) for implementation and verification status; no physical-device capture has yet been verified.
+
+When browser camera permission is denied, allow existing photos or address research. Manual dimensions remain an optional existing mode, not a prerequisite for capture. Neither visual estimates nor native RoomPlan output establish survey-grade accuracy or guaranteed furniture fit.
 
 ## What makes the shopping agent useful
 
@@ -108,7 +110,7 @@ The user also supplied a detailed account of its demo: a 333 Bush Street listing
 
 | Area | Homebuddy inspiration | Tadaima's intended emphasis |
 | --- | --- | --- |
-| Space input | Listing photos and floor plan | Address research with evidence confirmation, plus iPhone web capture |
+| Space input | Listing photos and floor plan | Address research with evidence confirmation, browser photos, and an optional iPhone RoomPlan companion |
 | Reconstruction | A navigable, furnished 3D home | A confirmed metric room model with explicit uncertainty |
 | Shopping | Catalog selection and running price | Source-linked, exact-variant, cross-retailer research and rechecking |
 | Interaction | Interactive 3D editing and walkthrough | One plan usable on desktop, mobile, and Quest 3S, with object-grounded voice |

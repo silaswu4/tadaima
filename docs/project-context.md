@@ -1,6 +1,6 @@
 # Project context and decision ledger
 
-Updated October 17, 2026. This is the compact handoff for continuing the work without reconstructing the conversation.
+Updated October 18, 2026. This is the compact handoff for continuing the work without reconstructing the conversation.
 
 ## What we are building
 
@@ -14,12 +14,13 @@ The user wants an ambitious hackathon project inspired by Homebuddy, with meanin
 
 | Requirement | Consequence |
 | --- | --- |
-| Stay web-only | No required native iOS, Android, or Quest application |
+| Keep shopping, design, and Quest on the web | The later approved native exception is an optional scan-only iPhone companion |
 | Work on web and mobile | Core planning and shopping cannot require a headset |
 | Available headset is Meta Quest 3S | Test that device; do not assume a Quest 3 demonstration proves compatibility |
-| Available scanning phone is an iPhone | Baseline capture must work in an iPhone browser |
+| Available scanning phone is an iPhone 14 Pro | Keep browser capture; also support the approved optional native RoomPlan input |
 | Offer address and unit number onboarding | Research publicly available plans/photos and ask the user to confirm the match |
-| Offer mobile web room scanning | Use guided camera capture and measurements; native Apple RoomPlan is outside the baseline |
+| Offer mobile web room capture without requiring tape measurements | Guided photos can produce an explicitly estimated draft; address research remains another input |
+| Add a thin SwiftUI/RoomPlan scan companion | Native sensor capture is scoped to reconstruction; review the imported shell and retain web fallbacks |
 | Reconstruct using floor plans and photos, with Blender in the discussed pipeline | Preserve an editable room representation and export a browser-friendly asset |
 | Explore substantive Solana integration | Research a useful role; the final feature has not been selected |
 | Reject the x402 agent-payment direction | Do not reintroduce it as an accepted requirement |
@@ -45,15 +46,17 @@ These are synthesis and implementation recommendations, not additional user appr
 1. **Starting point:** Homebuddy-style property research, 3D reconstruction, furnishing, cost tracking, and a walkthrough.
 2. **Product expansion:** Add an agentic shopping loop, voice, real retailer research, and Quest 3S inspection while keeping web/mobile compatibility.
 3. **Input expansion:** Offer both address-based discovery and phone-based capture.
-4. **Platform correction:** Keep the app web-only. An iPhone webpage cannot simply invoke native RoomPlan or assume standard iPhone WebXR room scanning.
+4. **Initial platform correction:** Keep the app web-only. An iPhone webpage cannot simply invoke native RoomPlan or assume standard iPhone WebXR room scanning. The later native-input exception is recorded below.
 5. **Commerce exploration:** The user proposed x402 agent payments on Solana, then explicitly rejected that direction.
 6. **Deeper Solana research:** Explore either a sell-to-upgrade furniture loop with escrow or a bounded purchase mandate. Both remain proposals; no final selection was recorded.
 7. **Repository handoff:** Continue in `silaswu4/tadaima`, which currently contains a stylized Three.js hero rather than the proposed application.
 8. **Team scaffold:** Split work into backend, reconstruction, frontend, and spatial folders. The later user correction assigns Angelina the product screens and Silas the spatial frontend.
 9. **Concurrent repository update:** Preserve the incoming ASCII landing hero from `34e581c` in `spatial/` and compose it from `frontend/`. Keep the earlier pencil-room renderer available; do not overwrite the newer work during scaffolding.
 10. **Backend/reconstruction swap:** The user takes reconstruction; Matthew takes backend, agents, shopping, shared contracts, and integration. Silas and Angelina keep their frontend assignments.
-11. **Reconstruction implementation:** A locally verified geometry-to-Blender/GLB pipeline now exists in `reconstruction/`, including runtime validation, editable objects, real apertures, a manifest, and a Node adapter. It does not yet recover geometry from addresses or photographs. See [the implementation handoff](../reconstruction/README.md).
+11. **Reconstruction implementation:** A locally verified geometry-to-Blender/GLB pipeline exists in `reconstruction/`, including runtime validation, editable objects, real apertures, a manifest, and a Node adapter. Local address-evidence processing and browser-photo inference now produce reviewable proposals; these are not a hosted ingestion service. See [the implementation handoff](../reconstruction/README.md).
 12. **Working branch correction:** The user requests reconstruction work directly on `main`, preserving concurrent changes and avoiding force pushes.
+13. **Photo-only capture:** Browser photos can feed a vision-estimated draft without requiring tape measurements. Unknown scale stays visibly unverified; missing photos lead to recapture, not invented measurements.
+14. **Native input approved:** The user approves an optional thin SwiftUI/RoomPlan companion for iPhone 14 Pro. This supersedes the earlier web-only restriction only for scan input. The companion and RoomPlan importer are being developed under `reconstruction/`; see [native scan status](native-scan.md) for build evidence. A physical iPhone capture and hosted upload integration remain unverified.
 
 ## Solana status at handoff
 

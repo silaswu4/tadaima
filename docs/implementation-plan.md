@@ -1,6 +1,6 @@
 # Repository state and implementation plan
 
-Repository originally inspected October 17, 2026 at base commit `cbbe48fe69b1b12afa4b1fb9c245bce6b83e84c4`; paths below are updated for the subsequent four-folder scaffold and incoming ASCII hero change `34e581c`. This document separates observed code from proposed work. See [team ownership](team-ownership.md) before editing.
+Repository originally inspected October 17, 2026 at base commit `cbbe48fe69b1b12afa4b1fb9c245bce6b83e84c4`; this inventory was updated October 18 for the local reconstruction inputs and approved optional native scanner. Historical scaffold details remain identified below. This document separates observed code from proposed work. See [team ownership](team-ownership.md) before editing.
 
 ## What exists
 
@@ -20,10 +20,13 @@ Repository originally inspected October 17, 2026 at base commit `cbbe48fe69b1b12
 | `reconstruction/processor.server.ts` | Local Node adapter invoking the actual Python/Blender pipeline |
 | `reconstruction/geometry.py`, `joins.py` | Bounded runtime validation, concave triangulation, opening cuts, conservative corner joins |
 | `reconstruction/pipeline.py`, `cli.py`, `blender_worker.py` | Private staging, trusted headless Blender, editable `.blend`, GLB, hashes/manifest, and optional preview |
+| `reconstruction/address/` | Local bounded public evidence acquisition, research/vision provider adapters, data-only proposal handoffs, provenance validation, and draft generation |
+| `app/capture/page.tsx`, `reconstruction/capture/` | Browser capture demo, bounded photo ZIP processing, photo-only inferred proposals without tape measurements, and optional explicit-dimension mode |
+| `reconstruction/ios/TadaimaScan/TadaimaScan.xcodeproj`, `reconstruction/roomplan/` | Native scan/preview/export app compiles for iOS and Simulator; Swift-emitted synthetic scan imports through Blender/GLB. [Verification](native-scan.md) excludes physical iPhone capture and accuracy |
 | `reconstruction/tests/`, `verify-glb.mjs` | Geometry/failure tests, actual Blender reopen, Three.js loading, and optional Khronos validation |
 | `public/models/` | Seven bundled GLB models, referenced by the hero |
 | `app/fonts/` | Paper Mono WOFF2 and SIL Open Font License text |
-| `HANDOFF.md` | Earlier Michael product/design handoff; partially superseded by web-only requirements |
+| `HANDOFF.md` | Historical Michael design notes; opening notice records the later native-input exception |
 | `AGENTS.md` | Next.js version-specific guidance plus the team's four working boundaries |
 | `README.md` | Mostly create-next-app starter text; the docs entry link points here |
 
@@ -37,7 +40,7 @@ Commit `07d83cb` attributes the bundled furniture models to CC0 Poly Haven asset
 
 ## What does not exist
 
-No address search, upload route, camera/photo-to-geometry pipeline, Apple RoomPlan import, hosted job service, runtime room-plan service, backend persistence, authentication, product catalog, real retailer search, cart preparation, checkout, WebXR session, shared-device state, voice agent, Fetch agent, wallet, or Solana contract exists yet. The geometry-to-artifacts stage is implemented locally; shared TypeScript types alone do not implement the remaining behaviors. Reconstruction has a separate Python/integration suite; no application test script is configured in root `package.json`.
+No hosted upload/job service, canonical runtime room-plan service, backend persistence/authentication, product catalog, real retailer shopping agent, cart preparation/checkout, WebXR session, shared-device state, voice agent, Fetch agent, wallet, or Solana contract is connected yet. Local address and browser-photo pipelines now exist; live paid-provider execution and physical iPhone scanning are separate verification gates, not implied by passing fixture tests. The optional RoomPlan companion/importer is being added; its current evidence belongs in [native scanning](native-scan.md). Reconstruction has Python and standalone Node checks; shared TypeScript types alone do not implement the remaining application services.
 
 ## Dependencies and local setup
 
@@ -70,7 +73,7 @@ The final four-folder scaffold, including the incoming ASCII update, passed `npm
 
 Before application changes, follow `AGENTS.md` and read the relevant installed Next.js guides under `node_modules/next/dist/docs/`. Do not assume older framework conventions apply to this version.
 
-Reconstruction accepts `BLENDER_BIN` or an explicit executable option, plus trusted private output paths and timeouts documented in [its README](../reconstruction/README.md). No external-provider secrets are established by the repository. Choose provider configuration when implementing each remaining adapter; do not paste guessed variables or actual credentials into public docs.
+Reconstruction accepts `BLENDER_BIN` or an explicit executable option, plus trusted private output paths and timeouts documented in [its README](../reconstruction/README.md). Address and photo inference have documented provider configuration and keyless data-only handoff paths; see their folder READMEs. Provider adapters existing in source does not prove configured credentials or successful paid execution. Never commit real credentials or private captures.
 
 ## Recommended implementation order
 
@@ -86,15 +89,15 @@ Implement item keep/lock, a constraint form, one plan change, a before/after dif
 
 Done when: a locked item cannot be removed by a replan, a stale write is rejected, and another browser session can load the accepted revision.
 
-### 3. Make both input paths real
+### 3. Integrate the local input paths
 
-For address onboarding, search a prepared permitted demo property, show candidate sources, and require match/dimension confirmation. For iPhone onboarding, implement permission-aware camera capture/upload and guided measurement entry. Both feed the same room-plan confirmation screen.
+Local address research and browser-photo processing exist. Connect their evidence and review states to authorized backend jobs and the shared room-plan confirmation screen. Photo-only input needs actual room images, not tape measurements; uncertain scale must stay visible. Add the approved optional native RoomPlan companion/importer as another input to that boundary, then test a real iPhone 14 Pro capture.
 
-Done when: an unmatched unit produces a useful capture/measurement fallback, a denied camera permission has a usable upload path, and each source/dimension retains its provenance. Capture does not need a research-grade neural reconstruction to establish a truthful first slice.
+Done when: an unmatched unit offers browser photos or native capture; denied camera permission retains an existing-photo path; every geometry proposal preserves its actual evidence and review requirement. Verify native surface import and physical scanning separately from simulator compilation. Hosted upload authorization, persistence, and jobs must be demonstrated before describing them as connected.
 
 ### 4. Add the Blender worker
 
-This stage is now implemented locally. See [working commands, verification, and handoffs](../reconstruction/README.md). Hosted queue/storage integration and upstream capture remain pending; the scope below describes the stage's acceptance criteria.
+This stage is implemented locally and is shared by the address/photo input paths. See [working commands, verification, and handoffs](../reconstruction/README.md). Hosted queue/storage integration remains pending; the scope below describes the stage's acceptance criteria.
 
 Generate the confirmed shell from a validated geometry schema using controlled Python. Save source JSON, editable `.blend`, and optimized GLB with a manifest tied to the input revision. Add meaningful async stages and a failure/retry path.
 

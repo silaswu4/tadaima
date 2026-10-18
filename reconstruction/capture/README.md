@@ -1,5 +1,7 @@
 # Mobile Web Photo Reconstruction
 
+For a LiDAR-equipped iPhone, the optional [native scanning companion](../../docs/native-scan.md) provides a separate sensor-derived input. This page documents the photo-only browser fallback.
+
 Updated October 18, 2026: **no tape measure or numeric dimension form is required**. The `/capture` diagnostic page collects four wall photographs, lets the user review them, and exports a private photo-only capture ZIP. The worker requests a vision proposal, validates its geometry, and can generate an editable Blender scene and GLB.
 
 The supported output is an approximate rectangular single-room shell. Room size, scale, shape and openings proposed from photographs are **inferred**, never measured or user-confirmed. This is visual layout estimation, not calibrated photogrammetry, browser LiDAR, native RoomPlan, or a guarantee that furniture fits.

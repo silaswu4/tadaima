@@ -1,17 +1,17 @@
 # Team ownership and working boundaries
 
-Updated October 17, 2026. This allocation implements the user's request for four primary working folders. It assigns responsibilities, not assumed prior expertise. The project remains one Next.js application with one dependency installation, one development server, and one shared data contract.
+Updated October 18, 2026. This allocation implements the user's request for four primary working folders. It assigns responsibilities, not assumed prior expertise. The product remains one Next.js web application with one shared data contract, plus the approved optional scan-only iPhone companion under reconstruction.
 
 ## Primary folders
 
 | Owner | Primary folder | Responsibility | Initial deliverable |
 | --- | --- | --- | --- |
 | Matthew | `backend/` | Shared contracts, application services, persistence, authorization, planning and shopping orchestration, sponsor adapters, and final integration | A browser-safe room-plan contract and a fixture-backed application boundary that the other three areas can use |
-| User / project lead | `reconstruction/` | Address evidence processing, capture processing, metric geometry proposals, Blender generation, artifacts, and asynchronous reconstruction jobs | A confirmed room fixture that generates an editable shell and browser-viewable output, with a clear job status |
+| User / project lead | `reconstruction/` | Address/photo processing, optional native RoomPlan companion/import, geometry proposals, Blender generation, and artifacts | Extend the working local pipelines with native scan input; preserve review states and shared artifacts |
 | Angelina | `frontend/` | Product screens, onboarding, capture interface, plan and product panels, constraints, revision review, basket review, and responsive UI | A coherent flat-screen flow that can use fixtures before live backend operations exist |
 | Silas | `spatial/` | ASCII landing renderer, Three.js room viewer, object selection, dimensional overlays, placement interaction, and Quest/WebXR interface | Preserve the latest ASCII hero and earlier room renderer, then render the shared room fixture and emit stable item selections |
 
-Silas and Angelina are both focused on frontend work. The split is between the surrounding product interface and the spatial interface; it is not two separate applications. The user owns processing and reconstruction rather than the capture screen. Matthew owns backend integration rather than asking each person to create their own backend. This reflects the user's latest swap of backend and reconstruction responsibilities.
+Silas and Angelina are both focused on frontend work. The split is between the surrounding product interface and the spatial interface; it is not two separate web applications. Angelina owns product capture screens; the project lead owns reconstruction processing and the approved thin native scan companion. Matthew owns backend integration. This preserves the user's ownership swaps while keeping the native exception bounded.
 
 ## Repository shape
 
@@ -36,7 +36,7 @@ docs/                        Supporting project documentation
 
 The listed UI/scene paths describe the scaffold layout. They do not establish that the proposed shopping or reconstruction flows have been built. Consult the current files and [implementation inventory](implementation-plan.md) before depending on a feature.
 
-Do not add a separate `package.json`, Next.js application, development server, or competing root configuration inside each working folder. A future worker may need a Python environment or another runtime, but that is an explicit reconstruction deployment decision, not a reason to split the website into four apps.
+Do not add a separate `package.json`, Next.js application, development server, or competing root configuration inside each working folder. The Python reconstruction worker and approved SwiftUI/RoomPlan Xcode project are bounded reconstruction runtimes. The companion supplies scan input only; it does not duplicate the product frontend, room-plan service, or shopping agents. See [native scanning](native-scan.md).
 
 ## Shared files and integration ownership
 
@@ -91,7 +91,7 @@ The viewer should not independently research products, recalculate merchant pric
 
 Angelina owns camera permission screens, capture guidance, upload interaction, progress presentation, and measurement correction UI. The project lead owns processing uploaded material, quality observations, reconstruction proposals, and generated artifacts. Matthew's backend coordinates authorized uploads and job execution.
 
-Agree on media references, capture metadata, required measurement prompts, progress stages, and retry/review outcomes before building both sides. The baseline is guided iPhone browser capture. Native RoomPlan or guaranteed LiDAR scanning is not part of this allocation.
+Agree on media references, capture metadata, progress stages, and retry/review outcomes before building both sides. Browser-photo inference does not require tape measurements. The user also approved an optional SwiftUI/RoomPlan companion for iPhone 14 Pro under the project lead's `reconstruction/` ownership. Native export/import must enter the same canonical geometry/artifact boundary; physical capture and hosted upload authorization remain separate verification/integration gates.
 
 ## Initial work, in dependency order
 
