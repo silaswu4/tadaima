@@ -1,0 +1,74 @@
+/* dev console only: system sans, neutral controls */
+.dev-console {
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-size: 14px;
+  color: #18181b;
+  background: #f6f6f4;
+  min-height: 100vh;
+}
+.dev-console input,
+.dev-console textarea,
+.dev-console select,
+.dev-console button {
+  font-family: inherit;
+}
+.dev-console .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 6px;
+  border: 1px solid #d4d4d8;
+  background: #fff;
+  color: #18181b;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.dev-console .btn:hover:not(:disabled) {
+  background: #f4f4f5;
+}
+.dev-console .btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.dev-console .btn-primary {
+  background: #18181b;
+  border-color: #18181b;
+  color: #fff;
+}
+.dev-console .btn-primary:hover:not(:disabled) {
+  background: #3f3f46;
+}
+.dev-console .btn-danger {
+  color: #b91c1c;
+  border-color: #fca5a5;
+}
+.dev-console .field {
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 6px;
+  border: 1px solid #d4d4d8;
+  background: #fff;
+  font-size: 13px;
+  outline: none;
+}
+.dev-console .field:focus {
+  border-color: #71717a;
+}
+.dev-console .card {
+  background: #fff;
+  border: 1px solid #e4e4e7;
+  border-radius: 10px;
+  padding: 14px;
+}
+.dev-console .card-title {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #71717a;
+  margin-bottom: 10px;
+}

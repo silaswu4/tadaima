@@ -113,7 +113,7 @@ function furniture(value: unknown, shape: RoomGeometry, known: Set<string>): Pla
     if (typeof entry.locked !== "boolean") fail("furniture lock must be a boolean.");
     const position = list(entry.position, 3, 3).map((axis) => number(axis, -10000, 10000)) as [number, number, number];
     const dimensions = list(entry.dimensions, 3, 3).map((axis) => number(axis, 1e-6, 100)) as [number, number, number];
-    const item: PlacedItem = { id: itemId, roomId, label: text(entry.label), origin: "existing_owned", productId: null, assetUrl: null,
+    const item: PlacedItem = { id: itemId, roomId, label: text(entry.label), category: "other", origin: "existing_owned", productId: null, assetUrl: null, seats: null,
       position, rotationY: number(entry.rotationY, -2 * Math.PI, 2 * Math.PI), dimensions, locked: entry.locked };
     item.evidenceIds = refs(entry.evidenceIds, known);
     if (!item.evidenceIds.length) fail("furniture evidence cannot be empty.");
@@ -157,8 +157,8 @@ export function parseRoomImport(source: string): RoomPlan {
   if (!Number.isSafeInteger(revision)) fail("revision must be an integer.");
   const observations = evidence(raw.evidence), known = new Set(observations.map((entry) => entry.id));
   const shape = geometry(raw.geometry, known);
-  const plan: RoomPlan = { schemaVersion: "0.1-scaffold", projectId, revision, geometry: shape, evidence: observations,
-    items: raw.items === undefined ? [] : furniture(raw.items, shape, known), products: [], constraints: { budget: null, minimumSeats: null } };
+  const plan: RoomPlan = { schemaVersion: "0.2", projectId, revision, geometry: shape, evidence: observations,
+    items: raw.items === undefined ? [] : furniture(raw.items, shape, known), products: [], constraints: { budget: null, minimumSeats: null, clearance: 0.3 } };
   if (raw.appearance !== undefined) plan.appearance = appearance(raw.appearance, shape, known);
   return plan;
 }
