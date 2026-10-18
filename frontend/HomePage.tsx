@@ -72,7 +72,7 @@ function Loader({ onLift, onDone, reduced }: { onLift: () => void; onDone: () =>
 type Row = { key: "scan" | "type" | "demo"; label: string };
 const ROWS: Row[] = [
   { key: "scan", label: "Scan room" },
-  { key: "type", label: "Type address" },
+  { key: "type", label: "Find your floorplan" },
   { key: "demo", label: "Explore demo rooms" },
 ];
 
