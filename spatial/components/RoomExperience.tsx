@@ -2,11 +2,12 @@
 
 import Image from "next/image";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import type { FloorSpot, FurnitureCategory, ProductCandidate, PlanProposal, RoomPlan, ShopRequest, ShopResult, Vector3Meters } from "../../backend/contracts";
+import type { FloorSpot, FurnitureCategory, Job, ProductCandidate, PlanProposal, RoomPlan, ShopJobOutput, ShopRequest, ShopResult, Vector3Meters } from "../../backend/contracts";
 import dynamic from "next/dynamic";
 import { placeAt } from "../../backend/shopping/placement";
 import { evaluate } from "../../backend/shopping/spot";
 import { useRoomShopping } from "../rooms/use-room-shopping";
+import { useRoomFetch } from "../rooms/use-room-fetch";
 import type { WalkCallbacks, WalkEnvironment, WalkItem, WalkMode, WalkOptions, WalkScene } from "../room/walk-api";
 import mark from "../assets/tadaima-mark.png";
 import { WipeLink, useWipeHold } from "./PageWipe";
@@ -189,6 +190,7 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
   const autoSearch = useRef<string | null>(null);
   const resultsRef = useRef<ShopResult[]>([]);
   const blocked = shopping.busy || shopping.connecting;
+  const fetchConnection = useRoomFetch(shopping.session?.plan.projectId);
 
 
   const coarse = useMedia("(pointer: coarse)");
@@ -536,6 +538,25 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
     setAgentProposal(proposal);
     return proposal;
   };
+  const previewFromFetch = async (job: Job<ShopJobOutput>, productId: string) => {
+    const owner = shopping.session?.plan.projectId;
+    if (blocked || !owner || job.projectId !== owner || !job.output) return false;
+    const plan = await shopping.refresh();
+    if (shoppingRef.current.session?.plan.projectId !== owner || !api()) return false;
+    const found = job.output.results.find((result) => result.product.id === productId);
+    if (!found) throw new Error("Ask Fetch to search for this piece again.");
+    const product = plan.products.find((entry) => entry.id === productId) ?? found.product;
+    const result = evaluate(plan, product, job.output.request, found.source);
+    if (!result.fits || !result.placement || result.withinBudget === false) throw new Error(result.problems.join(" ") || "This piece no longer fits this room and budget.");
+    const engine = api()!;
+    engine.cancelProductPreview();
+    engine.previewProduct(product, { placement: result.placement });
+    setSearchSpot(job.output.request.spot); setSwapTarget(null);
+    setPendingPlacement({ spot: job.output.request.spot, revision: plan.revision, jobId: job.id });
+    setPending(product); setPanel(null); openerRef.current = null;
+    setNotice(`Previewing ${product.label} from Fetch. Confirm placement to add it to this room.`);
+    return true;
+  };
   const safely = (action: () => void) => {
     if (blocked) return;
     try { action(); } catch (err) { setNotice(err instanceof Error ? err.message : "That change could not be made."); }
@@ -574,6 +595,19 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
   }, [shopping.job, shopping.session, swapTarget]);
   useLayoutEffect(() => { resultsRef.current = results; }, [results]);
   const connectedProject = shopping.session?.plan.projectId;
+  // Fetch adds public catalog observations, never an accepted placement. Refresh
+  // through the same queue after local drags/previews finish, preserving the camera.
+  const fetchJob = fetchConnection.status?.job;
+  const fetchRevision = fetchJob?.output?.checkedAtRevision;
+  const fetchAttempt = useRef({ key: "", at: 0 });
+  const canonicalRevision = shopping.session?.plan.revision;
+  const refreshRoom = shopping.refresh;
+  useEffect(() => {
+    const key = `${connectedProject}:${fetchRevision}`;
+    if (blocked || pending || moving || fetchRevision == null || canonicalRevision == null || fetchRevision <= canonicalRevision || (fetchAttempt.current.key === key && Date.now() - fetchAttempt.current.at < 5000)) return;
+    fetchAttempt.current = { key, at: Date.now() };
+    void refreshRoom().catch(() => undefined);
+  }, [blocked, pending, moving, fetchJob, fetchRevision, connectedProject, canonicalRevision, refreshRoom]);
 
   useEffect(() => {
     if (panel !== "catalog" || !connectedProject) { autoSearch.current = null; return; }
@@ -1012,7 +1046,7 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
         onClose={closePanel} onBasket={() => openPanel("basket")} onRefresh={shopping.refresh}
         onPropose={proposeWithAssistant} onApply={shopping.applyProposal}
         onSearch={assistantSearch} onPreview={(result) => addProduct(result.product)}
-        proposal={agentProposal} onProposal={setAgentProposal} /> : null}
+        proposal={agentProposal} onProposal={setAgentProposal} fetchConnection={fetchConnection} onFetchPreview={previewFromFetch} /> : null}
       {room.sourceDescription ? <p className="room-x__source">{room.sourceDescription}</p> : null}
       {/* ---------- states ---------- */}
       <div className="room-x__veil" data-show={status === "loading" || undefined} aria-hidden={status !== "loading"}>

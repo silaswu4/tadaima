@@ -52,7 +52,17 @@ The room’s **Talk** pill is the single voice entry point. Its SDK session load
 
 Server registration reports provider availability as booleans; credentials remain server-side. Set the variables above and restart the server to enable configured providers. After adding ElevenLabs credentials, synchronize the checked-in screen-review tool instructions with `npx tsx --env-file=.env.local backend/voice/setup-agent.ts`; this updates the configured agent (or creates it if no agent ID is set). A rendered control or a mocked tool test does not establish a successful live provider call. Physical Quest microphone behavior remains unverified.
 
-The Fetch agent and its visualization/payment extensions are currently on separate branches. They are not wired to the browser's private scanned-room session. They need scoped room pairing before external chat can operate on that room; merging their code alone does not grant that access.
+### Fetch / ASI:One, using the same scanned room
+
+Open **Ask Tadaima → Fetch chat → Connect this room to Fetch**. Send the displayed `connect CODE` message to the Tadaima agent in ASI:One. The code works once for ten minutes; successful redemption grants one hour of access to only this canonical room. **Disconnect Fetch** immediately revokes it. Creating another code invalidates the old code and active connection.
+
+The imported Python adapter from Matthew's `work/backend-fetch-agent` branch lives in [`backend/fetch`](../backend/fetch/README.md). Run it with the team's existing `AGENT_SEED` to retain the published agent address, and point `BACKEND_URL` at the backend holding this room's session. For this Mac's current preview that is `http://127.0.0.1:3017`. A local Python process reaches Agentverse through its mailbox; a separately hosted process needs access to the same deployed backend and persistence store. Do not point it at a different deployment with a different in-memory room store.
+
+Fetch reads the measured shell, furniture poses/locks, public product observations and current basket. It uses the existing research and planner operations. Search progress, fitting products, requested previews and the latest proposal appear in **Fetch chat**, polled while the room is open. **Preview in room** refreshes the canonical plan and rechecks the result at its search spot before showing the approximate model. **Confirm placement** uses the same revision check, validated placement, browser persistence and basket as manual shopping. Proposals open the existing review/apply interface. Live catalog updates refresh through the serialized queue after local drags and previews finish; a temporary refresh failure can retry on later polls.
+
+The scoped bearer credential is stored by the Python process per ASI:One sender, never by browser JavaScript or in model history/cards. The backend stores only its hash, checks expiry/revocation on every request and refuses other projects. Browser owner cookies never leave the website. Agent room responses remove source evidence, photo appearance data and all furniture model URLs; private room visualization links are disabled. Fetch may research, draft proposals, request previews and read a cart-only response. It cannot apply changes, confirm placement, move/store/unlock furniture, reset, approve payment or charge the cart. Those actions require the owning browser. This is a paired-room integration with web review; it does not establish a fully conversational checkout or sponsor submission eligibility.
+
+The Python process separately needs `ANTHROPIC_API_KEY` for free-form tool selection. Backend proposals and live retailer research use the website credentials described above. Without the Python model key, connection, `room` and `cart` still work. See the adapter README for its pinned runtime, local env setup and legacy feature boundaries. Actual Agentverse registration and ASI:One message delivery remain a separate smoke test with the team's seed/credentials; the local adapter/HTTP tests do not claim those calls occurred.
 
 ### Private room identity
 
@@ -67,6 +77,8 @@ Important modules:
 | Boundary | Implementation |
 | --- | --- |
 | Session registration, authorization and resume | `backend/session/service.ts`, `app/api/room-sessions/` |
+| Fetch pairing, revocation, scoped authorization and canonical inbox | `backend/session/fetch.ts`, `backend/session/fetch-types.ts`, `app/api/agent/pairings/` |
+| Fetch room controls and activity polling | `spatial/components/RoomFetch.tsx`, `spatial/rooms/use-room-fetch.ts` |
 | Bounded JSON/schema and immutable source checks | `backend/session/body.ts`, `schema.ts`, `sync.ts` |
 | Browser connection and serialized mutations | `spatial/rooms/use-room-shopping.ts` |
 | Scene acceptance, revision and preview handling | `spatial/room/walk-authority.ts`, `walk-scene.ts` |
@@ -115,6 +127,8 @@ npx tsc --noEmit
 npm run lint
 npm run build
 E2E_BASE=http://127.0.0.1:3017 npx tsx --test backend/e2e/room-sessions.e2e.ts
+E2E_BASE=http://127.0.0.1:3017 npx tsx --test backend/e2e/fetch-pairing.e2e.ts
+backend/fetch/.venv/bin/python -m unittest discover -s backend/fetch/tests -p 'test_*.py'
 ```
 
 The new checkout tests use isolated processes with server-only imports enabled. Payment success, decline, uncertain outcomes and simultaneous execution use stubbed Stripe resources while HTTP/HTTPS requests are rejected; those tests do not make actual Stripe calls. Session tests cover unauthorized reads/mutations, cross-origin refusal, per-room resume, stale revision races, bounded input and owned-furniture replacement.

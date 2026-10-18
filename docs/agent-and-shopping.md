@@ -1,6 +1,6 @@
 # Agent behavior and shopping workflow
 
-**Status:** The selected-room frontend connects catalog/live Browser Use search, planner proposal review/apply, basket review and optional ElevenLabs voice. See [in-room integration](shopping-integration.md) for actual behavior, provider setup and verification limits. Fetch remains on separate branches and needs private-room pairing. The sections below describe broader target behavior; they do not establish implementation of every proposed operation.
+**Status:** The selected-room frontend connects catalog/live Browser Use search, planner proposal review/apply, basket review and optional ElevenLabs voice. Fetch now pairs to the same private scanned room for research, proposals, requested previews and basket reads; accepted changes require web review. See [in-room integration](shopping-integration.md) for actual behavior, provider setup and verification limits, and [Fetch setup](../backend/fetch/README.md) for its separate runtime. Live ASI:One delivery still requires a configured running agent. The sections below describe broader target behavior; they do not establish implementation of every proposed operation.
 
 ## Agent objective
 
