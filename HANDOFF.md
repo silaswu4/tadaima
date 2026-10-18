@@ -1,3 +1,5 @@
+> Historical handoff: the current project context is in [docs/README.md](docs/README.md). Later requirements keep capture web-only on iPhone; native Apple RoomPlan is not the baseline. The active repository is `silaswu4/tadaima`, while the UI still uses Michael. The original design notes below are retained for context.
+
 # Michael: what we're building
 
 Michael is a working name, so it may change. This is our LA Hacks 2026 project.
