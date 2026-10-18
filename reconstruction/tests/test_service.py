@@ -25,6 +25,7 @@ from test_roomplan_photo_bundle import archive_bytes, fixture as photo_bundle_fi
 ROOT = Path(__file__).resolve().parents[2]
 FIXTURE = ROOT / "reconstruction" / "fixtures" / "living-room.request.json"
 TOKEN = "test-token-that-is-long-enough-123"
+UPLOAD_KEY = "phone-upload-key-long-enough-4567"
 
 
 def _blender() -> str | None:
@@ -40,7 +41,7 @@ class ServiceTests(unittest.TestCase):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
         self.data = Path(self.temporary.name) / "data"
-        self.settings = Settings(data_dir=self.data, api_key=TOKEN, blender=_blender() or "/nonexistent/blender")
+        self.settings = Settings(data_dir=self.data, api_key=TOKEN, upload_key=UPLOAD_KEY, blender=_blender() or "/nonexistent/blender")
         self.client = TestClient(create_app(self.settings))
         self.client.__enter__()
         self.addCleanup(self.client.__exit__, None, None, None)
@@ -66,6 +67,23 @@ class ServiceTests(unittest.TestCase):
             response = self.client.post("/v1/jobs/geometry", content=FIXTURE.read_bytes(), headers=headers)
             self.assertEqual(response.status_code, 401, headers)
         self.assertEqual(self.client.get("/v1/capabilities").status_code, 401)
+
+    def test_phone_upload_key_can_only_submit_and_poll_roomplan_scans(self):
+        # The phone holds this key, so a leaked phone build must not expose other jobs or their files.
+        phone = {"x-tadaima-upload-key": UPLOAD_KEY}
+        submitted = self.client.post("/v1/jobs/roomplan?render=false", json=packet(), headers=phone)
+        self.assertEqual(submitted.status_code, 202)
+        job = self.wait(submitted.json()["id"])
+        self.assertEqual(self.client.get(f"/v1/jobs/{job['id']}", headers=phone).status_code, 200)
+        self.assertEqual(self.client.get("/v1/jobs", headers=phone).status_code, 401)
+        artifact = f"/v1/jobs/{job['id']}/artifacts/reconstruction.request.json"
+        self.assertEqual(self.client.get(artifact, headers=phone).status_code, 401)
+        self.assertEqual(self.client.post("/v1/jobs/geometry", content=FIXTURE.read_bytes(), headers=phone).status_code, 401)
+        geometry = self.client.post("/v1/jobs/geometry", content=FIXTURE.read_bytes(), headers=self.auth).json()
+        self.assertEqual(self.client.get(f"/v1/jobs/{geometry['id']}", headers=phone).status_code, 404)
+        wrong = {"x-tadaima-upload-key": "x" * len(UPLOAD_KEY)}
+        self.assertEqual(self.client.post("/v1/jobs/roomplan", json=packet(), headers=wrong).status_code, 401)
+        self.wait(geometry["id"])
 
     def test_settings_refuse_to_start_without_auth_unless_explicitly_local(self):
         from reconstruction.service.settings import Settings, SettingsError

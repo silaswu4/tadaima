@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { RoomsPage, type RoomsPageRoom } from "@/spatial/components/RoomsPage";
-import { getTadaimaRooms } from "@/spatial/fixtures/roomsCatalog";
+import { getTadaimaRooms, hydrateCatalogRoom } from "@/spatial/fixtures/roomsCatalog";
 import { bootstrapLocalCapture, getRoom, getRoomDraft, listRooms, subscribeRooms } from "@/spatial/rooms/registry";
 
 const RoomImporter = dynamic(() => import("@/spatial/components/RoomImporter"));
@@ -12,7 +12,7 @@ const PhoneScanInbox = dynamic(() => import("@/spatial/components/PhoneScanInbox
 
 export default function Rooms() {
   const router = useRouter();
-  const own = useMemo<RoomsPageRoom[]>(() => getTadaimaRooms().map((r) => ({ ...r, description: "Demo room · furniture at listed dimensions" })), []);
+  const own = useMemo(() => getTadaimaRooms().map((r) => ({ ...r, description: r.description ?? "Demo room · furniture at listed dimensions" })), []);
   const [rooms, setRooms] = useState<RoomsPageRoom[] | null>(null);
   const [importing, setImporting] = useState(false);
   const [notice, setNotice] = useState("");
@@ -32,7 +32,10 @@ export default function Rooms() {
         description: r.model ? "Your scan · measured layout, photo-informed furniture" : "Your scan · measured layout, furniture stand-ins",
         reconstruction: r.model ? { plan: r.sourcePlan, texturedModel: r.model, binding: r.binding } : undefined,
       }));
-      const demos = await Promise.all(own.map(async (room) => ({ ...room, plan: await getRoomDraft(room.id) ?? room.plan })));
+      const demos = await Promise.all(own.map(async (room) => {
+        const [hydrated, draft] = await Promise.all([hydrateCatalogRoom(room), getRoomDraft(room.id)]);
+        return { ...hydrated, plan: draft ?? hydrated.plan };
+      }));
       if (!live || version !== refresh) return;
       const next = [...privateRooms, ...demos];
       let selected: string | null = null;

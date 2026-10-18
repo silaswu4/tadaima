@@ -1,3 +1,6 @@
+import publishedScan from "../../public/demo/scanned-living-room/scene.json";
+import publishedScanManifest from "../../public/demo/scanned-living-room/manifest.json";
+import type { WalkOptions } from "../room/walk-api";
 import type { FurnitureCategory, PlacedItem, PointXZ, RoomPlan } from "../../backend/contracts";
 import { demoPlan } from "../../backend/fixtures/demo-room";
 import { assetUrlFor } from "../../backend/shopping/assets";
@@ -25,7 +28,33 @@ import {
  * person (0.8 m wide) can walk from the door to every floor piece.
  */
 
-export type CarouselRoom = { id: string; slug: string; label: string; source: "tadaima-original" | "tadaima-demo"; plan: RoomPlan };
+export type CarouselRoom = {
+  id: string; slug: string; label: string; source: "tadaima-original" | "tadaima-demo" | "tadaima-scan"; plan: RoomPlan;
+  description?: string; sourceDescription?: string; reconstruction?: WalkOptions["reconstruction"];
+};
+
+export const PUBLISHED_SCAN_ID = "scanned-living-room";
+const SCAN_DESCRIPTION = "iPhone scan · measured layout, photo-informed furniture and baked lighting";
+let publishedReconstruction: Promise<NonNullable<WalkOptions["reconstruction"]>> | undefined;
+
+/** One shared download for gallery and room entry. The original private scan stays separate. */
+export async function hydrateCatalogRoom(room: CarouselRoom): Promise<CarouselRoom> {
+  if (room.id !== PUBLISHED_SCAN_ID) return room;
+  publishedReconstruction ??= (async () => {
+    const [{ validateLocalTexturedGlb }, { validateRoomModelBinding }] = await Promise.all([
+      import("../room/textured-model"), import("../rooms/registry"),
+    ]);
+    const response = await fetch("/demo/scanned-living-room/scene.glb", { credentials: "same-origin" });
+    if (!response.ok) throw new Error("The shared scanned room could not download. Try again.");
+    const texturedModel = await response.arrayBuffer();
+    if (texturedModel.byteLength !== publishedScanManifest.modelBytes) throw new Error("The shared scanned room download is incomplete. Try again.");
+    const plan = parseRoomImport(JSON.stringify(publishedScan));
+    const binding = { jobId: publishedScan.jobId, inputSha256: publishedScanManifest.sourceSha256 };
+    validateRoomModelBinding(validateLocalTexturedGlb(texturedModel), plan, binding);
+    return { plan, texturedModel, binding };
+  })().catch((cause) => { publishedReconstruction = undefined; throw cause; });
+  return { ...room, reconstruction: await publishedReconstruction };
+}
 
 const withLabel = (p: RoomPlan, label: string) => {
   p.geometry.rooms[0].label = label;
@@ -193,6 +222,8 @@ function kidsRoom(): RoomPlan {
 export function getTadaimaRooms(): CarouselRoom[] {
   const gallery = Object.fromEntries(makeGalleryRooms().map((g) => [g.id, g.plan]));
   const rooms: Array<Omit<CarouselRoom, "plan"> & { plan: RoomPlan }> = [
+    { id: PUBLISHED_SCAN_ID, slug: PUBLISHED_SCAN_ID, label: "Scanned living room", source: "tadaima-scan",
+      plan: parseRoomImport(JSON.stringify(publishedScan)), description: SCAN_DESCRIPTION, sourceDescription: SCAN_DESCRIPTION },
     // spatial/room/workspace-fixture.ts, also the gallery's living room
     { id: "furniture-workspace-demo", slug: "living-room", label: "Living room", source: "tadaima-original", plan: workspaceLivingRoom() },
     { id: "proj_demo", slug: "studio-living-room", label: "Studio living room", source: "tadaima-original", plan: studioLivingRoom() },
@@ -204,7 +235,8 @@ export function getTadaimaRooms(): CarouselRoom[] {
     { id: "tadaima-dining", slug: "dining-room", label: "Dining room", source: "tadaima-demo", plan: diningRoom() },
     { id: "tadaima-kids", slug: "kids-room", label: "Kids' room", source: "tadaima-demo", plan: kidsRoom() },
   ];
-  return rooms.map((room) => ({ ...room, plan: asYours(withLabel(room.plan, room.label)) }));
+  // Keep the published capture's measured shell, furniture locks and evidence intact.
+  return rooms.map((room) => room.source === "tadaima-scan" ? room : ({ ...room, plan: asYours(withLabel(room.plan, room.label)) }));
 }
 
 /**

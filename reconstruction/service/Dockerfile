@@ -38,5 +38,5 @@ ENV BLENDER_BIN=/opt/blender/blender \
     PYTHONUNBUFFERED=1 \
     PORT=8000
 EXPOSE 8000
-VOLUME ["/data"]
+# No VOLUME: Railway bans it. Mount a volume at /data (docker run -v, or a Railway volume).
 CMD ["python", "-m", "reconstruction.service"]

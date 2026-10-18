@@ -26,6 +26,7 @@ def _positive_int(name: str, default: int) -> int:
 class Settings:
     data_dir: Path
     api_key: str | None
+    upload_key: str | None = None
     blender: str | None = None
     workers: int = 1
     cors_origins: tuple[str, ...] = ()
@@ -45,9 +46,12 @@ class Settings:
             raise SettingsError("Set TADAIMA_API_KEY, or TADAIMA_ALLOW_NO_AUTH=1 for local development only")
         if api_key is not None and len(api_key) < 24:
             raise SettingsError("TADAIMA_API_KEY must be at least 24 characters")
+        upload_key = os.environ.get("TADAIMA_UPLOAD_KEY") or None
+        if upload_key is not None and len(upload_key) < 24:
+            raise SettingsError("TADAIMA_UPLOAD_KEY must be at least 24 characters")
         origins = tuple(origin.strip() for origin in os.environ.get("TADAIMA_CORS_ORIGINS", "").split(",") if origin.strip())
         return cls(
-            data_dir=Path(data_dir).absolute(), api_key=api_key,
+            data_dir=Path(data_dir).absolute(), api_key=api_key, upload_key=upload_key,
             blender=os.environ.get("BLENDER_BIN") or None,
             workers=_positive_int("TADAIMA_WORKERS", 1),
             cors_origins=origins,

@@ -41,7 +41,7 @@ test("apply returns only the server's accepted plan and propagates revision/vali
   await assert.rejects(applyRoomProposal({ apply: async () => ({ ok: false, reason: "validation_failed", validations: [{ status: "fail", message: "Blocked" }] }) }, plan, proposal), /Blocked/);
 });
 
-function voiceFixture() {
+function voiceFixture(overrides = {}) {
   const { plan, proposal } = fixture(); let active = true;
   const product = plan.products[0];
   const result = { product, fits: true, withinBudget: true, overBudgetUsd: null, problems: [], placement: { roomId: plan.geometry.rooms[0].id, position: [1, 0, 1], rotationY: 0 }, source: "catalog" };
@@ -53,7 +53,7 @@ function voiceFixture() {
     // a search finishes its catalog pass at once
     search: async (input) => { calls.push(["search", input]); state.job = { ...job, id: "search-2" }; }, preview: (r) => { calls.push(["preview", r]); return true; },
     place: async (r) => { calls.push(["place", r]); },
-    spot: () => ({ position: [1, 0, 1] }), move: async (...args) => { calls.push(["move", ...args]); }, store: async (...args) => { calls.push(["store", ...args]); }, liveSearch: false });
+    spot: () => ({ position: [1, 0, 1] }), move: async (...args) => { calls.push(["move", ...args]); }, store: async (...args) => { calls.push(["store", ...args]); }, liveSearch: false, ...overrides });
   return { tools, state, calls, result, proposal, stop: () => { active = false; } };
 }
 test("voice applies only the proposal on screen after a yes, and never pays", async () => {
@@ -76,18 +76,21 @@ test("voice searches answer with the catalog results and reject malformed inputs
   assert.match(said, /1\)/, "names the results");
   assert.equal(calls[0][1].live, false);
 });
-test("voice placing needs current results, a valid integer and a verified fit, and never guesses budget math", async () => {
+test("voice placement needs a current actual preview and rechecks fit and budget", async () => {
   const { tools, state, calls, result } = voiceFixture();
-  for (const params of [{ choice: 0 }, { choice: 1.5 }, { choice: 1, job_id: "old-search" }]) assert.match(await tools.place_product(params), /Not completed/);
+  for (const params of [{}, { choice: 0 }, { choice: 1.5 }, { choice: 1, job_id: "old-search" }]) assert.match(await tools.place_product(params), /Not completed/);
+  assert.deepEqual(calls, []);
+  assert.match(await tools.preview_product({ choice: 1 }), /Previewing/);
   state.results[0] = { ...result, fits: false };
-  assert.match(await tools.place_product({ choice: 1 }), /Not completed/);
+  assert.match(await tools.place_product({ choice: 1 }), /Not completed.*doesn't fit/);
   state.plan.constraints.budget = { amountMinor: 150000, currency: "USD" };
   state.results[0] = { ...result, withinBudget: false, overBudgetUsd: 196.97 };
-  assert.match(await tools.place_product({ choice: 1 }), /Not placed.*\$197 over.*\$1,700.*set_budget with 1700/);
-  assert.deepEqual(calls, []);
+  assert.match(await tools.place_product({}), /Not placed.*\$197 over.*never raise it automatically/);
+  assert.equal(calls.filter(([name]) => name === "place").length, 0);
   state.results[0] = result;
-  assert.match(await tools.place_product({ choice: 1 }), /^ok: .* in the room and the basket/);
-  assert.deepEqual(calls, [["place", result]]);
+  assert.match(await tools.place_product({}), /^ok: .* in the room and the basket/);
+  assert.deepEqual(calls, [["preview", result], ["place", result]]);
+  assert.match(await tools.place_product({}), /Not completed.*Preview/, "one approval cannot place twice");
 });
 test("voice moves locked pieces only with an explicit unlock, after asking", async () => {
   const { tools, state, calls } = voiceFixture();
@@ -123,4 +126,96 @@ test("pre-existing scan overlap does not block a non-worsening budget proposal",
   let called = false;
   const result = await applyRoomProposal({ apply: async () => { called = true; return { ok: true, plan: { ...proposal.result, revision: plan.revision + 1 } }; } }, plan, proposal);
   assert.equal(called, true); assert.equal(result.revision, plan.revision + 1);
+});
+
+
+test("agent search automatically previews the first ranked eligible match without committing", async () => {
+  const { tools, state, calls, result } = voiceFixture();
+  const unfit = { ...result, product: { ...result.product, id: "unfit" }, fits: false };
+  const over = { ...result, product: { ...result.product, id: "over" }, withinBudget: false };
+  state.results = [unfit, over, result];
+  const reply = await tools.shop_here({ category: "chair", max_price_usd: 200 });
+  assert.match(reply, /Previewing/); assert.ok(reply.includes(`product_id=${result.product.id}`)); assert.match(reply, /job_id=search-2/);
+  assert.match(reply, /preview only.*nothing is placed/i);
+  assert.deepEqual(calls.map(([name]) => name), ["search", "preview"]);
+  assert.equal(calls[1][1], result);
+});
+test("agent never previews or places when no verified in-budget match exists", async () => {
+  const { tools, state, calls, result } = voiceFixture();
+  for (const invalid of [{ ...result, fits: false }, { ...result, withinBudget: false }, { ...result, placement: null }]) {
+    state.results = [invalid];
+    assert.match(await tools.check_search({}), /No verified in-budget match/);
+    assert.match(await tools.preview_product({ choice: 1 }), /Not completed.*cannot be recommended/);
+    assert.match(await tools.place_product({}), /Not completed.*Preview/);
+  }
+  assert.deepEqual(calls, []);
+});
+test("live result reordering preserves the pinned recommendation and never substitutes another product", async () => {
+  const { tools, state, calls, result } = voiceFixture();
+  await tools.check_search({});
+  const alternative = { ...result, product: { ...result.product, id: "another-product", label: "Another chair" } };
+  state.results = [alternative, result];
+  assert.ok((await tools.check_search({})).includes(`Previewing ${result.product.label}`));
+  assert.equal(calls.filter(([name]) => name === "preview").length, 1, "a live update does not replace a valid preview");
+  assert.match(await tools.place_product({ choice: 1 }), /Not completed.*choice changed/i);
+  assert.match(await tools.place_product({ product_id: alternative.product.id }), /Not completed.*not the previewed product/i);
+  assert.match(await tools.place_product({ product_id: result.product.id, job_id: state.job.id }), /^ok/);
+  assert.equal(calls.at(-1)[1], result);
+});
+test("an explicit alternative requires its own real preview before approval can place it", async () => {
+  const { tools, state, calls, result } = voiceFixture();
+  const alternative = { ...result, product: { ...result.product, id: "another-product", label: "Another chair" } };
+  state.results.push(alternative);
+  await tools.check_search({});
+  assert.match(await tools.preview_product({ product_id: alternative.product.id, job_id: state.job.id }), /Previewing Another chair/);
+  assert.match(await tools.place_product({ product_id: result.product.id }), /Not completed/);
+  assert.match(await tools.place_product({}), /^ok: Another chair/);
+  assert.deepEqual(calls.map(([name, r]) => [name, r.product.id]), [["preview", result.product.id], ["preview", alternative.product.id], ["place", alternative.product.id]]);
+});
+test("new searches and foreign jobs invalidate previous preview approval", async () => {
+  const { tools, state, calls, result } = voiceFixture();
+  await tools.check_search({});
+  state.job = { ...state.job, id: "different-search" };
+  assert.match(await tools.place_product({}), /Not completed.*Preview/);
+  assert.match(await tools.check_search({ job_id: "search-1" }), /Not completed.*no longer selected/);
+  assert.match(await tools.preview_product({ choice: 1, job_id: "search-1" }), /Not completed.*no longer selected/);
+  state.job.projectId = "another-room";
+  assert.match(await tools.preview_product({ choice: 1 }), /Not completed/);
+  assert.equal(calls.filter(([name]) => name === "place").length, 0);
+  state.job.projectId = state.plan.projectId; state.results = [{ ...result, fits: false }];
+  assert.match(await tools.shop_here({ category: "chair" }), /No verified in-budget/);
+  assert.match(await tools.place_product({}), /Not completed.*Preview/);
+});
+test("cancelled, changed, repriced or relocated previews require fresh approval", async () => {
+  for (const change of [
+    (s) => { s.previewedProductId = null; },
+    (s) => { s.previewedProductId = "different-preview"; },
+    (s) => { s.plan.revision++; },
+    (s) => { s.results[0] = { ...s.results[0], product: { ...s.results[0].product, price: { amountMinor: 12345, currency: "USD" } } }; },
+    (s) => { s.results[0] = { ...s.results[0], placement: { ...s.results[0].placement, position: [2, 0, 2] } }; },
+  ]) {
+    const { tools, state, calls } = voiceFixture();
+    await tools.preview_product({ choice: 1 }); change(state);
+    assert.match(await tools.place_product({}), /Not completed.*(cancelled or changed|changed since)/);
+    assert.equal(calls.filter(([name]) => name === "place").length, 0);
+  }
+});
+
+test("failed visual previews cannot create a placement approval pin", async () => {
+  const { tools, calls } = voiceFixture({ preview: () => false });
+  assert.match(await tools.shop_here({ category: "chair" }), /Not completed.*could not show this preview/);
+  assert.match(await tools.place_product({}), /Not completed.*Preview/);
+  assert.equal(calls.filter(([name]) => name === "place").length, 0);
+});
+test("one pending approval cannot place twice or switch the recommendation mid-save", async () => {
+  let complete, placements = 0;
+  const pending = new Promise((resolve) => { complete = resolve; });
+  const { tools } = voiceFixture({ place: async () => { placements++; await pending; } });
+  await tools.check_search({});
+  const first = tools.place_product({});
+  assert.match(await tools.place_product({}), /already being saved/);
+  assert.match(await tools.preview_product({ choice: 1 }), /Wait for the approved placement/);
+  assert.match(await tools.check_search({}), /Wait for the approved placement/);
+  assert.match(await tools.shop_here({ category: "chair" }), /Wait for the approved placement/);
+  complete(); assert.match(await first, /^ok/); assert.equal(placements, 1);
 });

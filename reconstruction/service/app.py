@@ -100,7 +100,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app = FastAPI(title="Tadaima reconstruction", version="1.0.0", lifespan=lifespan)
     if settings.cors_origins:
         app.add_middleware(CORSMiddleware, allow_origins=list(settings.cors_origins),
-                           allow_methods=["GET", "POST"], allow_headers=["Authorization", "Content-Type"])
+                           allow_methods=["GET", "POST"], allow_headers=["Authorization", "Content-Type", "X-Tadaima-Upload-Key"])
 
     def authorize(request: Request) -> None:
         if settings.api_key is None:
@@ -111,6 +111,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise _fail(401, "Unauthorized", "Missing or invalid bearer token")
 
     Auth = Depends(authorize)
+
+    def authorize_phone(request: Request) -> None:
+        """TadaimaScan uploads straight here (photo bundles exceed Vercel's 4.5 MB body limit).
+
+        The upload key only submits RoomPlan scans and polls RoomPlan jobs; it cannot list or download.
+        """
+        provided = request.headers.get("x-tadaima-upload-key", "")
+        if settings.upload_key and provided and hmac.compare_digest(provided.encode(), settings.upload_key.encode()):
+            request.state.phone = True
+            return
+        request.state.phone = False
+        authorize(request)
+
+    PhoneAuth = Depends(authorize_phone)
 
     def _stage(files: dict[str, bytes], validate) -> Path:
         """Write inputs to a private staging directory and validate them there."""
@@ -175,7 +189,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         staged = await stage({"input.json": body}, lambda directory: read_request(directory / "input.json"))
         return enqueue(request, "geometry", {"preview": preview}, staged, handlers.geometry(settings, preview=preview))
 
-    @app.post("/v1/jobs/roomplan", status_code=202, dependencies=[Auth])
+    @app.post("/v1/jobs/roomplan", status_code=202, dependencies=[PhoneAuth])
     async def submit_roomplan(request: Request, render: bool = True, preview: bool = False) -> dict:
         body = await _read_body(request, MAX_ROOMPLAN_ZIP_BYTES)
         if body.startswith(b"PK"):
@@ -251,9 +265,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         jobs = request.app.state.store.recent(kind, max(1, min(limit, 100)))
         return {"jobs": [describe(request, job) for job in jobs]}
 
-    @app.get("/v1/jobs/{job_id}", dependencies=[Auth])
+    @app.get("/v1/jobs/{job_id}", dependencies=[PhoneAuth])
     def get_job(request: Request, job_id: str) -> dict:
-        return describe(request, load(request, job_id))
+        job = load(request, job_id)
+        if request.state.phone and job["kind"] != "roomplan":
+            raise _fail(404, "NotFound", "No such job")
+        return describe(request, job)
 
     @app.get("/v1/jobs/{job_id}/artifacts/{name:path}", dependencies=[Auth])
     def get_artifact(request: Request, job_id: str, name: str) -> FileResponse:

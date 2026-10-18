@@ -6,7 +6,8 @@ import test from "node:test";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { roomSourceIdentity, validateEditedRoom, validateRoomModelBinding, validateRoomDraft, getRoomDraft, saveRoomDraft, getRoom, importRoom, saveEditedPlan, importLocalCapture, bootstrapLocalCapture, listRooms } from "../rooms/registry.ts";
 import { prepareLocalShoppingPlan, searchLocalProducts, commitLocalProduct } from "../room/local-shopping.ts";
-import { getTadaimaRooms } from "../fixtures/roomsCatalog.ts";
+import { validateLocalTexturedGlb } from "../room/textured-model.ts";
+import { getTadaimaRooms, hydrateCatalogRoom, PUBLISHED_SCAN_ID } from "../fixtures/roomsCatalog.ts";
 
 function fixture() {
   const raw = JSON.parse(readFileSync(new URL("../../reconstruction/fixtures/living-room.request.json", import.meta.url), "utf8"));
@@ -453,4 +454,65 @@ test("server JSON key ordering does not invalidate immutable scan furniture", as
   assert.doesNotThrow(() => validateEditedRoom(plan, snapshot));
   snapshot.items[0].dimensions[0] += .1;
   assert.throws(() => validateEditedRoom(plan, snapshot), /dimensions and source IDs/);
+});
+
+
+const publishedAsset = (name) => readFileSync(new URL(`../../public/demo/scanned-living-room/${name}`, import.meta.url));
+test("published scan keeps the measured source, verified baked model and a distinct shared room ID", async () => {
+  const source = publishedAsset("scene.json"), model = publishedAsset("scene.glb"), manifest = JSON.parse(publishedAsset("manifest.json"));
+  assert.equal(createHash("sha256").update(source).digest("hex"), manifest.sourceSha256);
+  assert.equal(createHash("sha256").update(model).digest("hex"), manifest.modelSha256);
+  assert.equal(source.length, manifest.sourceBytes); assert.equal(model.length, manifest.modelBytes);
+  const identity = await roomSourceIdentity(source.toString());
+  assert.notEqual(identity.binding.inputSha256, manifest.originalSourceSha256, "sanitization has a separate identity");
+  assert.equal(identity.plan.items.length, 28); assert.equal(identity.plan.geometry.walls.length, 12); assert.equal(identity.plan.geometry.openings.length, 4);
+  assert.ok(identity.plan.evidence.every((entry) => entry.privateAssetId === null && entry.sourceUrl === null));
+  assert.ok(identity.plan.items.every((item) => item.origin === "existing_owned" && item.productId === null));
+  const room = getTadaimaRooms().find((entry) => entry.id === PUBLISHED_SCAN_ID);
+  assert.equal(room.source, "tadaima-scan"); assert.deepEqual(room.plan, identity.plan);
+  assert.ok(!room.id.startsWith("local-scan-"), "private room and accepted edits are not overwritten");
+  const raw = validateLocalTexturedGlb(model.buffer.slice(model.byteOffset, model.byteOffset + model.byteLength));
+  validateRoomModelBinding(raw, identity.plan, identity.binding);
+  assert.ok(raw.materials.some((material) => material.extras?.tadaimaIndirectLightmap), "baked lighting is retained");
+});
+
+test("published model contains no source paths, raw photo links or EXIF and preserves geometry/pixel payloads", () => {
+  const source = publishedAsset("scene.json"), model = publishedAsset("scene.glb"), manifest = JSON.parse(publishedAsset("manifest.json"));
+  const jsonLength = model.readUInt32LE(12), raw = JSON.parse(model.subarray(20, 20 + jsonLength)), binary = model.subarray(28 + jsonLength);
+  for (const metadata of [source.toString(), JSON.stringify(raw)]) assert.doesNotMatch(metadata, /\/Users\/|file:\/\/|\/private\/|\/var\/|https?:\/\/|photos\/|\.jpe?g/i);
+  const imageViews = new Set(raw.images.map((image) => image.bufferView)), geometry = createHash("sha256"), pixels = createHash("sha256");
+  for (const [index, view] of raw.bufferViews.entries()) {
+    const data = binary.subarray(view.byteOffset ?? 0, (view.byteOffset ?? 0) + view.byteLength);
+    if (!imageViews.has(index)) { geometry.update(data); continue; }
+    assert.deepEqual([...data.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
+    let position = 8;
+    while (position + 12 <= data.length) {
+      const length = data.readUInt32BE(position), kind = data.toString("ascii", position + 4, position + 8);
+      assert.ok(!["eXIf", "tEXt", "zTXt", "iTXt"].includes(kind), "image metadata was removed");
+      if (kind === "IDAT") pixels.update(data.subarray(position + 8, position + 8 + length));
+      position += 12 + length;
+    }
+    assert.equal(position, data.length);
+  }
+  assert.equal(geometry.digest("hex"), manifest.geometryPayloadSha256);
+  assert.equal(pixels.digest("hex"), manifest.imagePixelPayloadSha256);
+});
+
+test("published scan hydration shares one validated download and retries a failed download", async () => {
+  const previous = globalThis.fetch, room = getTadaimaRooms().find((entry) => entry.id === PUBLISHED_SCAN_ID);
+  const model = publishedAsset("scene.glb"); let calls = 0, fail = true;
+  globalThis.fetch = async (url, options) => {
+    calls++; assert.equal(url, "/demo/scanned-living-room/scene.glb"); assert.equal(options.credentials, "same-origin");
+    return fail ? new Response("missing", { status: 404 }) : new Response(model);
+  };
+  try {
+    const normal = getTadaimaRooms().find((entry) => entry.id !== PUBLISHED_SCAN_ID);
+    assert.equal(await hydrateCatalogRoom(normal), normal); assert.equal(calls, 0);
+    await assert.rejects(hydrateCatalogRoom(room), /could not download/); assert.equal(calls, 1);
+    fail = false;
+    const [a, b] = await Promise.all([hydrateCatalogRoom(room), hydrateCatalogRoom(room)]);
+    assert.equal(calls, 2); assert.equal(a.reconstruction, b.reconstruction);
+    assert.deepEqual(a.plan, room.plan); assert.deepEqual(a.reconstruction.plan, room.plan);
+    assert.equal(a.reconstruction.texturedModel.byteLength, model.length);
+  } finally { globalThis.fetch = previous; }
 });

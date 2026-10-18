@@ -112,7 +112,7 @@ struct ScanScreen: View {
                             HStack { ProgressView(); Text(progressMessage).font(.subheadline) }
                         }
                         controls
-                        Text("Send to Tadaima uploads the scan and photos to your Mac, which rebuilds the room for shopping. Share scan + photos keeps geometry, JPEGs and camera calibration together. Nothing uploads until you tap Send.")
+                        Text("Send to Tadaima uploads the scan and photos to the Tadaima scan server, which rebuilds the room for shopping. Share scan + photos keeps geometry, JPEGs and camera calibration together. Nothing uploads until you tap Send.")
                             .font(.caption).foregroundStyle(.secondary)
                     }
                     .padding()
@@ -147,7 +147,7 @@ struct ScanScreen: View {
             }
             uploadStatus = "Sending to Tadaima…"
             var status = try await uploader.upload(file)
-            uploadStatus = "Building your room on the Mac…"
+            uploadStatus = "Building your room…"
             var polls = 0
             while ["queued", "running"].contains(status.status) && polls < 300 {
                 try await Task.sleep(for: .seconds(2))
@@ -159,7 +159,7 @@ struct ScanScreen: View {
             } else if status.status == "failed" {
                 uploadStatus = (status.error ?? "The room could not be rebuilt.") + " Scan again."
             } else {
-                uploadStatus = "Still building after 10 minutes. Check the Mac."
+                uploadStatus = "Still building after 10 minutes. Check Tadaima on the laptop."
             }
         } catch {
             uploadStatus = error.localizedDescription
@@ -214,7 +214,7 @@ struct ScanScreen: View {
             Button("Cancel scan", role: .cancel) { model.rescan() }.buttonStyle(.bordered)
         case .review:
             VStack(alignment: .leading, spacing: 10) {
-                TextField("Tadaima server, e.g. http://your-mac.local:3000", text: $server)
+                TextField("Scan server, e.g. https://your-service.up.railway.app", text: $server)
                     .textFieldStyle(.roundedBorder).keyboardType(.URL)
                     .textInputAutocapitalization(.never).autocorrectionDisabled().disabled(sending)
                 TextField("Upload key", text: $uploadKey)

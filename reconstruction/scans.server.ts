@@ -2,8 +2,12 @@
  * Server-only bridge between the web app and the reconstruction service.
  *
  * The phone uploads its TadaimaScan export here; the service token never leaves
- * the server. Callers must be on this machine (the /rooms inbox on localhost) or
- * present TADAIMA_SCAN_UPLOAD_KEY (the phone app).
+ * the server. Callers must be on this machine (the /rooms inbox on localhost),
+ * present TADAIMA_SCAN_UPLOAD_KEY (the phone app), or hold the cookie set by
+ * connectScans (the /rooms inbox on a deployed site).
+ *
+ * Photo bundles exceed Vercel's 4.5 MB request limit, so a deployed phone app uploads
+ * straight to the service with the same key; this bridge only lists and serves scans.
  */
 import "server-only";
 import { timingSafeEqual } from "node:crypto";
@@ -15,6 +19,7 @@ const ASSETS = {
 } as const;
 const LOOPBACK = new Set(["localhost", "127.0.0.1", "[::1]"]);
 const NO_STORE = { "Cache-Control": "no-store" };
+const COOKIE = "tadaima_scan_key";
 
 export type ScanAsset = keyof typeof ASSETS;
 
@@ -42,10 +47,18 @@ function sameSecret(provided: string, expected: string): boolean {
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
-/** Local browser on this machine, or the phone holding the upload key. */
+function cookieKey(request: Request): string | null {
+  for (const part of (request.headers.get("cookie") ?? "").split(";")) {
+    const [name, ...value] = part.trim().split("=");
+    if (name === COOKIE) return decodeURIComponent(value.join("="));
+  }
+  return null;
+}
+
+/** Local browser on this machine, the phone holding the upload key, or a browser that entered it. */
 function authorized(request: Request): boolean {
   const key = process.env.TADAIMA_SCAN_UPLOAD_KEY;
-  const provided = request.headers.get("x-tadaima-upload-key");
+  const provided = request.headers.get("x-tadaima-upload-key") ?? cookieKey(request);
   if (key && provided && sameSecret(provided, key)) return true;
   // request.url reflects the bind address (0.0.0.0 when serving the phone), so use the Host header.
   const host = request.headers.get("host");
@@ -89,6 +102,17 @@ async function guarded(request: Request, work: () => Promise<Response>): Promise
     if (cause instanceof ScanServiceUnavailable) return json({ error: "The reconstruction service is not running or not configured." }, 503);
     throw cause;
   }
+}
+
+/** Remember the scan key in an HttpOnly cookie so the deployed /rooms inbox can list scans. */
+export async function connectScans(request: Request): Promise<Response> {
+  const key = process.env.TADAIMA_SCAN_UPLOAD_KEY;
+  const body = await request.json().catch(() => null) as { key?: unknown } | null;
+  const provided = typeof body?.key === "string" ? body.key.trim() : "";
+  if (!key || !provided || !sameSecret(provided, key)) return json({ error: "That scan key is not right." }, 401);
+  const secure = new URL(request.url).protocol === "https:" ? "; Secure" : "";
+  const cookie = `${COOKIE}=${encodeURIComponent(provided)}; Path=/api/scans; HttpOnly; SameSite=Strict; Max-Age=604800${secure}`;
+  return new Response(null, { status: 204, headers: { ...NO_STORE, "Set-Cookie": cookie } });
 }
 
 export function uploadScan(request: Request): Promise<Response> {

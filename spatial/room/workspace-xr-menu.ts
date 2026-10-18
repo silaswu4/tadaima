@@ -3,7 +3,7 @@ import type { WorkspaceXRShopping, WorkspaceXRLocomotion } from "./workspace-xr"
 
 export const XR_MENU_WIDTH = 1440;
 export const XR_MENU_HEIGHT = 1000;
-export type XRMenuTab = "shop" | "room" | "controls";
+export type XRMenuTab = "shop" | "room" | "agent" | "controls";
 export type XRMenuTarget = {
   id: string; x: number; y: number; width: number; height: number; disabled: boolean;
 };
@@ -20,12 +20,14 @@ type MenuState = WorkspaceXRShopping & {
   basketLabel?: string; selectedItemLocked?: boolean; busy?: boolean;
 };
 type Icon = "chair" | "rug" | "lamp" | "box";
+// Match RoomsPage.css and RoomExperience.css, with opaque surfaces for VR contrast.
+export const XR_MENU_INK = "#2b1a10";
 const C = {
-  paper: "#f6f3eb", ink: "#202a24", muted: "#59645c", line: "#d8ddd2",
-  white: "#fffef9", olive: "#304b3d", oliveHover: "#3e624f", pale: "#e6ecdf",
-  hover: "#dce6d5", disabled: "#e6e7df", disabledInk: "#777e74", danger: "#884c3e",
+  paper: "#f5f2eb", ink: XR_MENU_INK, muted: "#8a6e4e", line: "rgba(43, 26, 16, 0.14)",
+  white: "#fbf8f2", inkHover: "#46301f", well: "#ebe5d9",
+  hover: "#e8e1d5", disabled: "#ebe5d9", disabledInk: "#927f6d", danger: "#9b3a24",
 };
-const FONT = 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+const FALLBACK_FONT = 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
 const clean = (text: string | undefined, max = 240) => (text ?? "").replace(/\s+/g, " ").trim().slice(0, max);
 
 /** One unlit draw call. All hit regions use the same pixel layout as the texture. */
@@ -35,6 +37,11 @@ export function createXRMenu(callbacks: XRMenuCallbacks) {
   const context = canvas.getContext("2d");
   if (!context) throw new Error("The VR menu needs a 2D canvas context.");
   const ctx = context;
+  // Canvas text cannot resolve CSS var() expressions itself. Use the same
+  // Next.js font families as the site, then repaint after those faces load.
+  const style = document.defaultView?.getComputedStyle(document.documentElement);
+  const bodyFont = style?.getPropertyValue("--font-body").trim() || FALLBACK_FONT;
+  const displayFont = style?.getPropertyValue("--font-display").trim() || bodyFont;
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.anisotropy = 4;
@@ -48,7 +55,7 @@ export function createXRMenu(callbacks: XRMenuCallbacks) {
   mesh.renderOrder = 20;
   let state: MenuState = { offers: [] };
   let locomotion: WorkspaceXRLocomotion = "walk";
-  let tab: XRMenuTab = "shop";
+  let tab: XRMenuTab = "agent";
   let targets: XRMenuTarget[] = [];
   let hovered = new Set<string>();
   let disposed = false;
@@ -74,13 +81,13 @@ export function createXRMenu(callbacks: XRMenuCallbacks) {
     return end ? `${text.slice(0, end)}…` : "";
   }
 
-  function text(value: string, x: number, y: number, size = 34, color = C.ink, width = 1260, weight = 500) {
-    ctx.font = `${weight} ${size}px ${FONT}`; ctx.textBaseline = "middle";
+  function text(value: string, x: number, y: number, size = 34, color = C.ink, width = 1260, weight = 400, display = false) {
+    ctx.font = `${weight} ${size}px ${display ? displayFont : bodyFont}`; ctx.textBaseline = "middle";
     ctx.fillStyle = color; ctx.fillText(fit(value, width), x, y);
   }
 
   function paragraph(value: string, x: number, y: number, width: number, size = 30, color = C.muted, maxLines = 2) {
-    ctx.font = `500 ${size}px ${FONT}`;
+    ctx.font = `400 ${size}px ${bodyFont}`;
     const words = value.split(" "); let line = "", row = 0;
     for (let index = 0; index < words.length; index++) {
       const candidate = line ? `${line} ${words[index]}` : words[index];
@@ -100,17 +107,17 @@ export function createXRMenu(callbacks: XRMenuCallbacks) {
     options: { disabled?: boolean; primary?: boolean; danger?: boolean; selected?: boolean } = {}) {
     const over = target(id, x, y, width, height, !!options.disabled);
     const dark = options.primary || options.selected;
-    box(x, y, width, height, options.disabled ? C.disabled : dark ? over ? C.oliveHover : C.olive : over ? C.hover : C.white,
-      dark || options.disabled ? undefined : C.line);
-    ctx.font = `650 34px ${FONT}`;
+    box(x, y, width, height, options.disabled ? C.disabled : dark ? over ? C.inkHover : C.ink : over ? C.hover : C.white,
+      dark || options.disabled ? undefined : C.line, height / 2);
+    ctx.font = `500 34px ${bodyFont}`;
     const labelWidth = Math.min(width - 42, ctx.measureText(label).width);
     text(label, x + (width - labelWidth) / 2, y + height / 2, 34,
-      options.disabled ? C.disabledInk : dark ? C.white : options.danger ? C.danger : C.ink, width - 42, 650);
+      options.disabled ? C.disabledInk : dark ? C.white : options.danger ? C.danger : C.ink, width - 42, 500);
   }
 
   function icon(kind: Icon, x: number, y: number, size = 70) {
     ctx.save(); ctx.translate(x, y); ctx.scale(size / 70, size / 70);
-    ctx.strokeStyle = C.olive; ctx.lineWidth = 4; ctx.lineCap = "round"; ctx.lineJoin = "round";
+    ctx.strokeStyle = C.ink; ctx.lineWidth = 4; ctx.lineCap = "round"; ctx.lineJoin = "round";
     ctx.beginPath();
     if (kind === "chair") {
       ctx.moveTo(15, 38); ctx.lineTo(15, 12); ctx.quadraticCurveTo(35, 5, 55, 12); ctx.lineTo(55, 38);
@@ -137,38 +144,38 @@ export function createXRMenu(callbacks: XRMenuCallbacks) {
   }
 
   function shop() {
-    text("Find your next piece", 64, 286, 42, C.ink, 1110, 650);
+    text("Add furniture", 64, 286, 42, C.ink, 1110, 500, true);
     const categories = [{ id: "search-chair", label: "Chairs", kind: "chair" }, { id: "search-rug", label: "Rugs", kind: "rug" }, { id: "search-lamp", label: "Lamps", kind: "lamp" }] as const;
     categories.forEach((item, index) => {
       const x = 64 + index * 444, id = `action:${item.id}`, disabled = actionDisabled(item.id);
       const over = target(id, x, 328, 424, 92, disabled);
-      box(x, 328, 424, 92, disabled ? C.disabled : over ? C.hover : C.white, disabled ? undefined : C.line);
+      box(x, 328, 424, 92, disabled ? C.disabled : over ? C.hover : C.white, disabled ? undefined : C.line, 46);
       icon(item.kind, x + 24, 351, 46);
-      text(item.label, x + 94, 374, 34, disabled ? C.disabledInk : C.ink, 300, 650);
+      text(item.label, x + 94, 374, 34, disabled ? C.disabledInk : C.ink, 300, 500);
     });
     if (!state.offers.length) {
-      box(64, 444, 1312, 354, C.pale);
+      box(64, 444, 1312, 354, C.well);
       icon("chair", 674, 476, 90);
-      text(state.busy ? "Finding pieces for your room…" : "Find furniture that fits", 104, 616, 38, C.ink, 1232, 650);
+      text(state.busy ? "Finding pieces for your room…" : "Find furniture that fits", 104, 616, 38, C.ink, 1232, 500);
       paragraph(state.busy ? "You can keep looking around. Results will appear here." : "Point at a clear floor spot, then choose Chairs, Rugs or Lamps above.", 104, 676, 1210, 32);
     } else {
       state.offers.slice(0, 3).forEach((offer, index) => {
         const y = 440 + index * 124, selected = state.pendingOfferId === offer.id;
         const over = target(`preview:${offer.id}`, 64, y, 1312, 112, !!state.busy);
-        box(64, y, 1312, 112, selected ? C.pale : over ? C.hover : C.white, selected ? C.olive : C.line);
+        box(64, y, 1312, 112, selected ? C.well : over ? C.hover : C.white, selected ? C.ink : C.line);
         box(80, y + 14, 84, 84, C.paper, undefined, 14); icon(category(offer.label), 94, y + 27, 56);
-        text(offer.label, 188, y + 37, 35, state.busy ? C.disabledInk : C.ink, 884, 650);
+        text(offer.label, 188, y + 37, 35, state.busy ? C.disabledInk : C.ink, 884, 500);
         text(offer.detail || "View a sized preview in your room", 188, y + 80, 32, C.muted, 884);
-        text(selected ? "Previewing" : "Try in room", 1100, y + 56, 32, C.olive, 248, 650);
+        text(selected ? "Previewing" : "Try in room", 1100, y + 56, 32, C.ink, 248, 500);
       });
     }
   }
 
   function room() {
-    text("Make room for what’s next", 64, 286, 42, C.ink, 1240, 650);
-    box(64, 332, 1312, 158, C.pale);
-    text(state.selectedItemLabel ? "SELECTED PIECE" : "YOUR ROOM", 104, 374, 25, C.muted, 1200, 650);
-    text(state.selectedItemLabel || "Point at any piece to select it", 104, 431, 39, C.ink, 1200, 650);
+    text("Your room", 64, 286, 42, C.ink, 1240, 500, true);
+    box(64, 332, 1312, 158, C.well);
+    text(state.selectedItemLabel ? "SELECTED PIECE" : "YOUR ROOM", 104, 374, 25, C.muted, 1200, 500);
+    text(state.selectedItemLabel || "Point at any piece to select it", 104, 431, 39, C.ink, 1200, 500);
     const locked = !!state.selectedItemLocked;
     button("action:rotate-selected", "Rotate 45°", 64, 522, 640, 112,
       { disabled: locked || actionDisabled("rotate-selected") });
@@ -180,15 +187,34 @@ export function createXRMenu(callbacks: XRMenuCallbacks) {
       "Aim your controller at furniture and pull the trigger. Your selection appears here.", 104, 714, 1224, 32);
   }
 
+  function agent() {
+    const voice = state.agent, recommendation = state.offers.find((offer) => offer.id === state.pendingOfferId);
+    text(recommendation ? "Tadaima recommends" : "Tell Tadaima what you need", 64, 286, 42, C.ink, 1240, 500, true);
+    box(64, 332, 1312, 138, C.well);
+    text(recommendation?.label || (voice?.available ? voice.activity || voice.status || "Ready to talk" : "Your room agent isn’t connected yet"), 104, 378, 38, C.ink, 1210, 500);
+    text(recommendation?.detail || (voice?.listening ? "Microphone on · tap Finish speaking when you’re done" :
+      voice?.available ? "Describe what you want. Tadaima handles the search and fit." : "Agent setup is needed. You can still browse in Shop."), 104, 434, 30, C.muted, 1210);
+    const toggle = action("voice-toggle"), stop = action("voice-stop");
+    button("action:voice-toggle", voice?.listening ? "Finish speaking" : "Talk to Tadaima", 64, 502, 640, 100,
+      { primary: !recommendation, disabled: !voice?.available || !toggle || !!toggle.disabled });
+    button("action:voice-stop", "End conversation", 736, 502, 640, 100,
+      { disabled: !stop || !!stop.disabled });
+    box(64, 636, 1312, 162, C.white, C.line);
+    const explanation = voice?.error || (voice?.activity ? `${voice.activity}…` : voice?.caption) ||
+      (recommendation ? "This piece is previewed in your room. Say ‘place it’ to add it, or ask Tadaima for another option." : voice?.transcript ? `You asked: ${voice.transcript}` : voice?.available ? "Try: ‘Find me a comfortable chair under $200.’ Tadaima searches, checks fit and shows you a recommendation before adding anything." :
+      "Voice is unavailable on this server. Once connected, the agent can search, preview and rearrange this room with your approval.");
+    paragraph(explanation, 104, 676, 1224, 30, voice?.error ? C.danger : C.muted, 3);
+  }
+
   function controls() {
-    text("Move at your own pace", 64, 286, 42, C.ink, 1240, 650);
-    box(64, 332, 1312, 148, C.pale);
-    text(locomotion === "walk" ? "Walking is on" : "Teleport is on", 104, 378, 38, C.ink, 690, 650);
+    text("Your controls", 64, 286, 42, C.ink, 1240, 500, true);
+    box(64, 332, 1312, 148, C.well);
+    text(locomotion === "walk" ? "Walking is on" : "Teleport is on", 104, 378, 38, C.ink, 690, 500);
     text(locomotion === "walk" ? "Left stick walks and strafes" : "Aim at floor, release left stick", 104, 434, 30, C.muted, 700);
     button("locomotion", locomotion === "walk" ? "Use teleport" : "Use walking", 928, 360, 416, 92, { disabled: !!state.busy });
     box(64, 514, 1312, 178, C.white, C.line);
-    text("RIGHT STICK", 104, 554, 25, C.muted, 500, 650); text("Snap-turn your view", 104, 610, 34, C.ink, 580, 650);
-    text("LEFT GRIP", 770, 554, 25, C.muted, 500, 650); text("Bring this menu to you", 770, 610, 34, C.ink, 560, 650);
+    text("RIGHT STICK", 104, 554, 25, C.muted, 500, 500); text("Snap-turn your view", 104, 610, 34, C.ink, 580, 500);
+    text("LEFT GRIP", 770, 554, 25, C.muted, 500, 500); text("Bring this menu to you", 770, 610, 34, C.ink, 560, 500);
     button("exit", "Exit VR", 64, 714, 1312, 90, { danger: true });
   }
 
@@ -196,7 +222,7 @@ export function createXRMenu(callbacks: XRMenuCallbacks) {
     ctx.fillStyle = C.line; ctx.fillRect(64, 828, 1312, 2);
     if (state.pendingOfferId) {
       const pending = state.offers.find((offer) => offer.id === state.pendingOfferId);
-      text(state.canConfirm && !state.busy ? "Ready to place" : state.busy ? "Updating your room…" : "Placement needs attention", 64, 868, 32, C.ink, 438, 650);
+      text(state.canConfirm && !state.busy ? "Ready to place" : state.busy ? "Updating your room…" : "Placement needs attention", 64, 868, 32, C.ink, 438, 500);
       text(!state.canConfirm && state.status ? state.status : pending?.label || "Furniture preview", 64, 913, 28, C.muted, 438);
       button("action:cancel-preview", "Cancel preview", 526, 856, 358, 92,
         { disabled: actionDisabled("cancel-preview") });
@@ -213,16 +239,16 @@ export function createXRMenu(callbacks: XRMenuCallbacks) {
     targets = [];
     ctx.clearRect(0, 0, XR_MENU_WIDTH, XR_MENU_HEIGHT);
     box(4, 4, XR_MENU_WIDTH - 8, XR_MENU_HEIGHT - 8, C.paper, C.line, 44);
-    text("tadaima", 64, 84, 54, C.ink, 380, 700);
+    text("tadaima", 64, 84, 54, C.ink, 380, 500, true);
     if (state.basketLabel) {
-      box(838, 48, 390, 72, C.pale, undefined, 36);
-      text(state.basketLabel, 866, 84, 32, C.olive, 336, 650);
+      box(838, 48, 390, 72, C.well, undefined, 36);
+      text(state.basketLabel, 866, 84, 32, C.ink, 336, 500);
     }
-    button("close", "×", 1268, 40, 108, 92);
-    (["shop", "room", "controls"] as const).forEach((item, index) => {
-      button(`tab-${item}`, item[0].toUpperCase() + item.slice(1), 64 + index * 444, 154, 424, 92, { selected: tab === item });
+    button("close", "×", 1284, 40, 92, 92);
+    (["shop", "room", "agent", "controls"] as const).forEach((item, index) => {
+      button(`tab-${item}`, item[0].toUpperCase() + item.slice(1), 64 + index * 332, 154, 316, 92, { selected: tab === item });
     });
-    if (tab === "shop") shop(); else if (tab === "room") room(); else controls();
+    if (tab === "shop") shop(); else if (tab === "room") room(); else if (tab === "agent") agent(); else controls();
     footer();
     texture.needsUpdate = true;
   }
@@ -239,16 +265,24 @@ export function createXRMenu(callbacks: XRMenuCallbacks) {
       action("cancel-preview")?.disabled] : [state.status, state.busy];
     const body = tab === "shop" ? [state.offers, state.pendingOfferId, state.busy,
       ["search-chair", "search-rug", "search-lamp"].map(actionDisabled)] : tab === "room" ?
-      [state.selectedItemLabel, state.selectedItemLocked, actionDisabled("rotate-selected"), actionDisabled("store-selected")] :
-      [locomotion, state.busy];
+      [state.selectedItemLabel, state.selectedItemLocked, actionDisabled("rotate-selected"), actionDisabled("store-selected")] : tab === "agent" ?
+      [state.agent, state.pendingOfferId, state.offers.find((offer) => offer.id === state.pendingOfferId), action("voice-toggle")?.disabled, action("voice-stop")?.disabled] : [locomotion, state.busy];
     return JSON.stringify([tab, state.basketLabel, body, footerState]);
   }
 
   draw();
+  if (document.fonts?.load) {
+    void Promise.allSettled([
+      document.fonts.load(`400 34px ${bodyFont}`),
+      document.fonts.load(`500 34px ${bodyFont}`),
+      document.fonts.load(`500 54px ${displayFont}`),
+    ]).then(() => draw()); // draw() ignores completion after disposal.
+  }
   return {
     mesh,
     get targets(): readonly XRMenuTarget[] { return targets; },
     get activeTab(): XRMenuTab { return tab; },
+    focusAgent() { if (!disposed && tab !== "agent") { tab = "agent"; hovered.clear(); draw(); } },
     setState(next: WorkspaceXRShopping, nextLocomotion: WorkspaceXRLocomotion) {
       if (disposed) return;
       const input = next as MenuState;
@@ -256,14 +290,14 @@ export function createXRMenu(callbacks: XRMenuCallbacks) {
       const pendingOfferId = offers.some((offer) => offer.id === input.pendingOfferId) ? input.pendingOfferId : null;
       const projected: MenuState = {
         offers,
-        actions: (input.actions ?? []).filter((item) => ["search-chair", "search-rug", "search-lamp", "rotate-selected", "store-selected", "cancel-preview"].includes(item.id))
+        actions: (input.actions ?? []).filter((item) => ["search-chair", "search-rug", "search-lamp", "rotate-selected", "store-selected", "cancel-preview", "voice-toggle", "voice-stop"].includes(item.id))
           .map((item) => ({ id: item.id, label: "", disabled: !!item.disabled })),
         selectedItemLabel: clean(input.selectedItemLabel, 160), status: clean(input.status),
         pendingOfferId, canConfirm: !!pendingOfferId && !!input.canConfirm,
+        agent: input.agent ? { available: !!input.agent.available, status: clean(input.agent.status, 120), caption: clean(input.agent.caption, 600), listening: !!input.agent.listening, connected: !!input.agent.connected, error: clean(input.agent.error, 300), activity: clean(input.agent.activity, 160), transcript: clean(input.agent.transcript, 300) } : undefined,
         basketLabel: clean(input.basketLabel, 80), selectedItemLocked: !!input.selectedItemLocked, busy: !!input.busy,
       };
       const before = visibleKey();
-      if (projected.pendingOfferId && projected.pendingOfferId !== state.pendingOfferId) tab = "shop";
       state = projected; locomotion = nextLocomotion;
       if (visibleKey() !== before) { hovered.clear(); draw(); }
     },

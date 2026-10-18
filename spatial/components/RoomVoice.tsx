@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic";
 import { useLayoutEffect, useRef } from "react";
 import type { FloorSpot, Job, PlanProposal, RoomPlan, ShopJobOutput, ShopRequest, ShopResult } from "../../backend/contracts";
+import type { RoomVoiceControls, RoomVoiceState } from "./RoomAgentVoice";
 import { createRoomAgentTools } from "../rooms/agent-tools";
 import "./RoomVoice.css";
 
@@ -10,11 +11,14 @@ const Session = dynamic(() => import("./RoomAgentVoice"), { ssr: false });
 type Props = {
   plan: RoomPlan | null;
   selectedId: string | null;
+  previewedProductId?: string | null;
   job: Job<ShopJobOutput> | null;
   results: ShopResult[];
   liveSearch: boolean;
   available: boolean;
   disabled?: boolean;
+  onControls?(controls: RoomVoiceControls | null): void;
+  onStateChange?(state: RoomVoiceState): void;
   getSpot(): FloorSpot;
   onRefresh(): Promise<unknown>;
   onPropose(request: string): Promise<PlanProposal>;
@@ -46,7 +50,7 @@ export function RoomVoice(props: Props) {
       context: () => {
         const value = p();
         if (!value.plan) throw new Error("This room is no longer connected.");
-        return { plan: value.plan, selectedId: value.selectedId, job: value.job, results: value.results };
+        return { plan: value.plan, selectedId: value.selectedId, job: value.job, results: value.results, previewedProductId: value.previewedProductId };
       },
       refresh: () => p().onRefresh(),
       propose: (request) => p().onPropose(request),
@@ -82,5 +86,5 @@ export function RoomVoice(props: Props) {
     : undefined;
 
   if (!projectId || !props.available) return null;
-  return <Session key={projectId} projectId={projectId} getTools={getTools} update={update} disabled={props.disabled} />;
+  return <Session key={projectId} projectId={projectId} getTools={getTools} update={update} disabled={props.disabled} onControls={props.onControls} onStateChange={props.onStateChange} />;
 }

@@ -1,9 +1,10 @@
 import Foundation
 
-/// Sends an exported scan to the Tadaima web app (`POST /api/scans`) and polls the
-/// reconstruction until the room is ready to open in /rooms on the laptop.
+/// Sends an exported scan straight to the reconstruction service (`POST /v1/jobs/roomplan`)
+/// and polls it until the room is ready to open in /rooms. Photo bundles are tens of
+/// megabytes, past what the deployed web app can accept, so the web app is not in this path.
 struct ScanUploader: Sendable {
-    struct Status: Decodable, Sendable {
+    struct Status: Sendable {
         let id: String
         let status: String
         let ready: Bool
@@ -16,13 +17,25 @@ struct ScanUploader: Sendable {
 
         var errorDescription: String? {
             switch self {
-            case .invalidServer: "Enter the Tadaima server address, for example http://your-mac.local:3000."
+            case .invalidServer: "Enter the Tadaima scan server address, for example https://your-service.up.railway.app."
             case .rejected(let detail): detail
             }
         }
     }
 
-    private struct ErrorBody: Decodable { let error: String }
+    private struct Job: Decodable {
+        struct Failure: Decodable { let message: String }
+        struct Artifact: Decodable { let name: String }
+        let id: String
+        let status: String
+        let error: Failure?
+        let artifacts: [Artifact]
+    }
+
+    private struct ErrorBody: Decodable {
+        struct Detail: Decodable { let message: String }
+        let detail: Detail
+    }
 
     let server: URL
     let key: String
@@ -37,7 +50,8 @@ struct ScanUploader: Sendable {
     }
 
     func upload(_ file: URL) async throws -> Status {
-        var request = URLRequest(url: server.appending(path: "api/scans"))
+        let endpoint = server.appending(path: "v1/jobs/roomplan").appending(queryItems: [URLQueryItem(name: "render", value: "true")])
+        var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
         // Photo bundles can be tens of megabytes on venue Wi-Fi.
         request.timeoutInterval = 600
@@ -49,7 +63,7 @@ struct ScanUploader: Sendable {
     }
 
     func status(_ id: String) async throws -> Status {
-        var request = URLRequest(url: server.appending(path: "api/scans/\(id)"))
+        var request = URLRequest(url: server.appending(path: "v1/jobs/\(id)"))
         request.timeoutInterval = 30
         request.setValue(key, forHTTPHeaderField: "x-tadaima-upload-key")
         let (data, response) = try await URLSession.shared.data(for: request)
@@ -59,10 +73,15 @@ struct ScanUploader: Sendable {
     private func decode(_ data: Data, _ response: URLResponse) throws -> Status {
         let code = (response as? HTTPURLResponse)?.statusCode ?? 0
         guard (200..<300).contains(code) else {
-            let detail = (try? JSONDecoder().decode(ErrorBody.self, from: data))?.error
-            if code == 401 { throw Failure.rejected("The server refused the upload key. Check it matches TADAIMA_SCAN_UPLOAD_KEY on the Mac.") }
+            let detail = (try? JSONDecoder().decode(ErrorBody.self, from: data))?.detail.message
+            if code == 401 { throw Failure.rejected("The server refused the upload key. Check it matches TADAIMA_UPLOAD_KEY on the scan server.") }
             throw Failure.rejected(detail ?? "The server answered \(code).")
         }
-        return try JSONDecoder().decode(Status.self, from: data)
+        let job = try JSONDecoder().decode(Job.self, from: data)
+        let names = Set(job.artifacts.map(\.name))
+        // Same rule as the web inbox: the room opens only once the scene and model both exist.
+        return Status(id: job.id, status: job.status,
+                      ready: job.status == "succeeded" && names.isSuperset(of: ["draft/scene.json", "draft/scene.glb"]),
+                      error: job.error?.message)
     }
 }
