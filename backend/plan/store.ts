@@ -149,13 +149,6 @@ export async function saveProposal(p: PlanProposal) {
 }
 
 /** Small per-project records (checkout state). Keys are namespaced by project. */
-/** Writes a brand-new plan (a user's room created from a template). Refuses to overwrite. */
-export async function createPlan(plan: RoomPlan): Promise<boolean> {
-  if (await db().get(planKey(plan.projectId))) return false;
-  await db().set(planKey(plan.projectId), plan);
-  return true;
-}
-
 /** Account records (users, sender links, room inventory). */
 export const accountKv = {
   get: <T>(key: string) => db().get<T>(`acct:${key}`),

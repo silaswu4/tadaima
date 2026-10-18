@@ -132,8 +132,13 @@ def by_id(rows: list[dict]) -> dict[str, dict]:
     return {r["id"]: r for r in rows}
 
 
+def placed(plan: dict) -> list[dict]:
+    """Items in the room. Stored pieces stay in the plan but take no space, seat nobody, and aren't bought."""
+    return [i for i in plan["items"] if not i.get("stored")]
+
+
 def seats(plan: dict) -> int:
-    return sum(i.get("seats") or 0 for i in plan["items"])
+    return sum(i.get("seats") or 0 for i in placed(plan))
 
 
 def room_size(plan: dict) -> str:
@@ -156,8 +161,9 @@ def cost_line(cost: dict, plan: dict) -> str:
 
 
 def room_summary(plan: dict, cost: dict) -> str:
-    owned = [i for i in plan["items"] if i["origin"] == "existing_owned"]
-    buying = [i for i in plan["items"] if i["origin"] == "proposed_purchase"]
+    owned = [i for i in placed(plan) if i["origin"] == "existing_owned"]
+    buying = [i for i in placed(plan) if i["origin"] == "proposed_purchase"]
+    stored = [i for i in plan["items"] if i.get("stored")]
     products = by_id(plan["products"])
     lines = [f"**Your room** (revision {plan['revision']}{room_size(plan)})", ""]
     if owned:
@@ -168,6 +174,8 @@ def room_summary(plan: dict, cost: dict) -> str:
         p = products.get(i.get("productId") or "")
         price = usd(p["price"]) if p else "price unknown"
         lines.append(f"- {i['label']}: {price}{' (locked)' if i['locked'] else ''}")
+    if stored:
+        lines.append("Put away: " + ", ".join(i["label"] for i in stored))
     lines.append("")
     want = plan["constraints"].get("minimumSeats")
     lines.append(f"Seats {seats(plan)}" + (f" (needs at least {want})" if want else "") + ". " + cost_line(cost, plan))
@@ -191,6 +199,10 @@ def describe_change(c: dict, before: dict, after: dict) -> str:
         return f"Move **{name}** to x {x:.2f} m, z {z:.2f} m"
     if k == "lock":
         return f"{'Lock' if c['locked'] else 'Unlock'} **{name}**"
+    if k == "store":
+        return f"Put **{name}** away"
+    if k == "take_out":
+        return f"Bring **{name}** back out"
     if k == "add":
         return f"Add **{c['item']['label']}**"
     if k == "set_constraints":
@@ -219,7 +231,7 @@ def problems(validations: list[dict]) -> list[str]:
 def products_carousel(plan: dict, title: str) -> MetadataContent | None:
     products = by_id(plan["products"])
     cards = []
-    for i in plan["items"]:
+    for i in placed(plan):
         if i["origin"] != "proposed_purchase" or not i.get("productId"):
             continue
         p = products.get(i["productId"])
@@ -380,7 +392,7 @@ async def cart(ctx: Context, sender: str, project: str):
     plan, cost = data["plan"], data["cost"]
     products = by_id(plan["products"])
     lines_by_merchant: dict[str, list[str]] = {}
-    for i in plan["items"]:
+    for i in placed(plan):
         if i["origin"] != "proposed_purchase" or not i.get("productId"):
             continue
         p = products.get(i["productId"])
