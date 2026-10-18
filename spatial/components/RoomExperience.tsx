@@ -1317,7 +1317,6 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
         onPropose={proposeWithAssistant} onApply={shopping.applyProposal}
         onSearch={assistantSearch} onPreview={(result) => addProduct(result.product)}
         proposal={agentProposal} onProposal={setAgentProposal} fetchConnection={fetchConnection} onFetchPreview={previewFromFetch} /> : null}
-      {room.sourceDescription ? <p className="room-x__source">{room.sourceDescription}</p> : null}
       {ready ? <RoomOnboarding xr={xr} touch={coarse} /> : null}
       {/* ---------- states ---------- */}
       <div className="room-x__veil" data-show={status === "loading" || undefined} aria-hidden={status !== "loading"}>
