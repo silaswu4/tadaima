@@ -277,11 +277,9 @@ export function createRoom(
   ro.observe(canvas);
   resize();
 
-  // pointer: gentle look-around plus hover picking
+  // pointer: hover picking only, the camera stays put
   const ray = new THREE.Raycaster();
   const ndc = new THREE.Vector2();
-  const aim = new THREE.Vector2();
-  const lookNow = new THREE.Vector2();
   let pointerDirty = false;
   let hovered: Item | null = null;
 
@@ -292,11 +290,9 @@ export function createRoom(
   const onMove = (e: PointerEvent) => {
     if (e.pointerType !== "mouse") return;
     toNdc(e);
-    aim.copy(ndc);
     pointerDirty = true;
   };
   const onLeave = () => {
-    aim.set(0, 0);
     setHover(null);
   };
   const onTap = (e: PointerEvent) => {
@@ -343,10 +339,6 @@ export function createRoom(
   const anchor = new THREE.Vector3();
   let raf = 0;
   const tick = () => {
-    lookNow.lerp(aim, 0.06);
-    camera.position.set(eye.x + lookNow.x * 0.18, eye.y + lookNow.y * 0.06, eye.z);
-    camera.lookAt(look.x + lookNow.x * 0.9, look.y + lookNow.y * 0.45, look.z);
-
     if (pointerDirty) {
       pointerDirty = false;
       setHover(pick());
