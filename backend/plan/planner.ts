@@ -152,6 +152,9 @@ export async function planChanges(plan: RoomPlan, intent: string, selectedItemId
       output_config: { effort: "medium", format: zodOutputFormat(ProposalSchema) },
       messages,
     });
+    const u = response.usage;
+    // opus 5.5: $4 / $20 per million tokens in / out
+    console.log(`[planner] attempt ${attempt}: ${u.input_tokens} in, ${u.output_tokens} out, ~$${((u.input_tokens * 4 + u.output_tokens * 20) / 1e6).toFixed(3)}`);
     if (response.stop_reason === "refusal") throw new Error("planner declined the request");
     const out = response.parsed_output;
     if (!out) throw new Error(`planner returned no parseable output (stop_reason ${response.stop_reason})`);
