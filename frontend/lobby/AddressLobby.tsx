@@ -75,9 +75,6 @@ export default function AddressLobby({ address, reduced, onExit }: { address: st
     return () => window.clearTimeout(t);
   }, [run.finished, reduced, exit]);
 
-  // never leave a live browser running behind us
-  useEffect(() => () => stopLiveBrowse(), []);
-
   // ---- the spine grows down to the newest node, and the view follows it ----
   const shownCount = run.revealed.length + (run.finished ? 1 : 0);
   const measure = useCallback(() => {
@@ -247,7 +244,7 @@ const StageNode = memo(function StageNode({
           <span className={`lobby-pill lobby-pill--${pill}`}>{pill}</span>
         </div>
         <p className="lobby-card__explain">{explain}</p>
-        {isBrowse && (working || browse.mode !== "starting") ? <BrowserFrame mode={browse.mode} liveUrl={working ? browse.liveUrl : null} site={browse.site} /> : null}
+        {isBrowse && working ? <BrowserFrame mode={browse.mode} liveUrl={browse.liveUrl} site={browse.site} /> : null}
         <ThoughtLine
           className="lobby-thought"
           label={`${def.working}...`}

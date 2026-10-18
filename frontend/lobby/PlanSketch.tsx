@@ -18,7 +18,7 @@ const VIEW = `${-PAD} ${-PAD} ${W + PAD * 2} ${D + PAD * 2}`;
 const door = { x0: (STUDIO.door.from[0] - STUDIO.door.offset - STUDIO.door.width) * U, x1: (STUDIO.door.from[0] - STUDIO.door.offset) * U, z: D };
 const win = { x0: STUDIO.window.offset * U, x1: (STUDIO.window.offset + STUDIO.window.width) * U, z: 0 };
 const DOOR_TOP = 2.1;
-const RISE_LAYERS = 9;
+const RISE_LAYERS = 6;
 /** On screen, how tall the raised walls stand (px). Kept short so the sketch stays a sketch. */
 const RISE_PX = 64;
 
@@ -142,6 +142,7 @@ export default function PlanSketch({ phase, reduced }: { phase: PlanPhase; reduc
             </linearGradient>
           </defs>
           <rect x={-PAD} y={-PAD} width={W + PAD * 2} height={D + PAD * 2} fill={`url(#${gridId})`} className="plan-paper" />
+          <path className="plan-outline" d={OUTER} />
           <polygon className="plan-light" points={`${win.x0},0 ${win.x1},0 ${W - 30},${D - 20} ${60},${D - 20}`} fill={`url(#${lightId})`} />
 
           {/* dimensions */}
@@ -201,6 +202,9 @@ export default function PlanSketch({ phase, reduced }: { phase: PlanPhase; reduc
           <WallLayer key={i} id={`${uid}-w${i + 1}`} height={((i + 1) / RISE_LAYERS) * STUDIO.height} />
         ))}
       </div>
+      <p className="plan-wait">
+        <span>The plan draws here once the agent finds it</span>
+      </p>
     </div>
   );
 }

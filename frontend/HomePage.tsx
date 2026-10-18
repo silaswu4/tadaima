@@ -239,8 +239,8 @@ export default function Home() {
         .to(".hero-type", { y: -24, autoAlpha: 0, duration: 0.5 }, 0.05)
         .to(".hero-side", { y: -18, duration: 0.6 }, 0.05)
         .to(".hero-credit", { y: -16, autoAlpha: 0, duration: 0.5 }, 0.1)
-        .to(".hero-word__fill .hero-word__char", { yPercent: -105, duration: 0.65, stagger: 0.035, force3D: true }, 0.12)
-        .to(".hero-word__edge .hero-word__char", { yPercent: -105, duration: 0.65, stagger: 0.035, force3D: false }, 0.12);
+        .to(".hero-word__fill .hero-word__char", { yPercent: -105, duration: 0.6, stagger: 0.03, force3D: true }, 0.04)
+        .to(".hero-word__edge .hero-word__char", { yPercent: -105, duration: 0.6, stagger: 0.03, force3D: false }, 0.04);
     }, root);
     return () => ctx.revert();
   }, [lobby, reduced]);
