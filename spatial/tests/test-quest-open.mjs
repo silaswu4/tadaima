@@ -52,12 +52,12 @@ test("non-Quest Android devices are not opened", () => {
   assert.ok(!fake.calls.some((args) => args.includes("reverse") || args.includes("start")));
 });
 
-test("one authorized Quest is verified, forwarded and opened without exposing ADB's echoed token", () => {
+test("one authorized Quest is forwarded and opens the browser through Horizon shell without exposing ADB's echoed token", () => {
   const fake = fakeAdb("PHONE device\nQUEST_A device", { PHONE: "Pixel 9", QUEST_A: "Quest 3S" });
   const result = run(fake);
   assert.equal(result.ok, true);
   assert.deepEqual(fake.calls.at(-2), ["-s", "QUEST_A", "reverse", "tcp:3017", "tcp:3017"]);
-  assert.deepEqual(fake.calls.at(-1), ["-s", "QUEST_A", "shell", "am", "start", "-a", "android.intent.action.VIEW", "-d", `http://localhost:3017/rooms#local-scan=${token}`]);
+  assert.deepEqual(fake.calls.at(-1), ["-s", "QUEST_A", "shell", "am", "start", "-W", "-a", "android.intent.action.VIEW", "-n", "com.oculus.vrshell/.MainActivity", "-d", "systemux://browser", "-e", "uri", `http://localhost:3017/rooms#local-scan=${token}`]);
 });
 
 test("duplicate device listing rows count as one Quest", () => {

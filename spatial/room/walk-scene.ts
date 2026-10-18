@@ -28,7 +28,7 @@ import { createWalkRevisionTracker } from "./walk-revision";
 import { applyWalkCutaway } from "./walk-material";
 import { acceptWalkPlan, canPreserveWalkUndo, checkedWalkShoppingSpot, walkModelIdentity } from "./walk-authority";
 import { placeAt } from "../../backend/shopping/placement";
-import { createNavigationWorld, findNavigationSpawn, canNavigateAt } from "./navigation";
+import { createNavigationWorld, findNavigationSpawn, canNavigateAt, moveNavigation } from "./navigation";
 import { createWorkspaceXR } from "./workspace-xr";
 import { makeExplodeController, type ExplodeController } from "./explode";
 
@@ -1629,10 +1629,12 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
     getOccluders: () => [...wallMeshes.filter((mesh) => mesh.visible), ...envMeshes],
     getSpawnPoint: () => { const spawn = safeSpawn(); return spawn.ok ? new THREE.Vector3(...spawn.position) : null; },
     isFloorSpotValid: (point) => canNavigateAt(navigationWorld(), [point.x, point.z]),
+    moveFloor: (head, input, deltaSeconds) => new THREE.Vector3(...moveNavigation(navigationWorld(), [head.x, head.y, head.z], input, deltaSeconds * .65)),
     onSelectItem: select,
     onFloorSelect: (point) => callbacks.onShoppingFloor?.({ roomId: roomFor(point.x, point.z).id, position: [point.x, 0, point.z] }),
     onPreviewOffer: (id) => callbacks.onPreviewOffer?.(id),
     onConfirmOffer: () => callbacks.onConfirmOffer?.(),
+    onAction: (id) => callbacks.onXRAction?.(id),
     onSessionChange: (active) => {
       indoorLighting?.setImmersive(active);
       shadowCache.invalidate();
@@ -1763,7 +1765,7 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
       updateOrbitWalls();
     }
     try {
-      xr?.update();
+      xr?.update(dt);
     } catch {
       // A headset layer fault must not stop the room from drawing.
     }

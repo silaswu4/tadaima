@@ -6,8 +6,11 @@ import { insideFloor } from "./window-daylight";
 export type WorkspaceXRSupport = { supported: boolean; reason: string };
 /** Display-only offers supplied by the application's shopping state. */
 export type WorkspaceXROffer = { id: string; label: string; detail?: string };
+export type WorkspaceXRAction = { id: string; label: string; detail?: string; disabled?: boolean };
+export type WorkspaceXRLocomotion = "walk" | "teleport";
 export type WorkspaceXRShopping = {
   offers: WorkspaceXROffer[];
+  actions?: WorkspaceXRAction[];
   selectedItemLabel?: string;
   status?: string;
   pendingOfferId?: string | null;
@@ -24,11 +27,15 @@ export type WorkspaceXROptions = {
   getOccluders?(): THREE.Object3D[];
   getSpawnPoint?(): THREE.Vector3 | null;
   isFloorSpotValid?(point: THREE.Vector3): boolean;
+  /** Shared swept collision solver; only horizontal rig translation is accepted. */
+  moveFloor?(head: THREE.Vector3, input: { forward: number; right: number; yaw: number }, deltaSeconds: number): THREE.Vector3;
+  locomotion?: WorkspaceXRLocomotion;
   onSelectItem(id: string | null): void;
   onFloorSelect?(point: THREE.Vector3): void;
   onPreviewOffer?(id: string): void;
   /** Confirms a placement preview, never a purchase. */
   onConfirmOffer?(): void;
+  onAction?(id: string): void;
   onSessionChange?(presenting: boolean): void;
   onError?(message: string): void;
 };
@@ -47,6 +54,47 @@ export function snapTurnXR(rig: THREE.Object3D, headPosition: THREE.Vector3, rad
   rig.position.z = headPosition.z + offset.z;
   rig.rotation.y += radians;
   rig.updateMatrixWorld(true);
+}
+
+/** xr-standard puts the thumbstick on axes 2/3; normalize drift and diagonals. */
+export function readXRThumbstick(axes: readonly number[] | undefined): { right: number; forward: number } | null {
+  if (!axes || axes.length < 2 || axes.some((axis) => !Number.isFinite(axis))) return null;
+  const x = axes.length >= 4 ? axes[2] : axes[0], y = axes.length >= 4 ? axes[3] : axes[1];
+  const magnitude = Math.hypot(x, y);
+  if (magnitude < .2) return { right: 0, forward: 0 };
+  const strength = Math.min(1, (magnitude - .2) / .8);
+  return { right: x / magnitude * strength, forward: -y / magnitude * strength };
+}
+
+/** Head-relative walking keeps sensor eye height and uses swept room clearance. */
+export function walkXR(rig: THREE.Object3D, head: THREE.Vector3, orientation: THREE.Quaternion,
+  stick: { right: number; forward: number }, deltaSeconds: number, valid: (point: THREE.Vector3) => boolean,
+  moveFloor?: WorkspaceXROptions["moveFloor"]) {
+  if (![stick.right, stick.forward, deltaSeconds, head.x, head.y, head.z].every(Number.isFinite) || deltaSeconds <= 0 || !Math.hypot(stick.right, stick.forward)) return;
+  const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(orientation); forward.y = 0;
+  if (forward.lengthSq() < 1e-6) forward.set(0, 0, -1).applyQuaternion(rig.quaternion);
+  forward.y = 0; forward.normalize();
+  const yaw = Math.atan2(-forward.x, -forward.z), dt = Math.min(deltaSeconds, .05);
+  if (moveFloor) {
+    const target = moveFloor(head.clone(), { ...stick, yaw }, dt);
+    if ([target.x, target.z].every(Number.isFinite) && valid(new THREE.Vector3(target.x, 0, target.z))) teleportXR(rig, head, target);
+    return;
+  }
+  const right = forward.clone().cross(new THREE.Vector3(0, 1, 0));
+  const delta = forward.multiplyScalar(stick.forward).addScaledVector(right, stick.right).multiplyScalar(1.3 * dt);
+  const point = new THREE.Vector3(head.x, 0, head.z), count = Math.max(1, Math.ceil(delta.length() / .025));
+  delta.divideScalar(count);
+  for (let step = 0; step < count; step++) {
+    const candidate = point.clone().add(delta);
+    if (valid(candidate)) point.copy(candidate);
+    else {
+      const x = point.clone().add(new THREE.Vector3(delta.x, 0, 0));
+      if (valid(x)) point.copy(x);
+      const z = point.clone().add(new THREE.Vector3(0, 0, delta.z));
+      if (valid(z)) point.copy(z);
+    }
+  }
+  teleportXR(rig, head, point);
 }
 
 /** Feature detection is separate from entry: requestSession must remain in a user gesture. */
@@ -101,6 +149,8 @@ export function createWorkspaceXR(options: WorkspaceXROptions) {
   let teleportTarget: THREE.Vector3 | null = null;
   let hudVisible = true;
   let shoppingKey = "";
+  let locomotion: WorkspaceXRLocomotion = options.locomotion ?? "walk";
+  let resumeNeutral = false;
 
   function inputAvailable() {
     return presenting && (!activeSession?.visibilityState || activeSession.visibilityState === "visible");
@@ -118,25 +168,36 @@ export function createWorkspaceXR(options: WorkspaceXROptions) {
 
   function drawShopping() {
     clearCards();
-    const add = (y: number, height: number, lines: string[], action?: () => void) => {
-      const panel = createPanel(.72, height, 1400);
-      panel.mesh.position.y = y;
+    const add = (y: number, height: number, lines: string[], action?: () => void, x = 0, width = .72) => {
+      const panel = createPanel(width, height, 1400);
+      panel.mesh.position.set(x, y, 0);
       panel.mesh.material.depthTest = true;
       panel.mesh.material.side = THREE.DoubleSide;
-      if (action) panel.mesh.raycast = THREE.Mesh.prototype.raycast;
+      panel.mesh.raycast = THREE.Mesh.prototype.raycast;
       panel.draw(lines.map((text, i) => ({ text, size: i ? 28 : 34, muted: i > 0 })));
       hud.add(panel.mesh);
       cards.push({ panel, action });
     };
-    add(.33, .23, [shopping.selectedItemLabel ?? "Tadaima / room shop", shopping.status ?? "Trigger: select furniture or a floor spot", "Left stick: teleport / right stick: turn / grip: menu"]);
+    add(.47, .23, [shopping.selectedItemLabel ?? "Tadaima / room shop", shopping.status ?? "Trigger: select furniture or a floor spot", `Left stick: ${locomotion === "walk" ? "walk" : "aim + release teleport"} / right: turn / left grip: menu`]);
     const offers = shopping.offers.slice(0, 3);
-    offers.forEach((offer, index) => add(.09 - index * .16, .145,
+    offers.forEach((offer, index) => add(.23 - index * .16, .145,
       [`${shopping.pendingOfferId === offer.id ? "Selected: " : "Try: "}${offer.label}`, offer.detail ?? "Preview only; no purchase"],
       () => options.onPreviewOffer?.(offer.id)));
     if (shopping.canConfirm && shopping.pendingOfferId) {
-      add(.09 - offers.length * .16, .135, ["Confirm placement", "Adds to the room preview, never purchases"], () => options.onConfirmOffer?.());
+      add(.23 - offers.length * .16, .135, ["Confirm placement", "Adds to the room and basket; no purchase"], () => options.onConfirmOffer?.());
     }
-    if (!offers.length) add(.05, .16, ["No shopping results loaded", "Search for products on the page before entering VR."]);
+    if (!offers.length) add(.19, .16, ["Choose a clear floor spot", "Then use a search button below."]);
+    const actions = shopping.actions ?? [];
+    const start = offers.length ? .23 - offers.length * .16 - (shopping.canConfirm ? .15 : 0) : -.01;
+    actions.forEach((action, index) => add(start - Math.floor(index / 2) * .14, .125,
+      [action.label, action.disabled ? "Unavailable for this selection" : action.detail ?? ""], action.disabled ? undefined : () => options.onAction?.(action.id), index % 2 ? .185 : -.185, .35));
+    const bottom = start - Math.ceil(actions.length / 2) * .14;
+    add(bottom, .125, [locomotion === "walk" ? "Use teleport" : "Use walking", locomotion === "walk" ? "Aim at floor, stick forward + release" : "Left stick moves where you look"], () => {
+      locomotion = locomotion === "walk" ? "teleport" : "walk";
+      teleportHeld = false; teleportTarget = null; reticle.visible = false;
+      drawShopping();
+    }, -.185, .35);
+    add(bottom, .125, ["Exit VR", "Return to the website"], () => { void activeSession?.end().catch(() => options.onError?.("Use the Quest browser controls to exit VR.")); }, .185, .35);
   }
 
   function headPosition() { return renderer.xr.getCamera().getWorldPosition(new THREE.Vector3()); }
@@ -182,7 +243,7 @@ export function createWorkspaceXR(options: WorkspaceXROptions) {
     const items = options.getItemRoots();
     const floors = options.getFloorMeshes();
     const targets = [...items.map((i) => i.object), ...floors, ...(options.getOccluders?.() ?? [])];
-    if (hud.visible) targets.push(...cards.filter((c) => c.action).map((c) => c.panel.mesh));
+    if (hud.visible) targets.push(...cards.map((c) => c.panel.mesh));
     const hits = ray.intersectObjects(targets, true).filter((hit) => {
       let node: THREE.Object3D | null = hit.object;
       while (node) { if (!node.visible) return false; node = node.parent; }
@@ -227,7 +288,7 @@ export function createWorkspaceXR(options: WorkspaceXROptions) {
       teleportHeld = false; teleportTarget = null; reticle.visible = false;
     };
     const onSelect = () => select(controller);
-    const onSqueeze = () => { if (inputAvailable() && controller.visible) { hudVisible = !hudVisible; hud.visible = hudVisible; if (hudVisible) placeHud(); } };
+    const onSqueeze = () => { if (inputAvailable() && controller.visible) { hudVisible = sourceByController.get(controller)?.handedness === "left" || !hudVisible; hud.visible = hudVisible; if (hudVisible) placeHud(); } };
     controller.addEventListener("connected", connected);
     controller.addEventListener("disconnected", disconnected);
     controller.addEventListener("select", onSelect);
@@ -261,6 +322,7 @@ export function createWorkspaceXR(options: WorkspaceXROptions) {
     hud.visible = reticle.visible = false;
     rig.position.set(0, 0, 0); rig.rotation.set(0, 0, 0);
     initialHeadPlaced = teleportHeld = snapLatched = false;
+    resumeNeutral = false;
     teleportTarget = null;
     for (const controller of controllers) for (const child of controller.children) child.visible = false;
     options.onSessionChange?.(false);
@@ -287,7 +349,9 @@ export function createWorkspaceXR(options: WorkspaceXROptions) {
       }
       const pendingOfferId = offers.some((offer) => offer.id === state.pendingOfferId) ? state.pendingOfferId : null;
       const next = { offers, selectedItemLabel: state.selectedItemLabel?.slice(0, 200), status: state.status?.slice(0, 300),
-        pendingOfferId, canConfirm: !!pendingOfferId && state.canConfirm === true };
+        pendingOfferId, canConfirm: !!pendingOfferId && state.canConfirm === true,
+        actions: (state.actions ?? []).slice(0, 6).filter((action, i, list) => action.id && action.id.length <= 80 && list.findIndex((other) => other.id === action.id) === i)
+          .map((action) => ({ id: action.id, label: action.label.slice(0, 80), detail: action.detail?.slice(0, 140), disabled: action.disabled === true })) };
       const key = JSON.stringify(next);
       if (key === shoppingKey) return;
       shoppingKey = key;
@@ -324,10 +388,11 @@ export function createWorkspaceXR(options: WorkspaceXROptions) {
       } finally { entering = false; }
     },
     async exit() { await activeSession?.end(); },
-    update() {
+    update(deltaSeconds = 1 / 72) {
       if (!presenting || disposed) return;
       if (!inputAvailable()) {
         teleportHeld = false; teleportTarget = null; reticle.visible = false;
+        resumeNeutral = true;
         return;
       }
       // WebXRManager's tracked pose is current before the animation callback;
@@ -342,6 +407,7 @@ export function createWorkspaceXR(options: WorkspaceXROptions) {
       }
       let held = false;
       let turn = 0;
+      let walk = { right: 0, forward: 0 };
       for (const controller of controllers) {
         const source = sourceByController.get(controller);
         const axes = source?.gamepad?.axes;
@@ -351,19 +417,28 @@ export function createWorkspaceXR(options: WorkspaceXROptions) {
         }
         // xr-standard reserves axes 0/1 for touchpad, 2/3 for the thumbstick.
         const x = axes.length >= 4 ? axes[2] : axes[0], y = axes.length >= 4 ? axes[3] : axes[1];
-        if (source.handedness === "left" && y < -.65) {
+        if (source.handedness === "left") walk = readXRThumbstick(axes) ?? walk;
+        if (locomotion === "teleport" && source.handedness === "left" && y < -.65) {
           held = true;
           const hit = pick(controller);
           teleportTarget = hit?.kind === "floor" ? hit.point : null;
         }
         if (source.handedness === "right") turn = x;
       }
+      if (resumeNeutral) {
+        if (Math.hypot(walk.forward, walk.right) > 0 || Math.abs(turn) > .3) return;
+        resumeNeutral = false;
+      }
+      if (locomotion === "walk") walkXR(rig, headPosition(), renderer.xr.getCamera().getWorldQuaternion(new THREE.Quaternion()), walk, deltaSeconds, validFloor, options.moveFloor);
       reticle.visible = held && !!teleportTarget;
       if (reticle.visible && teleportTarget) reticle.position.copy(teleportTarget).add(new THREE.Vector3(0, .015, 0));
       if (!held && teleportHeld && teleportTarget && validFloor(teleportTarget)) {
         teleportXR(rig, headPosition(), teleportTarget); teleportTarget = null;
       }
       teleportHeld = held;
+      // Walking/teleporting translated the rig. Snap-turn must pivot around the
+      // resulting tracked head, rather than the position from before that move.
+      renderer.xr.updateCamera(camera);
       if (Math.abs(turn) < .3) snapLatched = false;
       if (Math.abs(turn) > .7 && !snapLatched) {
         snapTurnXR(rig, headPosition(), -Math.sign(turn) * Math.PI / 6);

@@ -31,16 +31,22 @@ Keep the development server and USB connection active. The physical boundary rem
 | --- | --- |
 | Look around | Head tracking at 1:1 metric scale, with the headset's measured eye height |
 | Controller trigger on furniture | Select that stable room item and update the shopping panel |
-| Left thumbstick forward, aim, release | Teleport to the valid floor reticle |
+| Left thumbstick | Walk/strafe relative to your head direction, with wall/furniture clearance and sliding |
+| Use teleport in the headset menu | Switch to comfort teleport: point at clear floor, push left stick forward, then release on the valid reticle |
 | Right thumbstick left/right | Turn in discrete 30-degree steps; release to turn again |
-| Controller grip | Hide/show and reposition the shopping panel in front of the wearer |
+| Left controller grip | Bring the shopping panel in front of the wearer |
+| Right controller grip | Hide/show the shopping panel; showing it also repositions it |
 | Trigger on a product card | Choose a product preview supplied by the application |
 | Trigger on a valid floor spot | Choose a shopping placement spot; position the local preview when a product is selected. This does not teleport. |
 | Trigger on Confirm placement | Confirm that preview through the application's callback; this does not purchase furniture |
+| Find chairs / rugs / lamps | Search the saved retailer catalog at your current floor spot, without leaving VR |
+| Rotate 45° / Put away | Edit the selected unlocked piece through the same canonical server queue |
+| Cancel preview | Discard the candidate before it joins the basket |
+| Exit VR | Return to the website |
 
-Controller rays respect the nearest supplied wall or furnishing. Trigger selection and locomotion are separate: only the left-stick aim/release action teleports. Teleport destinations use the same room clearance checks as desktop navigation. Moving your physical head is still physical movement, so the app's navigation checks do not replace the Quest boundary.
+Controller rays respect the nearest supplied wall or furnishing. Trigger selection and locomotion are separate. Walking is the default; the headset menu retains teleport for comfort. Walking uses the existing swept desktop navigation solver at 1.3 meters/second, with thumbstick dead-zone/diagonal normalization, a capped frame delta, wall/furniture sliding and unchanged tracked eye height. Browser/system UI pauses input; center the sticks before locomotion resumes. Teleport destinations use the same room clearance checks. Moving your physical head is still physical movement, so the app's navigation checks do not replace the Quest boundary.
 
-The headset panel is actual Three.js scene geometry. Ordinary DOM shopping controls are not visible inside an immersive VR session. The panel shows up to three current offers with supplied prices/dimension summaries, including the selected offer if it was chosen elsewhere in the result list. Display text is bounded, unchanged states reuse their existing panel textures, and confirmation is unavailable without a matching selected offer. The panel does not invent retailer results or call checkout. Search/loading/error status and selected offers come from the surrounding application. Exit immersive mode with the Quest browser/system controls to return to the page.
+The headset panel is actual Three.js scene geometry. Ordinary DOM shopping controls are not visible inside an immersive VR session. The panel shows up to three current offers with supplied prices/dimension summaries, including the selected offer if it was chosen elsewhere in the result list, plus at most six application actions and movement/exit controls. Saved-catalog presets search chairs/rugs up to $300 and lamps up to $150 using the same canonical room and fit checker; they are explicitly labeled catalog searches. Basket count and total appear in the header. Rotate/store controls require an unlocked selected item; the headset never implicitly unlocks kept furniture. Display text is bounded, unchanged states reuse their existing panel textures, disabled panels block click-through, and confirmation is unavailable without a matching selected offer. The panel does not invent retailer results or call checkout. Search/loading/error status and selected offers come from the surrounding application.
 
 ## Get the scanned room onto Quest
 
@@ -78,7 +84,7 @@ Once the server is running and the Quest is connected, open the private scan wit
 npm run quest:open
 ```
 
-The helper reads only `TADAIMA_LOCAL_CAPTURE_TOKEN` from the current environment or a literal assignment in the repository's `.env.local`. Use the same value configured for the server; it never evaluates the environment file. It verifies an authorized Quest model, forwards port 3017, and opens the `/rooms#local-scan=…` bootstrap through Android's normal browser intent. ADB's output is captured because Android can echo the private URL; the helper does not print the token. It does not install software or open a remote address.
+The helper reads only `TADAIMA_LOCAL_CAPTURE_TOKEN` from the current environment or a literal assignment in the repository's `.env.local`. Use the same value configured for the server; it never evaluates the environment file. It verifies an authorized Quest model, forwards port 3017, and opens the `/rooms#local-scan=…` bootstrap using Meta's [system browser deep link](https://developers.meta.com/vr/documentation/android-apps/ps-system-deep-linking/): `com.oculus.vrshell/.MainActivity`, intent `systemux://browser`, and the URL in its `uri` extra. A generic VIEW intent reported success while the physical Quest 3S remained in another panel; directly targeting the browser Activity marked it resumed but still did not establish a visible headset window. The Horizon shell owns panel presentation. ADB's output is captured because Android can echo the private URL; the helper does not print the token. It does not install software or open a remote address. A successful launch still requires wearer confirmation that the page is visible; it does not verify room loading or immersive VR.
 
 If more than one authorized Quest is attached, choose the serial shown by `adb devices -l`:
 
@@ -107,7 +113,7 @@ Before calling the physical experience verified, record the actual Quest 3S brow
 1. The intended scanned room loads with recognizable furniture and full-height walls.
 2. Standing eye height is plausible, furniture dimensions are metric, and the spawn is on clear floor.
 3. Trigger selection cannot reach through a wall; floor destinations reject obstructions and outside-room points.
-4. Teleport works on left-stick release, and snap turn requires recentering the right stick.
+4. Left-stick walking/strafe follows the head direction, stops/slides at walls and furniture, and preserves tracked eye height. Test the menu's teleport alternative and right-stick snap-turn recentering.
 5. Product cards, floor placement, and explicit placement confirmation work without leaving VR.
 6. Exiting restores the previous desktop camera and controls. Re-entering and route unmount do not duplicate controllers or leave an active session.
 7. Head tracking remains comfortable under the actual room's draw-call and texture load. Emulator success does not establish headset frame rate.
@@ -118,7 +124,9 @@ Automated tests cover metric teleport/snap pivot math, user-gesture entry, suppo
 npx tsx --test spatial/tests/test-workspace-xr.mjs
 ```
 
-All 24 focused tests passed on October 18, 2026, alongside targeted ESLint and the repository TypeScript check. These are synthetic Three.js/controller tests, not a physical Quest session. Physical headset performance and controller feel remain unverified until the checklist is run. Losing controller tracking or opening immersive browser/system UI cancels an armed teleport; it is not treated as a deliberate stick release.
+The updated 30 focused XR checks and five room-action checks cover direct head-relative walking, frame-delta clamping, shared swept collision delegation, focus pause/neutral rearming, simultaneous walk/turn head-pivot preservation, bounded action dispatch and disabled-panel click-through, in addition to the earlier session/teleport/selection cases. These are synthetic Three.js/controller tests.
+
+Physical Quest 3S connection is now confirmed: USB device authorized, browser version `154.0.0.45.15.1092497976`, local scan JSON/model reachable, JSON SHA-256 matching the saved room, and 28 captured objects. A wearer confirmed the room works; a local headset framebuffer capture showed stereo rendering of the measured room, furniture selection and controller rays. This establishes physical room rendering, not headset frame rate, shopping completion or the updated walking/controller feel. The remaining checklist requires wearer verification. Losing controller tracking or opening immersive browser/system UI cancels an armed teleport; it is not treated as a deliberate stick release.
 
 The current clean-room artifact measured 5,426,232 bytes, 75,124 triangles, 61 glTF meshes, 102 material primitives, and four embedded images. These are asset counts, not a headset frame-rate measurement. Prefer the clean room over the recovered 85 MB raw mesh, use the lighter shadow configuration, and check performance on the actual Quest 3S before increasing texture resolution or adding many products.
 

@@ -47,6 +47,8 @@ export type WalkCallbacks = {
   onShoppingFloor?(spot: FloorSpot): void;
   onPreviewOffer?(id: string): void;
   onConfirmOffer?(): void;
+  /** Application-owned headset controls; never bypass the canonical mutation queue. */
+  onXRAction?(id: string): void;
   onXRChange?(presenting: boolean): void;
   onError(message: string): void;
 };
