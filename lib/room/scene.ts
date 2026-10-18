@@ -119,9 +119,9 @@ type Spec = {
 };
 
 const SPECS: Spec[] = [
-  { name: "Rug", make: () => rug(3.0, 2.1, "#d6cab6"), at: [0.1, 0, -0.95], casts: false },
-  { name: "Sofa", model: "sofa_02", at: [0.1, 0, -1.94] },
-  { name: "Coffee table", model: "modern_coffee_table_01", at: [0.1, 0, -0.75], rot: Math.PI / 2 },
+  { name: "Rug", make: () => rug(3.0, 2.1, "#d6cab6"), at: [0, 0, -0.95], casts: false },
+  { name: "Sofa", model: "sofa_02", at: [0, 0, -1.94] },
+  { name: "Coffee table", model: "modern_coffee_table_01", at: [0, 0, -0.75], rot: Math.PI / 2 },
   { name: "Lounge chair", model: "mid_century_lounge_chair", at: [-1.85, 0, -0.45], rot: Math.PI / 2 + 0.45 },
   { name: "Cabinet", model: "modern_wooden_cabinet", at: [2.72, 0, -0.35], rot: -Math.PI / 2 },
   { name: "Shelves", model: "wooden_display_shelves_01", at: [2.15, 0, -2.2], rot: Math.PI / 2 },
@@ -129,7 +129,6 @@ const SPECS: Spec[] = [
   { name: "Side table", model: "side_table_01", at: [1.38, 0, -2.08] },
   { name: "Vase", model: "ceramic_vase_01", at: [1.38, 0, -2.08], on: "Side table" },
   { name: "Floor lamp", make: () => standingLamp(), at: [-1.2, 0, -2.08] },
-  { name: "Picture frame", model: "hanging_picture_frame_02", at: [0.1, 1.2, Z0], wall: true, casts: false },
 ];
 
 const gltf = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
@@ -166,8 +165,8 @@ export function createRoom(
   scene.environmentIntensity = 0.2;
 
   const camera = new THREE.PerspectiveCamera(50, 1, 0.05, 40);
-  const eye = new THREE.Vector3(0.35, 1.52, 3.0);
-  const look = new THREE.Vector3(-0.15, 0.82, -1.3);
+  const eye = new THREE.Vector3(0, 1.45, 3.2);
+  const look = new THREE.Vector3(0, 1.2, Z0);
   camera.position.copy(eye);
   camera.lookAt(look);
 
