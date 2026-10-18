@@ -21,7 +21,7 @@ import zlib
 from reconstruction.capture.bundle import BundleError, _jpeg_dimensions, _read_entry
 from .mesh import MAX_MESH_BYTES, validate_mesh
 
-MAX_ZIP_BYTES = 96 * 1024 * 1024
+MAX_ZIP_BYTES = 144 * 1024 * 1024
 LEGACY_MAX_ZIP_BYTES = 36 * 1024 * 1024
 MAX_MANIFEST_BYTES = 256 * 1024
 MAX_SCAN_BYTES = 2 * 1024 * 1024
@@ -155,7 +155,7 @@ def read_photo_bundle(path):
         with Path(path).open("rb") as stream:
             body = stream.read(MAX_ZIP_BYTES + 1)
         if len(body) > MAX_ZIP_BYTES:
-            _fail("ZIP exceeds 96 MiB")
+            _fail("ZIP exceeds 144 MiB")
         _framing(body)
         with zipfile.ZipFile(io.BytesIO(body)) as archive:
             entries = {}

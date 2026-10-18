@@ -18,7 +18,7 @@ export type WorkspaceItem = {
   /** Local model bounds, not retailer-verified dimensions. */
   size: [number, number, number];
   modelAvailable: boolean;
-  representation: "detected_size_proxy" | "photo_textured_proxy" | "demo_model" | "demo_proxy";
+  representation: "detected_size_proxy" | "photo_textured_proxy" | "photo_informed_model" | "demo_model" | "demo_proxy";
   locked: boolean;
   evidence: string[];
 };
@@ -34,7 +34,7 @@ type Callbacks = {
   onReady(items: WorkspaceItem[]): void;
   onSelect(id: string | null): void;
   onError(message: string): void;
-  onPhotoModel?(loaded: boolean, message?: string): void;
+  onPhotoModel?(loaded: boolean, message?: string, representation?: "photo_projected" | "photo_informed_parametric"): void;
   onCapturedModel?(loaded: boolean, message?: string): void;
 };
 
@@ -90,14 +90,17 @@ export function createFurnitureWorkspace(
   controls.enablePan = true;
   const shell = new THREE.Group();
   scene.add(shell);
-  scene.add(new THREE.HemisphereLight("#eaf0ff", "#b4a18a", .45));
+  const hemisphere = new THREE.HemisphereLight("#eaf0ff", "#b4a18a", .45);
+  scene.add(hemisphere);
   const windows = planWindowDaylight(plan.geometry, options.lite ? 4 : 8);
   if (windows.length) RectAreaLightUniformsLib.init();
+  const daylightLights: THREE.RectAreaLight[] = [];
   for (const window of windows) {
     const light = new THREE.RectAreaLight("#f1f5ff", 6, window.width, window.height);
     light.position.fromArray(window.position);
     light.lookAt(light.position.clone().add(new THREE.Vector3(...window.inward)));
     scene.add(light);
+    daylightLights.push(light);
   }
   // RectAreaLight supplies window-sized soft PBR illumination, but does not
   // cast shadows. One window-aligned directional proxy supplies contact shade;
@@ -208,6 +211,7 @@ export function createFurnitureWorkspace(
   const roots = new Map<string, THREE.Group>();
   const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
   let photoFurniture: Map<string, THREE.Group> | null = null;
+  let structuredLighting = false;
   let controller: ExplodeController | null = null;
   let capturedReference: THREE.Group | null = null;
   let capturedView = false;
@@ -337,6 +341,33 @@ export function createFurnitureWorkspace(
   canvas.addEventListener("pointerup", up);
   canvas.addEventListener("pointercancel", cancelPointer);
 
+  function applyIndoorLighting() {
+    structuredLighting = true;
+    for (const light of daylightLights) light.intensity = 0;
+    hemisphere.color.set("#f7f4ed");
+    hemisphere.groundColor.set("#bcb4a5");
+    hemisphere.intensity = .6;
+    scene.environmentIntensity = .65;
+    renderer.toneMappingExposure = 1;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    sun.color.set("#fff2df");
+    sun.intensity = .75;
+    sun.shadow.radius = 3;
+    // Broad ceiling fixtures supply estimated indoor fill. The weak overhead
+    // shadow proxy gives contact cues without suggesting an exterior sun beam.
+    RectAreaLightUniformsLib.init();
+    const center = roomBounds.getCenter(new THREE.Vector3());
+    const size = roomBounds.getSize(new THREE.Vector3());
+    const alongX = size.x >= size.z;
+    for (const sign of [-1, 1]) {
+      const light = new THREE.RectAreaLight("#fff1db", 1.8, Math.max(1, size.x * (alongX ? .4 : .8)), Math.max(1, size.z * (alongX ? .8 : .4)));
+      light.position.set(center.x + (alongX ? sign * size.x * .22 : 0), roomBounds.max.y + .2,
+        center.z + (alongX ? 0 : sign * size.z * .22));
+      light.lookAt(light.position.clone().add(new THREE.Vector3(0, -1, 0)));
+      scene.add(light);
+    }
+  }
+
   async function prepareCapturedModel() {
     if (!options.capturedModel || !options.capturedBinding) return;
     let loaded: THREE.Object3D | null = null;
@@ -363,7 +394,8 @@ export function createFurnitureWorkspace(
       validateLocalTexturedGlb(options.texturedModel);
       loaded = (await loader.parseAsync(options.texturedModel, "")).scene;
       if (disposed) { release(loaded); return; }
-      const bound = bindTexturedRoom(loaded, plan);
+      const bound = bindTexturedRoom(loaded, plan, options.capturedBinding);
+      if (bound.representation === "photo_informed_parametric") applyIndoorLighting();
       release(shell); shell.clear();
       shell.add(bound.shell);
       photoFurniture = bound.furniture;
@@ -373,12 +405,14 @@ export function createFurnitureWorkspace(
         for (const mesh of wall.meshes) {
           const materials = (Array.isArray(mesh.material) ? mesh.material : [mesh.material]).map((material) => {
             if (!(material instanceof THREE.MeshStandardMaterial)) throw new Error("Photo model: use standard PBR materials.");
-            const own = material.clone(); own.transparent = true; wall.materials.push(own); return own;
+            const own = material.clone();
+            own.userData.cutawayBaseOpacity = material.opacity; own.userData.cutawayDepthWrite = material.depthWrite;
+            own.transparent = true; wall.materials.push(own); return own;
           });
           mesh.material = Array.isArray(mesh.material) ? materials : materials[0];
         }
       }
-      callbacks.onPhotoModel?.(true);
+      callbacks.onPhotoModel?.(true, undefined, bound.representation);
     } catch (cause) {
       if (loaded) release(loaded);
       if (!disposed) callbacks.onPhotoModel?.(false, cause instanceof Error ? cause.message : "The photo model could not be opened.");
@@ -408,8 +442,8 @@ export function createFurnitureWorkspace(
     });
     roots.set(item.id, root);
     scene.add(root);
-    return { id: item.id, label: item.label, size, modelAvailable: available,
-      representation: photographed ? (photographed.userData.photoTextureCoverage > 0 ? "photo_textured_proxy" : "detected_size_proxy") : item.origin === "existing_owned" && plan.projectId !== "furniture-workspace-demo" && !available ? "detected_size_proxy" : available ? "demo_model" : "demo_proxy",
+    return { id: item.id, label: photographed?.userData.visualLabel ?? item.label, size, modelAvailable: available,
+      representation: photographed ? (photographed.userData.representation === "photo_informed_parametric" ? "photo_informed_model" : photographed.userData.photoTextureCoverage > 0 ? "photo_textured_proxy" : "detected_size_proxy") : item.origin === "existing_owned" && plan.projectId !== "furniture-workspace-demo" && !available ? "detected_size_proxy" : available ? "demo_model" : "demo_proxy",
       locked: item.locked,
       evidence: (item.evidenceIds ?? []).flatMap((id) => {
         const observation = plan.evidence.find((entry) => entry.id === id);
@@ -432,7 +466,11 @@ export function createFurnitureWorkspace(
     controls.update();
     for (const wall of wallViews) {
       const near = wall.interior || wall.outward.dot(camera.position.clone().sub(wall.midpoint)) > 0;
-      for (const material of wall.materials) { material.opacity = near ? .075 : 1; material.depthWrite = !near; }
+      for (const material of wall.materials) {
+        const baseOpacity = material.userData.cutawayBaseOpacity ?? 1;
+        material.opacity = (near ? .075 : 1) * baseOpacity;
+        material.depthWrite = !near && (material.userData.cutawayDepthWrite ?? true);
+      }
       // A presentation cutaway should not leave an opaque wall's shadow behind.
       for (const mesh of wall.meshes) mesh.castShadow = !near;
     }
@@ -471,7 +509,7 @@ export function createFurnitureWorkspace(
     const lightTarget = shadowBounds.getCenter(new THREE.Vector3());
     sun.target.position.copy(lightTarget);
     const primary = windows[0];
-    const direction = primary ? new THREE.Vector3(-primary.inward[0], .7, -primary.inward[2]).normalize()
+    const direction = structuredLighting ? new THREE.Vector3(.10, 1, .07).normalize() : primary ? new THREE.Vector3(-primary.inward[0], .7, -primary.inward[2]).normalize()
       : new THREE.Vector3(-8, 12, 10).normalize();
     const lightDistance = Math.max(20, shadowBounds.getSize(new THREE.Vector3()).length() * 1.5);
     sun.position.copy(lightTarget).addScaledVector(direction, lightDistance);

@@ -17,10 +17,44 @@ manifest = json.loads((directory / "manifest.json").read_text())
 bpy.ops.wm.open_mainfile(filepath=str(directory / "scene.blend"))
 scene = bpy.context.scene
 captured = manifest.get("captureRepresentation") == "observed_surface_mesh"
+structured = manifest.get("captureRepresentation") == "photo_informed_parametric"
+design = manifest.get("visualDesign", {})
+design_items = {entry["itemId"]: entry for entry in design.get("items", [])}
+design_surfaces = {entry["entityId"]: entry for entry in design.get("surfaces", [])}
+
+
+def assert_closed_components(mesh):
+    """Each disconnected modeled part must be a closed outward-facing solid."""
+    bm = bmesh.new()
+    bm.from_mesh(mesh)
+    assert all(edge.is_manifold for edge in bm.edges), mesh.name
+    remaining = set(bm.verts)
+    while remaining:
+        pending = [remaining.pop()]
+        component = set(pending)
+        while pending:
+            vertex = pending.pop()
+            for edge in vertex.link_edges:
+                other = edge.other_vert(vertex)
+                if other not in component:
+                    component.add(other)
+                    remaining.discard(other)
+                    pending.append(other)
+        faces = {face for vertex in component for face in vertex.link_faces}
+        assert faces, mesh.name + " contains a loose component"
+        signed_volume = 0
+        for face in faces:
+            vertices = [vertex.co for vertex in face.verts]
+            for index in range(1, len(vertices) - 1):
+                signed_volume += vertices[0].dot(vertices[index].cross(vertices[index + 1])) / 6
+        assert signed_volume > 1e-12, mesh.name + " contains an inverted or zero-volume component"
+    bm.free()
+
+
 assert scene.unit_settings.system == "METRIC"
 assert scene.unit_settings.scale_length == 1.0
 assert int(scene["inputRevision"]) == source["inputRevision"]
-textured = manifest.get("renderProfile") in ("pbr-daylight-v1", "pbr-window-daylight-v2")
+textured = structured or manifest.get("renderProfile") in ("pbr-daylight-v1", "pbr-window-daylight-v2")
 window_profile = manifest.get("renderProfile") == "pbr-window-daylight-v2"
 source_surfaces = {surface["entityId"]: surface for surface in source.get("appearance", {}).get("surfaces", [])}
 photo_entities = {entry["entityId"]: entry for entry in manifest.get("photoTexturing", {}).get("entities", [])}
@@ -79,6 +113,40 @@ if window_profile:
         assert (center - obj.location).dot(inward) > wall["thickness"] / 2, "Source must sit outside wall"
     assert bool(actual_window_lights) == (lighting["mode"] == "window_daylight")
 entities = {obj["entityId"]: obj for obj in scene.objects if "entityId" in obj and not (captured and obj.get("planningProxyOnly"))}
+if structured:
+    assert scene["captureRepresentation"] == "photo_informed_parametric"
+    assert scene["renderProfile"] == manifest["renderProfile"] == "photo-informed-room-v1"
+    assert design["schemaVersion"] == "room-visual-design-result/1.0"
+    assert design["mode"] == "photo_informed_parametric" and design["reviewRequired"] is True
+    assert json.loads((directory / "visual-design.json").read_text()) == design
+    assert json.loads(scene["visualDesignSummaryJson"]) == design
+    assert json.loads(scene["appearanceSummaryJson"]) == manifest["appearance"]
+    assert manifest["appearance"]["schemaVersion"] == "room-designed-surfaces/1.0"
+    assert manifest["appearance"]["mode"] == "photo_informed_clean_surfaces"
+    for key in ("projectId", "jobId", "inputRevision", "inputSha256"):
+        assert design[key] == manifest[key]
+    assert scene["inputSha256"] == manifest["inputSha256"]
+    assert hashlib.sha256((directory / "scene.json").read_bytes()).hexdigest() == design["inputSha256"]
+    compact_request = json.dumps(source, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False).encode()
+    assert hashlib.sha256(compact_request).hexdigest() == design["profileInputSha256"]
+    profile_bytes = (directory / "visual-design.input.json").read_bytes()
+    assert hashlib.sha256(profile_bytes).hexdigest() == design["profileSha256"]
+    profile = json.loads(profile_bytes)
+    assert profile["schemaVersion"] == "room-visual-design/1.0"
+    assert profile["inputSha256"] == design["profileInputSha256"]
+    for key in ("projectId", "jobId", "inputRevision", "producer", "sources", "surfaces", "items", "notes"):
+        assert profile[key] == design[key]
+    assert len(design["sourceArchiveSha256"]) == 64 and all(c in "0123456789abcdef" for c in design["sourceArchiveSha256"])
+    assert len(design["sources"]) <= 32
+    assert len(design_items) == len(design["items"]) <= len(source.get("items", []))
+    canonical = {entry["id"] for category in ("rooms", "walls", "openings") for entry in source["geometry"][category]}
+    canonical.update(entry["id"] for entry in source.get("items", []))
+    assert set(entities) == canonical
+    photo_evidence = {entry["evidenceId"] for entry in design["sources"]}
+    assert len(photo_evidence) == len(design["sources"])
+    assert photo_evidence <= {entry["id"] for entry in source["evidence"]}
+    for spec in design["surfaces"] + design["items"]:
+        assert spec["evidenceIds"] and set(spec["evidenceIds"]) <= photo_evidence
 if captured:
     summary = manifest["surfaceReconstruction"]
     assert summary["schemaVersion"] == "roomplan-surface-mesh/1.0"
@@ -88,6 +156,13 @@ if captured:
     assert scene["inputSha256"] == manifest["inputSha256"]
     assert scene["sourceRequestSha256"] == manifest["sourceRequestSha256"]
     assert scene["renderProfile"] == manifest["renderProfile"] == "captured-surface-rgb-v1"
+    assert scene.camera and scene.camera.data.type == "PERSP", "Captured RGB preview must use the calibrated perspective camera"
+    assert scene.view_settings.view_transform == "Standard", "Captured RGB must not receive an AgX contrast grade"
+    camera_up = scene.camera.matrix_world.to_quaternion() @ Vector((0, 1, 0))
+    camera_forward = scene.camera.matrix_world.to_quaternion() @ Vector((0, 0, -1))
+    if abs(camera_forward.z) < .95:
+        assert camera_up.z > .2, "Captured preview must present an upright world-up view"
+    assert 0 < summary["vertexCount"] <= 400_000 and 0 < summary["triangleCount"] <= 600_000
     assert sum(len(obj.data.vertices) for obj in entities.values()) == summary["vertexCount"]
     assert sum(len(obj.data.polygons) for obj in entities.values()) == summary["triangleCount"]
     assert summary["observedTriangleCount"] + summary["unobservedTriangleCount"] == summary["triangleCount"]
@@ -164,6 +239,8 @@ for obj in entities.values():
         assert all(edge.is_manifold for edge in bm.edges), obj.name
         assert bm.calc_volume(signed=True) > 0, obj.name + " has inverted normals"
         bm.free()
+        if structured and obj.get("representation") == "photo_informed_parametric":
+            assert_closed_components(obj.data)
         assert not obj.modifiers, "Scene should not depend on live Boolean modifiers"
         if textured:
             uv = obj.data.uv_layers.active
@@ -177,6 +254,24 @@ for obj in entities.values():
             for material in obj.data.materials:
                 assert material.use_nodes
                 shaders = [node for node in material.node_tree.nodes if node.type == "BSDF_PRINCIPLED"]
+                if structured:
+                    assert shaders, "Structured materials need a Principled PBR shader"
+                    shader = shaders[0]
+                    assert 0 <= shader.inputs["Metallic"].default_value <= 1
+                    assert 0 <= shader.inputs["Roughness"].default_value <= 1
+                    images = [node.image for node in material.node_tree.nodes if node.type == "TEX_IMAGE"]
+                    assert all(image and image.packed_file for image in images), "Structured maps must remain packed"
+                    spec = design_surfaces.get(obj["entityId"])
+                    if spec is not None:
+                        assert obj["finish"] == material["finish"] == spec["finish"]
+                        assert obj["appearanceStatus"] == "photo_estimate"
+                        assert material["appearanceSource"] == "photo_informed_estimate"
+                        assert json.loads(material["photoEvidenceIdsJson"]) == spec["evidenceIds"]
+                        if spec["finish"] != "wood":
+                            assert abs(shader.inputs["Roughness"].default_value - spec["roughness"]) < 1e-6
+                    if obj.get("role") == "existing_furniture":
+                        assert material["appearanceSource"] == "photo_informed_estimate"
+                    continue
                 photo = photo_entities.get(obj["entityId"])
                 if photo is not None:
                     assert shaders and shaders[0].inputs["Base Color"].is_linked
@@ -218,7 +313,15 @@ for item in ([] if captured else source.get("items", [])):
     assert not obj.hide_render and not obj.get("previewCutaway"), "Furniture must stay visible in previews"
     assert obj["roomId"] == item["roomId"] and obj["label"] == item["label"]
     assert obj["origin"] == "existing_owned" and obj["locked"] == item["locked"]
-    assert obj["proxyGeometry"] == "sensor_bounding_box"
+    designed = structured and obj.get("representation") == "photo_informed_parametric"
+    if structured and item["id"] in design_items:
+        assert designed, "Bound structured furniture lost its representation metadata"
+    assert obj["proxyGeometry"] == ("photo_informed_parts" if designed else "sensor_bounding_box")
+    if designed:
+        spec = design_items[item["id"]]
+        assert obj["appearanceStatus"] == "photo_inferred"
+        assert obj["visualLabel"] == spec["label"] and obj["designTemplate"] == spec["model"]
+        assert json.loads(obj["photoEvidenceIdsJson"]) == spec["evidenceIds"]
     assert json.loads(obj["dimensionsJson"]) == item["dimensions"]
     assert json.loads(obj["evidenceIdsJson"]) == item.get("evidenceIds", [])
     assert abs(obj.rotation_euler.z - item["rotationY"]) < 1e-6
@@ -234,10 +337,30 @@ for item in ([] if captured else source.get("items", [])):
                for x in (-width / 2, width / 2) for y in (0, height) for z in (-depth / 2, depth / 2)]
     actual = [(p.x, p.z, -p.y) for p in (obj.matrix_world @ Vector(v) for v in obj.bound_box)]
     assert all(min(math.dist(point, expected) for expected in corners) < 1e-5 for point in actual)
-    bm = bmesh.new()
-    bm.from_mesh(obj.data)
-    assert abs(bm.calc_volume() - width * height * depth) < 1e-5
-    bm.free()
+    if not designed:
+        bm = bmesh.new()
+        bm.from_mesh(obj.data)
+        assert abs(bm.calc_volume() - width * height * depth) < 1e-5
+        bm.free()
+    else:
+        assert_closed_components(obj.data)
+if structured:
+    openings = {opening["id"]: opening for opening in source["geometry"]["openings"]}
+    details = [obj for obj in scene.objects if obj.type == "MESH" and obj.get("ownerOpeningId")]
+    for obj in details:
+        assert "entityId" not in obj and "role" not in obj
+        owner = entities[obj["ownerOpeningId"]]
+        assert owner.get("role") == "opening" and obj.parent == owner
+        assert obj.get("representation") == "photo_informed_opening_detail"
+        assert_closed_components(obj.data)
+        for vertex in obj.data.vertices:
+            local = owner.matrix_world.inverted() @ (obj.matrix_world @ vertex.co)
+            assert all(abs(value) <= 1 + 1e-6 for value in local), "Opening detail escaped its normalized envelope"
+        if openings[obj["ownerOpeningId"]]["kind"] != "window":
+            assert obj.get("componentKind") in ("FrameLeft", "FrameRight", "FrameTop"), "No invented door leaf"
+    visible_meshes = [obj for obj in entities.values() if obj.type == "MESH"] + details
+    assert len(visible_meshes) == manifest["statistics"]["meshCount"]
+    assert sum(sum(len(face.vertices) - 2 for face in obj.data.polygons) for obj in visible_meshes) == manifest["statistics"]["triangleCount"]
 for wall in ([] if captured else source["geometry"]["walls"]):
     obj = entities[wall["id"]]
     cuts = [o for o in source["geometry"]["openings"] if o["wallId"] == wall["id"]]

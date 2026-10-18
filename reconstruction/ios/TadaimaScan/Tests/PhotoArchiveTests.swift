@@ -14,6 +14,18 @@ struct PhotoArchiveTests {
             try ScanPhotoArchive.encode(scanData: scanData ?? scan, projectId: projectId,
                 jobId: "synthetic-scan", inputRevision: revision, photos: photos)
         }
+        // Regression: a failed requested mesh must not strand captured RGB evidence.
+        let fallback = ScanPhotoExportKind.available(photoCount: 32, hasMesh: false, requestedMesh: true)
+        precondition(fallback == .photosWithoutDetailedMesh)
+        precondition(fallback?.label == "Share photos + layout (no detailed mesh)")
+        precondition(ScanPhotoExportKind.available(photoCount: 32, hasMesh: true, requestedMesh: true) == .detailed)
+        precondition(ScanPhotoExportKind.available(photoCount: 1, hasMesh: false, requestedMesh: false) == .photos)
+        precondition(ScanPhotoExportKind.available(photoCount: 0, hasMesh: true, requestedMesh: true) == nil)
+        var messages = ScanReviewMessages(transient: "Previous export failed", captureWarning: "Mesh capture failed")
+        messages.beginExport()
+        precondition(messages.transient == nil && messages.captureWarning == "Mesh capture failed")
+        precondition(ScanPhotoArchive.maximumArchiveBytes(hasMesh: false) == 36 * 1024 * 1024)
+        precondition(ScanPhotoArchive.maximumArchiveBytes(hasMesh: true) == 144 * 1024 * 1024)
         let archive = try encode([first, second])
         precondition(archive.starts(with: [0x50, 0x4B, 0x03, 0x04]))
         precondition(archive.suffix(22).starts(with: [0x50, 0x4B, 0x05, 0x06]))
@@ -42,6 +54,8 @@ struct PhotoArchiveTests {
         precondition(meshArchive.range(of: Data("mesh.json".utf8)) != nil)
         precondition(archive.range(of: Data("roomplan-photo-bundle/1.0".utf8)) != nil)
         precondition(archive.range(of: Data("mesh.json".utf8)) == nil)
+        precondition(archive.range(of: first.jpeg) != nil && archive.range(of: second.jpeg) != nil,
+                     "Photo-only fallback must preserve actual captured JPEG bytes")
         try rejects("mesh identity mismatch") {
             try ScanPhotoArchive.encode(scanData: scan, projectId: "synthetic-test",
                 jobId: "synthetic-scan", inputRevision: 0, photos: [first],
@@ -92,7 +106,7 @@ struct PhotoArchiveTests {
         try rejects("boolean revision") {
             try encode([first], scanData: Data(#"{"projectId":"synthetic-test","jobId":"synthetic-scan","inputRevision":false}"#.utf8))
         }
-        print("PASS: deterministic bounded ZIP export, actual image hashes and dimensions, private paths, tracking, camera matrices, calibration, scan identity and malformed JPEG rejection")
+        print("PASS: failed-mesh photo fallback, persistent capture warnings, deterministic bounded ZIP export, actual image hashes and dimensions, private paths, tracking, camera matrices, calibration, scan identity and malformed JPEG rejection")
     }
 
     private static func syntheticMesh(projectId: String, jobId: String) -> ScanMeshPacket {

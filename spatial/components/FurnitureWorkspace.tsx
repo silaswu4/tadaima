@@ -26,6 +26,7 @@ export default function FurnitureWorkspace() {
   const [capturedBinding, setCapturedBinding] = useState<CapturedRoomBinding | null>(null);
   const [texturedModel, setTexturedModel] = useState<ArrayBuffer | null>(null);
   const [photoModelLoaded, setPhotoModelLoaded] = useState(false);
+  const [structuredModelLoaded, setStructuredModelLoaded] = useState(false);
   const importGeneration = useRef(0);
   const [imported, setImported] = useState<RoomPlan | null>(null);
   const [photoReference, setPhotoReference] = useState(true);
@@ -63,9 +64,10 @@ export default function FurnitureWorkspace() {
           onSelect(id) {
             if (alive) setSelectedId(id);
           },
-          onPhotoModel(loaded, message) {
+          onPhotoModel(loaded, message, representation) {
             if (!alive) return;
             setPhotoModelLoaded(loaded);
+            setStructuredModelLoaded(loaded && representation === "photo_informed_parametric");
             if (message) setImportError(message);
           },
           onCapturedModel(loaded, message) {
@@ -136,7 +138,7 @@ export default function FurnitureWorkspace() {
       const hash = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", body)), (byte) => byte.toString(16).padStart(2, "0")).join("");
       const binding = { jobId: JSON.parse(source).jobId as string, inputSha256: hash };
       if (generation !== importGeneration.current) return;
-      resetPresentation(); setCapturedModel(null); setCapturedLoaded(false); setCapturedBinding(binding); setTexturedModel(null); setPhotoModelLoaded(false); setImported(next); setImportError("");
+      resetPresentation(); setCapturedModel(null); setCapturedLoaded(false); setCapturedBinding(binding); setTexturedModel(null); setPhotoModelLoaded(false); setStructuredModelLoaded(false); setImported(next); setImportError("");
     } catch (cause) {
       if (generation === importGeneration.current) setImportError(cause instanceof Error ? cause.message : "The room file could not be opened.");
     }
@@ -150,7 +152,7 @@ export default function FurnitureWorkspace() {
       const bytes = await file.arrayBuffer();
       validateLocalTexturedGlb(bytes);
       if (generation !== importGeneration.current) return;
-      resetPresentation(); setPhotoModelLoaded(false); setTexturedModel(bytes); setImportError("");
+      resetPresentation(); setPhotoModelLoaded(false); setStructuredModelLoaded(false); setTexturedModel(bytes); setImportError("");
     } catch (cause) {
       if (generation === importGeneration.current) setImportError(cause instanceof Error ? cause.message : "The photo model could not be opened.");
     }
@@ -159,8 +161,8 @@ export default function FurnitureWorkspace() {
     if (!file || !imported || !capturedBinding) return;
     const generation = ++importGeneration.current;
     try {
-      const { MAX_TEXTURED_MODEL_BYTES, validateLocalCapturedGlb } = await import("../room/textured-model");
-      if (file.size > MAX_TEXTURED_MODEL_BYTES) throw new Error("Choose a captured-room GLB smaller than 64 MiB.");
+      const { MAX_CAPTURED_MODEL_BYTES, validateLocalCapturedGlb } = await import("../room/textured-model");
+      if (file.size > MAX_CAPTURED_MODEL_BYTES) throw new Error("Choose a captured-room GLB no larger than 128 MiB.");
       const bytes = await file.arrayBuffer();
       validateLocalCapturedGlb(bytes, imported, capturedBinding);
       if (generation !== importGeneration.current) return;
@@ -195,20 +197,20 @@ export default function FurnitureWorkspace() {
           <input ref={fileInput} type="file" accept="application/json,.json" aria-label="Open reconstruction JSON file"
             onChange={(event) => { void importRoom(event.target.files?.[0]); event.target.value = ""; }} />
           {imported ? <>
-            <button type="button" onClick={() => modelInput.current?.click()}>Open textured model</button>
-            <input ref={modelInput} type="file" accept="model/gltf-binary,.glb" aria-label="Open local photo-textured GLB"
+            <button type="button" onClick={() => modelInput.current?.click()}>Open room model</button>
+            <input ref={modelInput} type="file" accept="model/gltf-binary,.glb" aria-label="Open local room model GLB"
               onChange={(event) => { void importPhotoModel(event.target.files?.[0]); event.target.value = ""; }} />
             <button type="button" onClick={() => capturedInput.current?.click()}>Open captured room</button>
             <input ref={capturedInput} type="file" accept="model/gltf-binary,.glb" aria-label="Open local detailed captured-room GLB"
               onChange={(event) => { void importCapturedModel(event.target.files?.[0]); event.target.value = ""; }} />
             {capturedLoaded ? <button type="button" aria-pressed={capturedView} onClick={() => setCapturedView((value) => !value)}>{capturedView ? "Show editable layout" : "Show captured room"}</button> : null}
-            {texturedModel ? <button type="button" onClick={() => { importGeneration.current++; resetPresentation(); setTexturedModel(null); setPhotoModelLoaded(false); setImportError(""); }}>Remove photo model</button> : null}
+            {texturedModel ? <button type="button" onClick={() => { importGeneration.current++; resetPresentation(); setTexturedModel(null); setPhotoModelLoaded(false); setStructuredModelLoaded(false); setImportError(""); }}>Remove room model</button> : null}
           </> : null}
-          <button type="button" aria-pressed={imported ? undefined : photoReference} onClick={() => { importGeneration.current++; resetPresentation(); setTexturedModel(null); setPhotoModelLoaded(false); setCapturedModel(null); setCapturedLoaded(false); setCapturedBinding(null); setImported(null); setPhotoReference((value) => imported ? true : !value); }}>
+          <button type="button" aria-pressed={imported ? undefined : photoReference} onClick={() => { importGeneration.current++; resetPresentation(); setTexturedModel(null); setPhotoModelLoaded(false); setStructuredModelLoaded(false); setCapturedModel(null); setCapturedLoaded(false); setCapturedBinding(null); setImported(null); setPhotoReference((value) => imported ? true : !value); }}>
             {imported ? "Back to demo" : "Photo reference finishes"}
           </button>
         </div>
-        <p className="furniture-fileHelp">Open a reconstruction.request.json or scene.json file (up to 2 MiB). It stays in this browser. Then open its matching photo-textured scene.glb (up to 64 MiB) to see captured appearance. For a detailed surface scan, choose Open captured room with its matching captured-room.glb. Files stay local. The captured view shows observed shape and appearance; the editable layout keeps furniture proxies selectable and able to explode.</p>
+        <p className="furniture-fileHelp">Open a reconstruction.request.json or scene.json file (up to 2 MiB). It stays in this browser. Then open its matching clean or photo-textured scene.glb with Open room model (up to 64 MiB). For a detailed surface scan, choose Open captured room with its matching scene.glb (up to 128 MiB). Files stay local. The captured view shows observed shape and appearance; the editable layout keeps furniture proxies selectable and able to explode.</p>
         {importError ? <p className="furniture-importError" role="alert">{importError}</p> : null}
       </section>
 
@@ -238,10 +240,10 @@ export default function FurnitureWorkspace() {
             <div className="furniture-viewBadge" aria-hidden="true">{capturedView && capturedLoaded ? "03 / captured" : exploded ? "02 / pieces" : "01 / together"}</div>
           </div>
           <div className="furniture-appearanceNote" aria-live="polite">
-            <strong>{capturedView && capturedLoaded ? "Observed room surface scan" : photoModelLoaded ? "Captured photo textures" : appearance ? "Photo-estimated finishes" : "Sample finishes"}</strong>
-            <span>{capturedView && capturedLoaded ? "Actual captured surface geometry with projected photos. Gaps and rough edges reflect missing sensor coverage; this is a partial reference, not a complete exact replica. Return to the editable layout to select or explode furniture proxies." : photoModelLoaded ? "Visible photo patches are projected onto the scan geometry. Unseen areas keep fallback materials; furniture shape remains a size proxy." : appearance ? photoScope : "Generic oak and plaster, unrelated to the room photos."} {photoSource ? <a href={photoSource} target="_blank" rel="noreferrer">View reference photo</a> : null}</span>
+            <strong>{capturedView && capturedLoaded ? "Observed room surface scan" : structuredModelLoaded ? "Photo-informed room model" : photoModelLoaded ? "Captured photo textures" : appearance ? "Photo-estimated finishes" : "Sample finishes"}</strong>
+            <span>{capturedView && capturedLoaded ? "Actual captured surface geometry with projected photos. Gaps and rough edges reflect missing sensor coverage; this is a partial reference, not a complete exact replica. Return to the editable layout to select or explode furniture proxies." : structuredModelLoaded ? "Complete room geometry and furniture forms are modeled from scan dimensions and photo references. Shapes, materials and unseen details are estimates; this is not an exact recovered mesh or a measured material scan." : photoModelLoaded ? "Visible photo patches are projected onto the scan geometry. Unseen areas keep fallback materials; furniture shape remains a size proxy." : appearance ? photoScope : "Generic oak and plaster, unrelated to the room photos."} {photoSource ? <a href={photoSource} target="_blank" rel="noreferrer">View reference photo</a> : null}</span>
             {appearance && !photoModelLoaded ? <span>Only cited surfaces use photo estimates; other finishes use sample materials.</span> : null}
-            {!capturedView ? <span>{hasWindowDaylight ? "Daylight follows exterior windows in the model. Light strength and downward shadow angle are approximations; sun direction and weather are unknown." : "No exterior windows are established in this draft. A generic studio light keeps it visible; daylight is not reconstructed."}</span> : <span>Photo colors preserve captured lighting; this view uses unlit materials.</span>}
+            {!capturedView ? <span>{structuredModelLoaded ? "Soft indoor lighting is estimated for this photo-informed room. Ceiling light placement, brightness and material response are approximations; exterior daylight is disabled." : hasWindowDaylight ? "Daylight follows exterior windows in the model. Light strength and downward shadow angle are approximations; sun direction and weather are unknown." : "No exterior windows are established in this draft. A generic studio light keeps it visible; daylight is not reconstructed."}</span> : <span>Photo colors preserve captured lighting; this view uses unlit materials.</span>}
           </div>
           <p id="furniture-cameraHelp" className="furniture-cameraHelp">{capturedView ? "Drag to look around the observed room. Scroll or pinch to zoom; right-drag or use two fingers to pan. Reset view returns inside the room. Switch to the editable layout for furniture selection." : "Drag to orbit. Scroll or pinch to zoom. Right-drag or use two fingers to pan. Select an exploded piece for a closer view; Reset view restores the overview."}</p>
         </section>
@@ -251,12 +253,17 @@ export default function FurnitureWorkspace() {
             <p id="furniture-selectedHeading" className="furniture-sectionLabel">selected piece</p>
             {capturedView ? <><h2>Captured surfaces.</h2><p className="furniture-selectionHelp">The room and existing furniture share one observed surface reference. Show editable layout to inspect individual detected furniture proxies.</p></> : selected ? <>
               <h2>{selected.label}</h2>
-              <p className="furniture-modelLabel">{selected.representation === "photo_textured_proxy" ? "Photo-textured size proxy" : selected.representation === "detected_size_proxy" ? "Detected size proxy" : selected.modelAvailable ? "Demo model" : "Demo proxy"}</p>
+              <p className="furniture-modelLabel">{selected.representation === "photo_informed_model" ? "Photo-informed furniture model" : selected.representation === "photo_textured_proxy" ? "Photo-textured size proxy" : selected.representation === "detected_size_proxy" ? "Detected size proxy" : selected.modelAvailable ? "Demo model" : "Demo proxy"}</p>
               <dl className="furniture-dimensions">
                 <div><dt>Width / X</dt><dd>{centimeters(selected.size[0])}</dd></div>
                 <div><dt>Height / Y</dt><dd>{centimeters(selected.size[1])}</dd></div>
                 <div><dt>Depth / Z</dt><dd>{centimeters(selected.size[2])}</dd></div>
               </dl>
+              {selected.representation === "photo_informed_model" ? <>
+                <p className="furniture-selectionHelp">Modeled furniture form and materials guided by room photos. The scan dimensions and placement are preserved; shape, hidden details and material properties are estimates.</p>
+                <p className="furniture-selectionHelp">{selected.locked ? "Placement preserved for planning." : "Placement is not locked."} Explode only changes the preview.</p>
+                {selected.evidence.map((claim, index) => <p key={index} className="furniture-selectionHelp">{claim}</p>)}
+              </> : null}
               {selected.representation === "detected_size_proxy" || selected.representation === "photo_textured_proxy" ? <>
                 <p className="furniture-selectionHelp">Sensor-estimated dimensions and placement. This box approximates the detected extent. Photo textures show observed appearance where captured; the exact furniture shape and identity have not been recovered.</p>
                 <p className="furniture-selectionHelp">{selected.locked ? "Placement preserved for planning." : "Placement is not locked."} Explode only changes the preview.</p>

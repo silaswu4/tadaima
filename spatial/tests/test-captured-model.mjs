@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import * as THREE from "three";
 import { makeWorkspaceDemo } from "../room/workspace-fixture.ts";
-import { bindCapturedRoom, capturedCameraPose, validateLocalCapturedGlb } from "../room/textured-model.ts";
+import { bindCapturedRoom, capturedCameraPose, MAX_CAPTURED_MODEL_BYTES, MAX_TEXTURED_MODEL_BYTES, validateLocalTexturedGlb, validateLocalCapturedGlb } from "../room/textured-model.ts";
 
 const binding = { jobId: "scan-001", inputSha256: "a".repeat(64) };
 const plan = makeWorkspaceDemo();
@@ -16,16 +16,16 @@ function fixture() {
   mesh.userData = { entityId: "mesh-12345678-abcd-1234-abcd-1234567890ab", role: "captured_surface", appearanceStatus: "photo_projected", photoTextureCoverage: .75 };
   scene.add(mesh); return { scene, mesh };
 }
-function glb(mutate = () => {}) {
+function glb(mutate = () => {}, binaryLength = 4) {
   const json = { asset: { version: "2.0" }, scene: 0, scenes: [{ nodes: [0], extras: metadata() }], nodes: [{ mesh: 0 }],
     meshes: [{ primitives: [{ attributes: { POSITION: 0 } }] }], accessors: [{ count: 3, type: "VEC3", componentType: 5126 }],
-    bufferViews: [{ buffer: 0, byteLength: 4 }], buffers: [{ byteLength: 4 }] };
+    bufferViews: [{ buffer: 0, byteLength: binaryLength }], buffers: [{ byteLength: binaryLength }] };
   mutate(json);
   const raw = Buffer.from(JSON.stringify(json)), padded = Buffer.concat([raw, Buffer.alloc((4 - raw.length % 4) % 4, 32)]);
-  const bytes = Buffer.alloc(28 + padded.length + 4);
+  const bytes = Buffer.alloc(28 + padded.length + binaryLength);
   bytes.writeUInt32LE(0x46546c67, 0); bytes.writeUInt32LE(2, 4); bytes.writeUInt32LE(bytes.length, 8);
   bytes.writeUInt32LE(padded.length, 12); bytes.writeUInt32LE(0x4e4f534a, 16); padded.copy(bytes, 20);
-  bytes.writeUInt32LE(4, 20 + padded.length); bytes.writeUInt32LE(0x004e4942, 24 + padded.length);
+  bytes.writeUInt32LE(binaryLength, 20 + padded.length); bytes.writeUInt32LE(0x004e4942, 24 + padded.length);
   return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
 }
 
@@ -50,7 +50,7 @@ for (const [name, change] of Object.entries({
   "different revision": j => { j.scenes[0].extras.inputRevision = "9999"; },
   "different input bytes": j => { j.scenes[0].extras.inputSha256 = "b".repeat(64); },
   "wrong representation": j => { j.scenes[0].extras.captureRepresentation = "furniture_proxy"; },
-  "too many vertices": j => { j.accessors[0].count = 900003; },
+  "too many vertices": j => { j.accessors[0].count = 1800003; },
   "incomplete triangles": j => { j.accessors[0].count = 4; },
   "external texture": j => { j.images = [{ uri: "https://example.com/secret.jpg" }]; },
 })) test(`captured preflight rejects ${name}`, () => assert.throws(() => validateLocalCapturedGlb(glb(change), plan, binding), /Photo model:/));
@@ -121,9 +121,33 @@ for (const [name, position, target] of [
   assert.throws(() => capturedCameraPose({ captureCameraPosition: position, captureCameraTarget: target }), /Photo model:/);
 });
 
-test("UV seam-expanded captured geometry can reach 900k exported vertices at 300k triangles", () => {
-  validateLocalCapturedGlb(glb(j => { j.accessors[0].count = 900000; }), plan, binding);
-  assert.throws(() => validateLocalCapturedGlb(glb(j => { j.accessors[0].count = 900003; }), plan, binding), /Photo model:/);
+test("UV seam-expanded captured geometry can reach 1.8 million exported vertices at 600k triangles", () => {
+  validateLocalCapturedGlb(glb(j => { j.accessors[0].count = 1800000; }), plan, binding);
+  assert.throws(() => validateLocalCapturedGlb(glb(j => { j.accessors[0].count = 1800003; }), plan, binding), /Photo model:/);
   // Indexed meshes can exceed the triangle budget even with few positions.
-  assert.throws(() => validateLocalCapturedGlb(glb(j => { j.accessors.push({ count: 900003, type: "SCALAR", componentType: 5125 }); j.meshes[0].primitives[0].indices = 1; }), plan, binding), /Photo model:/);
+  assert.throws(() => validateLocalCapturedGlb(glb(j => { j.accessors.push({ count: 1800003, type: "SCALAR", componentType: 5125 }); j.meshes[0].primitives[0].indices = 1; }), plan, binding), /Photo model:/);
+});
+
+
+test("large captured scans have a separate 128 MiB file budget without relaxing photo-only imports", () => {
+  assert.equal(MAX_CAPTURED_MODEL_BYTES, 128 * 1024 * 1024);
+  assert.equal(MAX_TEXTURED_MODEL_BYTES, 64 * 1024 * 1024);
+  const bytes = glb(() => {}, MAX_TEXTURED_MODEL_BYTES);
+  assert.ok(bytes.byteLength > MAX_TEXTURED_MODEL_BYTES);
+  validateLocalCapturedGlb(bytes, plan, binding);
+  assert.throws(() => validateLocalTexturedGlb(bytes), /64 MiB/);
+});
+
+test("captured JSON can exceed 2 MiB but stays within its 4 MiB limit", () => {
+  const bytes = glb(j => { j.scenes[0].extras.diagnostic = "x".repeat(2 * 1024 * 1024); });
+  validateLocalCapturedGlb(bytes, plan, binding);
+  assert.throws(() => validateLocalTexturedGlb(bytes), /JSON chunk/);
+  assert.throws(() => validateLocalCapturedGlb(glb(j => { j.scenes[0].extras.diagnostic = "x".repeat(4 * 1024 * 1024); }), plan, binding), /JSON chunk/);
+});
+
+test("captured total accessor count permits 16 million elements and rejects above budget", () => {
+  const bytes = glb(j => { for (let i = 0; i < 7; i++) j.accessors.push({ count: 2000000 }); });
+  validateLocalCapturedGlb(bytes, plan, binding);
+  assert.throws(() => validateLocalTexturedGlb(bytes), /vertex limit/);
+  assert.throws(() => validateLocalCapturedGlb(glb(j => { for (let i = 0; i < 8; i++) j.accessors.push({ count: 2000000 }); }), plan, binding), /vertex limit/);
 });

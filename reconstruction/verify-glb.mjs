@@ -54,6 +54,41 @@ async function verify(directory, validatorModule) {
   const embedded = inspectEmbeddedImages(bytes);
   const textured = embedded.images.length > 0;
   const captured = manifest.captureRepresentation === "observed_surface_mesh";
+  const structured = manifest.captureRepresentation === "photo_informed_parametric";
+  const design = manifest.visualDesign;
+  let designInput;
+  if (structured) {
+    assert.equal(manifest.renderProfile, "photo-informed-room-v1");
+    assert.equal(design?.schemaVersion, "room-visual-design-result/1.0");
+    assert.equal(design.mode, "photo_informed_parametric");
+    assert.equal(design.reviewRequired, true);
+    assert.deepEqual(JSON.parse(await readFile(resolve(directory, "visual-design.json"), "utf8")), design);
+    for (const key of ["projectId", "jobId", "inputRevision", "inputSha256"]) assert.equal(design[key], manifest[key]);
+    for (const key of ["profileInputSha256", "profileSha256", "sourceArchiveSha256"]) assert.match(design[key], /^[0-9a-f]{64}$/);
+    const profileBytes = await readFile(resolve(directory, "visual-design.input.json"));
+    assert.equal(createHash("sha256").update(profileBytes).digest("hex"), design.profileSha256);
+    designInput = JSON.parse(profileBytes.toString("utf8"));
+    assert.equal(designInput.schemaVersion, "room-visual-design/1.0");
+    assert.equal(designInput.inputSha256, design.profileInputSha256);
+    for (const key of ["projectId", "jobId", "inputRevision", "producer", "sources", "surfaces", "items", "notes"]) {
+      assert.deepEqual(designInput[key], design[key], "Visual sidecar report binding: " + key);
+    }
+    assert(design.sources.length <= 32 && design.items.length <= (source.items?.length ?? 0));
+    assert.equal(manifest.appearance?.schemaVersion, "room-designed-surfaces/1.0");
+    assert.equal(manifest.appearance.mode, "photo_informed_clean_surfaces");
+    const evidence = new Set(source.evidence.map((entry) => entry.id));
+    const cited = new Set(design.sources.map((entry) => entry.evidenceId));
+    assert.equal(cited.size, design.sources.length);
+    assert.equal(new Set(design.sources.map((entry) => entry.photoId)).size, design.sources.length);
+    for (const entry of design.sources) {
+      assert(evidence.has(entry.evidenceId)); assert.match(entry.sha256, /^[0-9a-f]{64}$/);
+    }
+    for (const binding of [...design.surfaces, ...design.items]) {
+      assert(binding.evidenceIds.length > 0 && binding.evidenceIds.every((id) => cited.has(id)));
+    }
+  }
+  const designItems = new Map((design?.items ?? []).map((entry) => [entry.itemId, entry]));
+  const designSurfaces = new Map((design?.surfaces ?? []).map((entry) => [entry.entityId, entry]));
   const surface = manifest.surfaceReconstruction;
   if (captured) {
     assert.equal(manifest.renderProfile, "captured-surface-rgb-v1");
@@ -64,7 +99,7 @@ async function verify(directory, validatorModule) {
     assert.match(surface.sourceArchiveSha256, /^[0-9a-f]{64}$/);
     assert.equal(surface.triangleCount, manifest.statistics.triangleCount);
     assert.equal(surface.observedTriangleCount + surface.unobservedTriangleCount, surface.triangleCount);
-    assert(surface.vertexCount > 0 && surface.vertexCount <= 200000 && surface.triangleCount > 0 && surface.triangleCount <= 300000);
+    assert(surface.vertexCount > 0 && surface.vertexCount <= 400000 && surface.triangleCount > 0 && surface.triangleCount <= 600000);
     assert.equal(surface.triangleSourceIndices.length, surface.triangleCount);
     assert.equal(surface.photoCount, surface.photoSources.length);
     for (const index of surface.triangleSourceIndices) assert(Number.isInteger(index) && index >= -1 && index < surface.photoCount);
@@ -126,6 +161,44 @@ async function verify(directory, validatorModule) {
               "Unobserved faces must retain plain neutral PBR");
           }
         }
+      } else if (structured) {
+        const triangleCount = (object.geometry.index?.count ?? positions.count) / 3;
+        assert(Number.isInteger(triangleCount) && triangleCount > 0, "Structured geometry must export triangles");
+        testedTriangles += triangleCount;
+        let owner = object;
+        while (owner && !owner.userData.entityId) owner = owner.parent;
+        assert(owner, "Structured geometry needs a semantic owner");
+        const uv = object.geometry.getAttribute("uv");
+        if (materials.some((material) => material.map || material.normalMap || material.roughnessMap)) {
+          assert(uv && uv.itemSize === 2 && uv.count === positions.count, "Mapped structured mesh needs complete UVs");
+          for (const value of uv.array) assert(Number.isFinite(value), "Nonfinite structured UV");
+        }
+        for (const material of materials) {
+          assert(material.isMeshStandardMaterial, "Structured material must use metallic/roughness PBR");
+          assert(Number.isFinite(material.roughness) && material.roughness >= 0 && material.roughness <= 1);
+          assert(Number.isFinite(material.metalness) && material.metalness >= 0 && material.metalness <= 1);
+          for (const map of [material.map, material.normalMap, material.roughnessMap]) {
+            if (map) assert(map.image?.data?.length > 0, "Structured material map must decode");
+          }
+        }
+        const surfaceSpec = designSurfaces.get(owner.userData.entityId);
+        if (surfaceSpec) {
+          assert.equal(owner.userData.finish, surfaceSpec.finish);
+          assert.equal(owner.userData.appearanceStatus, "photo_estimate");
+          for (const material of materials) {
+            assert.equal(material.userData.appearanceSource, "photo_informed_estimate");
+            if (surfaceSpec.finish !== "wood") assert(Math.abs(material.roughness - surfaceSpec.roughness) < 1e-6);
+          }
+        }
+        if (owner !== object && owner.userData.role === "opening") {
+          assert.equal(object.userData.entityId, undefined);
+          assert.equal(object.userData.role, undefined, "Opening detail must not introduce a semantic entity");
+          assert.equal(object.userData.ownerOpeningId, owner.userData.entityId);
+          for (let index = 0; index < positions.count; index++) {
+            const local = owner.worldToLocal(new Vector3().fromBufferAttribute(positions, index).applyMatrix4(object.matrixWorld));
+            assert(local.toArray().every((value) => Math.abs(value) <= 1 + 1e-5), "Opening detail escapes its normalized envelope");
+          }
+        }
       } else if (textured) {
         const uv = object.geometry.getAttribute("uv");
         assert(uv && uv.itemSize === 2 && uv.count === positions.count, "Textured mesh needs complete UVs");
@@ -167,12 +240,33 @@ async function verify(directory, validatorModule) {
     }
   });
   assert.equal(entities.size, manifest.objects.length, "Lost entity metadata");
+  if (structured) {
+    assert.equal(designItems.size, design.items.length, "Duplicate visual item binding");
+    assert.equal(designSurfaces.size, design.surfaces.length, "Duplicate visual surface binding");
+    const canonicalItems = new Set((source.items ?? []).map((entry) => entry.id));
+    const canonicalSurfaces = new Set([...source.geometry.rooms, ...source.geometry.walls].map((entry) => entry.id));
+    for (const id of designItems.keys()) assert(canonicalItems.has(id), "Unknown visual item binding");
+    for (const id of designSurfaces.keys()) assert(canonicalSurfaces.has(id), "Unknown visual surface binding");
+    assert.equal(testedTriangles, manifest.statistics.triangleCount, "Structured triangle count changed in export");
+    assert.equal(embedded.document.meshes.length, manifest.statistics.meshCount, "Structured mesh/trim count changed in export");
+    assert.equal(gltf.scene.userData.captureRepresentation, "photo_informed_parametric");
+    assert.equal(gltf.scene.userData.inputSha256, manifest.inputSha256);
+    assert.deepEqual(JSON.parse(gltf.scene.userData.visualDesignSummaryJson), design);
+    assert.deepEqual(JSON.parse(gltf.scene.userData.appearanceSummaryJson), manifest.appearance);
+    const canonical = new Set([...source.geometry.rooms, ...source.geometry.walls, ...source.geometry.openings,
+      ...(source.items ?? [])].map((entry) => entry.id));
+    assert.deepEqual(new Set(entities.keys()), canonical, "Structured model must retain all canonical semantic identities");
+  }
   if (captured) {
     assert.equal(testedTriangles, surface.triangleCount, "Observed triangle topology changed during export");
     assert.equal(observedTriangles, surface.observedTriangleCount, "Observed triangle/material coverage mismatch");
     assert.equal(gltf.scene.userData.captureRepresentation, "observed_surface_mesh");
     assert.equal(gltf.scene.userData.inputSha256, manifest.inputSha256);
     assert.equal(gltf.scene.userData.sourceRequestSha256, manifest.sourceRequestSha256);
+    const compactCoverage = JSON.parse(gltf.scene.userData.surfaceReconstructionSummaryJson);
+    assert.equal(compactCoverage.triangleSourceIndices, undefined,
+      "Per-triangle provenance stays in the private report, not duplicated into GLB extras");
+    assert.deepEqual(compactCoverage, Object.fromEntries(Object.entries(surface).filter(([key]) => key !== "triangleSourceIndices")));
     for (const object of entities.values()) {
       const refs = JSON.parse(object.userData.evidenceIdsJson);
       assert(refs.every((id) => surface.photoSources.some((photo) => photo.evidenceId === id)));
@@ -188,14 +282,39 @@ async function verify(directory, validatorModule) {
   }
   for (const item of captured ? [] : source.items ?? []) {
     const object = entities.get(item.id);
-    assert(object?.isMesh && object.userData.role === "existing_furniture", "Existing furniture must be a separate editable mesh");
+    const designed = structured && object?.userData.representation === "photo_informed_parametric";
+    if (structured && designItems.has(item.id)) assert(designed, "Bound structured item lost its representation metadata");
+    assert(object && (object.isMesh || (designed && object.isGroup)) && object.userData.role === "existing_furniture",
+      "Existing furniture must retain a separate editable mesh or structured group");
     assert.equal(object.userData.origin, "existing_owned");
     assert.equal(object.userData.roomId, item.roomId);
     assert.equal(object.userData.label, item.label);
     assert.equal(object.userData.locked, item.locked);
-    assert.equal(object.userData.proxyGeometry, "sensor_bounding_box");
+    assert.equal(object.userData.proxyGeometry, designed ? "photo_informed_parts" : "sensor_bounding_box");
     const photo = photoEntities.get(item.id);
-    assert.equal(object.userData.appearanceStatus, photo ? photo.coverage > 0 ? "photo_projected" : "unobserved" : "sensor_proxy");
+    assert.equal(object.userData.appearanceStatus, designed ? "photo_inferred" : photo ? photo.coverage > 0 ? "photo_projected" : "unobserved" : "sensor_proxy");
+    if (designed) {
+      const spec = designItems.get(item.id);
+      assert(spec, "Structured furniture needs its visual sidecar binding");
+      assert.equal(object.userData.visualLabel, spec.label);
+      assert.equal(object.userData.designTemplate, spec.model);
+      assert.deepEqual(JSON.parse(object.userData.photoEvidenceIdsJson), spec.evidenceIds);
+      const localBounds = new Box3();
+      object.traverse((child) => {
+        if (!child.isMesh) return;
+        const positions = child.geometry.getAttribute("position");
+        for (let index = 0; index < positions.count; index++) {
+          localBounds.expandByPoint(object.worldToLocal(new Vector3().fromBufferAttribute(positions, index).applyMatrix4(child.matrixWorld)));
+        }
+      });
+      const [w, h, d] = item.dimensions;
+      assert(localBounds.min.distanceTo(new Vector3(-w / 2, 0, -d / 2)) < 1e-5
+        && localBounds.max.distanceTo(new Vector3(w / 2, h, d / 2)) < 1e-5,
+        "Structured furniture must preserve its measured local envelope");
+      const xAxis = new Vector3(1, 0, 0).transformDirection(object.matrixWorld);
+      assert(xAxis.distanceTo(new Vector3(Math.cos(item.rotationY), 0, -Math.sin(item.rotationY))) < 1e-5,
+        "Structured furniture yaw or handedness changed");
+    }
     assert.deepEqual(JSON.parse(object.userData.dimensionsJson), item.dimensions);
     assert.deepEqual(JSON.parse(object.userData.evidenceIdsJson), item.evidenceIds ?? []);
     assert(object.getWorldPosition(new Vector3()).distanceTo(new Vector3(...item.position)) < 1e-5, "Furniture bottom-center origin mismatch");
@@ -206,17 +325,22 @@ async function verify(directory, validatorModule) {
       expected.push(new Vector3(item.position[0] + cosine * x + sine * z, item.position[1] + y,
         item.position[2] - sine * x + cosine * z));
     }
-    const actualBounds = new Box3().setFromObject(object);
-    const expectedBounds = new Box3().setFromPoints(expected);
-    assert(actualBounds.min.distanceTo(expectedBounds.min) < 1e-5 && actualBounds.max.distanceTo(expectedBounds.max) < 1e-5,
-      "Furniture width/depth, yaw or elevation mismatch");
-    const vertices = object.geometry.getAttribute("position");
-    const actualVertices = Array.from({ length: vertices.count }, (_, index) =>
-      new Vector3().fromBufferAttribute(vertices, index).applyMatrix4(object.matrixWorld));
-    assert(expected.every((point) => actualVertices.some((candidate) => point.distanceTo(candidate) < 1e-5)),
-      "Furniture corner orientation mismatch");
+    if (!designed) {
+      const actualBounds = new Box3().setFromObject(object);
+      const expectedBounds = new Box3().setFromPoints(expected);
+      assert(actualBounds.min.distanceTo(expectedBounds.min) < 1e-5 && actualBounds.max.distanceTo(expectedBounds.max) < 1e-5,
+        "Furniture width/depth, yaw or elevation mismatch");
+      const vertices = object.geometry.getAttribute("position");
+      const actualVertices = Array.from({ length: vertices.count }, (_, index) =>
+        new Vector3().fromBufferAttribute(vertices, index).applyMatrix4(object.matrixWorld));
+      assert(expected.every((point) => actualVertices.some((candidate) => point.distanceTo(candidate) < 1e-5)),
+        "Furniture corner orientation mismatch");
+    }
   }
-  const bounds = new Box3().setFromObject(gltf.scene);
+  // Rotated ARKit chunks can contain loose vertices and split UV/material
+  // primitives. Transforming each local AABB overestimates their true extent;
+  // captured references compare actual exported vertices in world coordinates.
+  const bounds = new Box3().setFromObject(gltf.scene, captured || structured);
   const actual = { min: bounds.min.toArray(), max: bounds.max.toArray() };
   for (const edge of ["min", "max"]) {
     for (let i = 0; i < 3; i++) {
@@ -234,13 +358,27 @@ async function verify(directory, validatorModule) {
     const center = new Vector3(wall.start[0] + dx * u, opening.sillHeight + opening.height / 2, wall.start[1] + dz * u);
     const normal = new Vector3(-dz, 0, dx);
     const ray = new Raycaster(center.clone().addScaledVector(normal, wall.thickness * 2), normal.clone().negate(), 0, wall.thickness * 4);
-    assert.equal(ray.intersectObject(entities.get(wall.id), true).length, 0, "Opening blocked: " + opening.id);
+    if (structured) {
+      const wallObject = entities.get(wall.id);
+      const wallMeshes = [];
+      wallObject.traverse((child) => {
+        if (!child.isMesh) return;
+        let owner = child;
+        while (owner && !owner.userData.entityId) owner = owner.parent;
+        if (owner === wallObject) wallMeshes.push(child);
+      });
+      assert.equal(ray.intersectObjects(wallMeshes, false).length, 0, "Structural wall blocks opening: " + opening.id);
+    } else {
+      assert.equal(ray.intersectObject(entities.get(wall.id), true).length, 0, "Opening blocked: " + opening.id);
+    }
     const marker = entities.get(opening.id);
     assert(marker.getWorldPosition(new Vector3()).distanceTo(center) < 1e-5, "Opening marker transform mismatch");
   }
   const report = { valid: true, loader: "Three.js GLTFLoader", entityCount: entities.size,
     meshCount: manifest.statistics.meshCount, bounds: actual, testedApertures: captured ? 0 : source.geometry.openings.length,
     testedExistingFurniture: captured ? 0 : source.items?.length ?? 0,
+    ...(structured ? {captureRepresentation: "photo_informed_parametric", testedDesignedItems: designItems.size,
+      reviewedVisualSources: design.sources.length} : {}),
     ...(captured ? {captureRepresentation: "observed_surface_mesh", testedObservedTriangles: testedTriangles,
       observedTriangles, unobservedTriangles: surface.unobservedTriangleCount} : {}),
     glbByteLength: bytes.length, embeddedPngImages: embedded.images,

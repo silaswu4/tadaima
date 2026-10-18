@@ -11,7 +11,19 @@ final class ScanModel: ObservableObject {
     @Published private(set) var phase: Phase = .idle
     @Published private(set) var captureView: RoomCaptureView?
     @Published private(set) var scanID = UUID()
-    @Published private(set) var message: String?
+    @Published private var reviewMessages = ScanReviewMessages()
+    private(set) var message: String? {
+        get { reviewMessages.transient }
+        set { reviewMessages.transient = newValue }
+    }
+    private(set) var captureWarning: String? {
+        get { reviewMessages.captureWarning }
+        set { reviewMessages.captureWarning = newValue }
+    }
+    var photoExportKind: ScanPhotoExportKind? {
+        ScanPhotoExportKind.available(photoCount: photos.count, hasMesh: mesh != nil,
+                                      requestedMesh: recordDetailedSurfaces)
+    }
     @Published private(set) var cameraDenied = false
     @Published var roomLabel = "Living room"
     @Published var recordAppearancePhotos = true
@@ -128,17 +140,13 @@ final class ScanModel: ObservableObject {
 
     func shareFile(includeUSDZ: Bool, includePhotos: Bool = false) async -> URL? {
         guard phase == .review, let room, let capturedAt else { return nil }
-        guard !includePhotos || !recordDetailedSurfaces || mesh != nil else {
-            message = "No detailed mesh was saved. Share the RoomPlan geometry or scan again."
-            return nil
-        }
-        guard !includePhotos || !photos.isEmpty else {
+        guard !includePhotos || photoExportKind != nil else {
             message = "No photos were saved. Share the geometry JSON or scan again with photo capture enabled."
             return nil
         }
         let token = scanID
         phase = .exporting
-        message = nil
+        reviewMessages.beginExport()
         let names = ScanNames(roomLabel: roomLabel, capturedAt: capturedAt, scanID: token,
                               timeZone: capturedTimeZone)
         let packet = ScanWire.packet(room: room, scanID: token,
@@ -185,7 +193,7 @@ final class ScanModel: ObservableObject {
     private func beginDetailPass() {
         guard let session = captureView?.captureSession.arSession else {
             phase = .review
-            message = "The detailed session was unavailable. RoomPlan geometry remains available; scan again for detailed surfaces."
+            captureWarning = "The detailed session was unavailable. RoomPlan geometry remains available; scan again for detailed surfaces."
             return
         }
         let configuration = ARWorldTrackingConfiguration()
@@ -196,7 +204,7 @@ final class ScanModel: ObservableObject {
         } else {
             session.pause()
             phase = .review
-            message = "Detailed surface capture is not supported on this device. RoomPlan geometry remains available."
+            captureWarning = "Detailed surface capture is not supported on this device. RoomPlan geometry remains available."
             return
         }
         configuration.worldAlignment = .gravity
@@ -262,7 +270,11 @@ final class ScanModel: ObservableObject {
             mesh = nil; photos = captured; photoCount = captured.count; detailView = nil
             capturedAt = Date(); capturedTimeZone = .current
             phase = .review
-            message = error.localizedDescription + ". Detailed geometry was not saved. You can export the RoomPlan geometry or scan again."
+            let recovery = captured.isEmpty
+                ? "The RoomPlan layout can still be shared. No appearance photos were saved."
+                : "Your saved photos and RoomPlan layout can still be shared; they do not contain detailed furniture shapes."
+            captureWarning = error.localizedDescription + ". Detailed geometry was not saved. " + recovery
+            message = nil
         }
     }
 
@@ -296,6 +308,7 @@ final class ScanModel: ObservableObject {
         captureView?.captureSession.delegate = nil
         captureView = nil; coordinator = nil; gate = nil
         room = nil; capturedAt = nil
+        reviewMessages = ScanReviewMessages()
         photos = []; photoCount = 0; photoMessage = nil
         Task { await exports.remove(scanID: previousID) }
     }

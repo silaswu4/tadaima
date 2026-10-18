@@ -27,9 +27,9 @@ enum ScanMeshError: LocalizedError {
 
 enum ScanMeshWire {
     static let maximumAnchors = 128
-    static let maximumVertices = 200_000
-    static let maximumFaces = 300_000
-    static let maximumJSONBytes = 48 * 1024 * 1024
+    static let maximumVertices = 400_000
+    static let maximumFaces = 600_000
+    static let maximumJSONBytes = 96 * 1024 * 1024
 
     static func validate(_ packet: ScanMeshPacket) throws {
         guard !packet.projectId.isEmpty, packet.projectId.utf8.count <= 200,
@@ -99,7 +99,7 @@ enum ScanMeshWire {
         try validate(packet)
         let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
         let data = try encoder.encode(packet)
-        guard data.count <= maximumJSONBytes else { throw ScanMeshError.invalid("mesh JSON exceeds 48 MiB; scan a smaller area") }
+        guard data.count <= maximumJSONBytes else { throw ScanMeshError.invalid("mesh JSON exceeds 96 MiB; scan a smaller area") }
         return data
     }
 }

@@ -39,6 +39,10 @@ enum ScanPhotoArchive {
         let byteLength: Int
     }
 
+    static func maximumArchiveBytes(hasMesh: Bool) -> Int {
+        (hasMesh ? 144 : 36) * 1024 * 1024
+    }
+
     static func encode(scanData: Data, projectId: String, jobId: String,
                        inputRevision: Int, photos: [CapturedScanPhoto], mesh: ScanMeshPacket? = nil) throws -> Data {
         guard !scanData.isEmpty, scanData.count <= 2 * 1024 * 1024,
@@ -99,8 +103,9 @@ enum ScanPhotoArchive {
         if let meshData { entries.append(("mesh.json", meshData)) }
         entries += photos.map { ($0.metadata.path, $0.jpeg) }
         let archive = zip(entries: entries)
-        guard archive.count <= 96 * 1024 * 1024 else {
-            throw ScanPhotoArchiveError.invalid("archive exceeds 96 MiB")
+        let maximumBytes = maximumArchiveBytes(hasMesh: meshData != nil)
+        guard archive.count <= maximumBytes else {
+            throw ScanPhotoArchiveError.invalid("archive exceeds \(maximumBytes / (1024 * 1024)) MiB")
         }
         return archive
     }

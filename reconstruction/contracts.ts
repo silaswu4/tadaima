@@ -44,7 +44,7 @@ export interface ReconstructionManifest extends ReconstructionResult {
   inputSha256: string;
   /** Exact input file bytes, before normalization; binds local viewer imports. */
   sourceRequestSha256?: string;
-  captureRepresentation?: "observed_surface_mesh";
+  captureRepresentation?: "observed_surface_mesh" | "photo_informed_parametric";
   blenderVersion: string;
   units: "m";
   coordinateSystem: "right-handed-y-up";
@@ -57,10 +57,35 @@ export interface ReconstructionManifest extends ReconstructionResult {
     glb: ReconstructionArtifactFile;
     photoTexturing?: ReconstructionArtifactFile;
     surfaceReconstruction?: ReconstructionArtifactFile;
+    visualDesign?: ReconstructionArtifactFile;
+    visualDesignInput?: ReconstructionArtifactFile;
   };
   objects: Array<{ id: string; role: "room_floor" | "wall" | "opening" | "existing_furniture" | "captured_surface"; name: string; evidenceIds: string[] }>;
   statistics: { meshCount: number; triangleCount: number; entityCount: number };
   warnings: string[];
+  /** Auditable estimated forms/finishes; dimensions and placement remain in scene JSON. */
+  visualDesign?: {
+    schemaVersion: "room-visual-design-result/1.0";
+    mode: "photo_informed_parametric";
+    producer: string;
+    projectId: string;
+    jobId: string;
+    inputRevision: number;
+    inputSha256: string;
+    profileInputSha256: string;
+    profileSha256: string;
+    sourceArchiveSha256: string;
+    reviewRequired: true;
+    sources: Array<{ photoId: string; evidenceId: string; sha256: string }>;
+    surfaces: Array<{ entityId: string; finish: string; color: string; secondaryColor: string;
+      pattern: string; roughness: number; repeatMeters: number; rotationDegrees: number;
+      confidence: string; evidenceIds: string[] }>;
+    items: Array<{ itemId: string; label: string; model: string; primaryColor: string;
+      secondaryColor: string; frameColor: string; accentColor: string; pattern: string;
+      seatCount: number; confidence: string; evidenceIds: string[]; notes: string }>;
+    notes: string[];
+    warnings: string[];
+  };
   surfaceReconstruction?: {
     schemaVersion: "roomplan-surface-mesh/1.0";
     mode: "observed_surface_mesh";

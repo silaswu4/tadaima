@@ -95,6 +95,10 @@ struct ScanScreen: View {
                                 }
                             }
                         }
+                        if let warning = model.captureWarning {
+                            Text(warning).font(.footnote).foregroundStyle(.orange)
+                                .accessibilityAddTraits(.updatesFrequently)
+                        }
                         if let message = model.message {
                             Text(message).font(.footnote).foregroundStyle(.orange)
                                 .accessibilityAddTraits(.updatesFrequently)
@@ -166,8 +170,8 @@ struct ScanScreen: View {
             Button("Cancel scan", role: .cancel) { model.rescan() }.buttonStyle(.bordered)
         case .review:
             VStack(alignment: .leading, spacing: 10) {
-                if model.photoCount > 0 && (!model.recordDetailedSurfaces || model.mesh != nil) {
-                    Button(model.mesh == nil ? "Share scan + photos" : "Share detailed scan + photos") {
+                if let exportKind = model.photoExportKind {
+                    Button(exportKind.label) {
                         Task {
                             if let url = await model.shareFile(includeUSDZ: false, includePhotos: true) {
                                 share = SharedScan(url: url)

@@ -2,6 +2,7 @@ import * as THREE from "three";
 import type { RoomPlan } from "../../backend/contracts";
 
 export const MAX_TEXTURED_MODEL_BYTES = 64 * 1024 * 1024;
+export const MAX_CAPTURED_MODEL_BYTES = 128 * 1024 * 1024;
 const MAX_IMAGE_PIXELS = 64 * 1024 * 1024;
 const allowedExtensions = new Set(["KHR_materials_ior", "KHR_materials_specular", "KHR_materials_clearcoat", "KHR_materials_sheen", "KHR_materials_emissive_strength", "KHR_materials_unlit", "KHR_texture_transform"]);
 function fail(detail: string): never { throw new Error(`Photo model: ${detail}`); }
@@ -38,12 +39,15 @@ function imageDimensions(bytes: Uint8Array, mime: unknown): [number, number] {
 }
 
 /** Inspect before GLTFLoader can create image URLs or request any resources. */
-export function validateLocalTexturedGlb(bytes: ArrayBuffer): Record<string, unknown> {
-  if (bytes.byteLength < 28 || bytes.byteLength > MAX_TEXTURED_MODEL_BYTES) fail("choose a GLB smaller than 64 MiB.");
+type GlbLimits = { fileBytes: number; jsonBytes: number; accessorCount: number; totalAccessorCount: number };
+const textureLimits: GlbLimits = { fileBytes: MAX_TEXTURED_MODEL_BYTES, jsonBytes: 2 * 1024 * 1024, accessorCount: 2_000_000, totalAccessorCount: 8_000_000 };
+const capturedLimits: GlbLimits = { fileBytes: MAX_CAPTURED_MODEL_BYTES, jsonBytes: 4 * 1024 * 1024, accessorCount: 2_000_000, totalAccessorCount: 16_000_000 };
+function inspectLocalGlb(bytes: ArrayBuffer, limits: GlbLimits): Record<string, unknown> {
+  if (bytes.byteLength < 28 || bytes.byteLength > limits.fileBytes) fail(`choose a GLB no larger than ${limits.fileBytes / (1024 * 1024)} MiB.`);
   const view = new DataView(bytes);
   if (view.getUint32(0, true) !== 0x46546C67 || view.getUint32(4, true) !== 2 || view.getUint32(8, true) !== bytes.byteLength) fail("choose a complete glTF 2 GLB.");
   const jsonLength = view.getUint32(12, true);
-  if (jsonLength > 2 * 1024 * 1024 || jsonLength % 4 || 20 + jsonLength + 8 > bytes.byteLength || view.getUint32(16, true) !== 0x4E4F534A) fail("invalid GLB JSON chunk.");
+  if (jsonLength > limits.jsonBytes || jsonLength % 4 || 20 + jsonLength + 8 > bytes.byteLength || view.getUint32(16, true) !== 0x4E4F534A) fail("invalid GLB JSON chunk.");
   let parsed: unknown;
   try { parsed = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(new Uint8Array(bytes, 20, jsonLength))); }
   catch { fail("invalid GLB JSON."); }
@@ -79,7 +83,7 @@ export function validateLocalTexturedGlb(bytes: ArrayBuffer): Record<string, unk
   let vertices = 0;
   for (const entry of array(raw.accessors, 10000)) {
     const accessor = record(entry);
-    if (accessor.sparse || (vertices += integer(accessor.count, 2_000_000)) > 8_000_000) fail("geometry exceeds the supported vertex limit.");
+    if (accessor.sparse || (vertices += integer(accessor.count, limits.accessorCount)) > limits.totalAccessorCount) fail("geometry exceeds the supported vertex limit.");
   }
   const nodes = array(raw.nodes, 2048);
   const roots = array(record(array(raw.scenes, 1)[0]).nodes, 2048).map((index) => integer(index, nodes.length - 1));
@@ -104,6 +108,10 @@ export function validateLocalTexturedGlb(bytes: ArrayBuffer): Record<string, unk
   return raw;
 }
 
+export function validateLocalTexturedGlb(bytes: ArrayBuffer): Record<string, unknown> {
+  return inspectLocalGlb(bytes, textureLimits);
+}
+
 function near(actual: number, expected: number, tolerance = .003) { return Number.isFinite(actual) && Math.abs(actual - expected) <= tolerance; }
 function requireMatrix(node: THREE.Object3D, position: number[], yaw: number, scale = [1, 1, 1]) {
   const matrix = new THREE.Matrix4().compose(new THREE.Vector3(...position),
@@ -121,7 +129,10 @@ function localBounds(node: THREE.Object3D): THREE.Box3 {
 }
 
 /** Validate actual loaded geometry; no caller input or canonical placement is changed. */
-export function bindTexturedRoom(model: THREE.Object3D, plan: RoomPlan) {
+export function bindTexturedRoom(model: THREE.Object3D, plan: RoomPlan, binding?: CapturedRoomBinding) {
+  const structured = model.userData.captureRepresentation === "photo_informed_parametric";
+  if (structured && (!binding || model.userData.jobId !== binding.jobId
+    || (model.userData.sourceRequestSha256 !== binding.inputSha256 && model.userData.inputSha256 !== binding.inputSha256))) fail("photo-informed model does not match the opened room file.");
   if (model.userData.projectId !== plan.projectId || model.userData.inputRevision !== String(plan.revision)) {
     fail("model project or revision does not match the opened room file.");
   }
@@ -144,7 +155,7 @@ export function bindTexturedRoom(model: THREE.Object3D, plan: RoomPlan) {
     if (node instanceof THREE.Mesh) {
       let owner: THREE.Object3D | null = node;
       while (owner && owner.userData.entityId === undefined) owner = owner.parent;
-      if (!owner || owner.userData.role === "opening") fail("model contains unidentified geometry.");
+      if (!owner || (owner.userData.role === "opening" && !structured)) fail("model contains unidentified geometry.");
       const materials = Array.isArray(node.material) ? node.material : [node.material];
       if (materials.some((material) => !(material instanceof THREE.MeshStandardMaterial))) fail("use standard PBR materials.");
       const positions = node.geometry.getAttribute("position");
@@ -152,7 +163,7 @@ export function bindTexturedRoom(model: THREE.Object3D, plan: RoomPlan) {
       for (let index = 0; index < positions.count; index++) if (![positions.getX(index), positions.getY(index), positions.getZ(index)].every(Number.isFinite)) fail("model contains nonfinite vertices.");
     }
   });
-  if (entities.size !== expected.size || !projected) fail("choose the matching photo-textured reconstruction GLB, including every room entity.");
+  if (entities.size !== expected.size || (!structured && !projected)) fail("choose the matching photo-textured reconstruction GLB, including every room entity.");
   for (const room of plan.geometry.rooms) {
     const node = entities.get(room.id)!, bounds = new THREE.Box3().setFromObject(node, true);
     const xs = room.floorPolygon.map((point) => point[0]), zs = room.floorPolygon.map((point) => point[1]);
@@ -189,10 +200,18 @@ export function bindTexturedRoom(model: THREE.Object3D, plan: RoomPlan) {
     const length = Math.hypot(dx, dz), middle = opening.offset + opening.width / 2;
     requireMatrix(entities.get(opening.id)!, [wall.start[0] + dx * middle / length, opening.sillHeight + opening.height / 2,
       wall.start[1] + dz * middle / length], -Math.atan2(dz, dx), [opening.width / 2, opening.height / 2, wall.thickness / 2]);
+    if (structured) {
+      const bounds = localBounds(entities.get(opening.id)!);
+      if (!bounds.isEmpty() && [...bounds.min.toArray(), ...bounds.max.toArray()].some((value) => !Number.isFinite(value) || Math.abs(value) > 1.01)) fail("opening trim exceeds the measured aperture.");
+    }
   }
   for (const item of plan.items) {
     if (!item.dimensions) fail("furniture dimensions are required.");
-    const node = entities.get(item.id)!; requireMatrix(node, [...item.position], item.rotationY);
+    const node = entities.get(item.id)!;
+    if (structured && (node.userData.representation !== "photo_informed_parametric" || node.userData.appearanceStatus !== "photo_inferred"
+      || node.userData.proxyGeometry !== "photo_informed_parts" || (node.userData.visualLabel !== undefined
+        && (typeof node.userData.visualLabel !== "string" || !node.userData.visualLabel.trim() || node.userData.visualLabel.length > 200)))) fail("photo-informed furniture metadata is unsupported.");
+    requireMatrix(node, [...item.position], item.rotationY);
     const bounds = localBounds(node), [width, height, depth] = item.dimensions;
     if (![near(bounds.min.x, -width / 2), near(bounds.max.x, width / 2), near(bounds.min.y, 0), near(bounds.max.y, height), near(bounds.min.z, -depth / 2), near(bounds.max.z, depth / 2)].every(Boolean)) fail("model furniture extents do not match the room file.");
   }
@@ -204,21 +223,31 @@ export function bindTexturedRoom(model: THREE.Object3D, plan: RoomPlan) {
     node.traverse((child) => { if (child instanceof THREE.Mesh) { child.castShadow = child.userData.role !== "room_floor"; child.receiveShadow = true; meshes.push(child); } });
     walls.set(entry.id, meshes);
   }
+  if (structured) for (const opening of plan.geometry.openings) {
+    const node = entities.get(opening.id)!;
+    let parent = node.parent;
+    while (parent && parent !== shell) parent = parent.parent;
+    if (parent !== shell) shell.attach(node);
+  }
   for (const item of plan.items) {
     const root = new THREE.Group(); root.userData.workspaceItemId = item.id;
     root.userData.photoTextureCoverage = entities.get(item.id)!.userData.photoTextureCoverage ?? 0;
+    if (structured) {
+      root.userData.representation = "photo_informed_parametric";
+      root.userData.visualLabel = entities.get(item.id)!.userData.visualLabel;
+    }
     root.position.fromArray(item.position); root.rotation.y = item.rotationY; root.updateMatrixWorld(true);
     root.attach(entities.get(item.id)!);
     root.traverse((child) => { if (child instanceof THREE.Mesh) { child.castShadow = true; child.receiveShadow = true; } });
     furniture.set(item.id, root);
   }
-  return { shell, furniture, walls, projectedEntities: projected };
+  return { shell, furniture, walls, projectedEntities: projected, representation: structured ? "photo_informed_parametric" as const : "photo_projected" as const };
 }
 
 
 export type CapturedRoomBinding = { jobId: string; inputSha256: string };
-const MAX_CAPTURED_VERTICES = 900_000;
-const MAX_CAPTURED_TRIANGLES = 300_000;
+const MAX_CAPTURED_VERTICES = 1_800_000;
+const MAX_CAPTURED_TRIANGLES = 600_000;
 
 /** A captured camera pose is optional, but both points must be finite metric triples. */
 export function capturedCameraPose(metadata: Record<string, unknown>): { position: [number, number, number]; target: [number, number, number] } | null {
@@ -235,7 +264,7 @@ export function capturedCameraPose(metadata: Record<string, unknown>): { positio
 
 /** The observed mesh is a separate, local reference, never editable furniture. */
 export function validateLocalCapturedGlb(bytes: ArrayBuffer, plan: RoomPlan, binding: CapturedRoomBinding) {
-  const raw = validateLocalTexturedGlb(bytes);
+  const raw = inspectLocalGlb(bytes, capturedLimits);
   const metadata = record(record(array(raw.scenes, 1)[0]).extras);
   if (metadata.captureRepresentation !== "observed_surface_mesh" || metadata.projectId !== plan.projectId
     || metadata.inputRevision !== String(plan.revision) || metadata.jobId !== binding.jobId
@@ -253,7 +282,7 @@ export function validateLocalCapturedGlb(bytes: ArrayBuffer, plan: RoomPlan, bin
     if (size % 3) fail("captured mesh has incomplete triangles.");
     triangles += size / 3;
   }
-  if (!vertices || vertices > MAX_CAPTURED_VERTICES || !triangles || triangles > MAX_CAPTURED_TRIANGLES) fail("captured mesh exceeds the 900k exported vertex / 300k triangle budget.");
+  if (!vertices || vertices > MAX_CAPTURED_VERTICES || !triangles || triangles > MAX_CAPTURED_TRIANGLES) fail("captured mesh exceeds the 1.8m exported vertex / 600k triangle budget.");
   return metadata;
 }
 

@@ -71,7 +71,8 @@ def _sha256(path: Path) -> str:
 
 def generate(request_path: Path, output_path: Path, *, blender: str | None = None,
              timeout: float = 120, preview: bool = False,
-             photo_bundle: Path | None = None) -> dict:
+             photo_bundle: Path | None = None,
+             design_profile: Path | None = None) -> dict:
     """Publish a complete fresh artifact directory, or leave no final directory.
 
     Caller supplies trusted output/configuration paths. Input JSON never chooses
@@ -79,6 +80,8 @@ def generate(request_path: Path, output_path: Path, *, blender: str | None = Non
     """
     request, request_bytes = _request_source(request_path)
     source_request_sha256 = hashlib.sha256(request_bytes).hexdigest()
+    if design_profile is not None and photo_bundle is None:
+        raise GeometryError("A visual design profile requires its original matching photo bundle")
     if isinstance(timeout, bool) or not math.isfinite(timeout) or timeout <= 0:
         raise PipelineError("Timeout must be a positive finite number of seconds")
     binary = resolve_blender(blender)
@@ -103,6 +106,15 @@ def generate(request_path: Path, output_path: Path, *, blender: str | None = Non
             from reconstruction.roomplan.texture_source import prepare_texture_source
             source = prepare_texture_source(Path(photo_bundle), request, photo_sources)
             command.extend(["--photo-source", str(source)])
+            if design_profile is not None:
+                from reconstruction.design_profile import read_design_profile
+                source_metadata = json.loads(source.read_text())
+                design = read_design_profile(design_profile, request, source_metadata["photos"])
+                if {item["itemId"] for item in design["items"]} != {item["id"] for item in request.get("items", [])}:
+                    raise GeometryError("Structured room rendering requires a visual binding for every captured item")
+                profile_path = staging / "visual-design.input.json"
+                profile_path.write_text(json.dumps(design, sort_keys=True, indent=2, allow_nan=False) + "\n")
+                command.extend(["--design-profile", str(profile_path)])
         if preview:
             command.append("--preview")
         log_path = staging / "worker.log"
@@ -117,7 +129,7 @@ def generate(request_path: Path, output_path: Path, *, blender: str | None = Non
             raise PipelineError(f"Blender failed (exit {process.returncode}):\n{tail}")
         metadata = json.loads((staging / "worker-result.json").read_text())
         if photo_bundle is not None:
-            if not isinstance(metadata.get("photoTexturing", metadata.get("surfaceReconstruction")), dict):
+            if not isinstance(metadata.get("photoTexturing", metadata.get("surfaceReconstruction", metadata.get("visualDesign"))), dict):
                 raise PipelineError("Photo texturing was requested but the worker produced no coverage report")
             # The original archive stays with its caller. All render textures
             # must already be packed into both portable artifacts.
@@ -145,8 +157,10 @@ def generate(request_path: Path, output_path: Path, *, blender: str | None = Non
         if request.get("items") and not metadata.get("surfaceReconstruction"):
             warnings.append("Existing furniture is represented by separate sensor-size proxies, not exact textured meshes or merchant products.")
         if photo_bundle is not None:
-            report_key = "surfaceReconstruction" if metadata.get("surfaceReconstruction") else "photoTexturing"
-            report = staging / ("surface-reconstruction.json" if report_key == "surfaceReconstruction" else "photo-texturing.json")
+            report_key = ("visualDesign" if metadata.get("visualDesign") else
+                          "surfaceReconstruction" if metadata.get("surfaceReconstruction") else "photoTexturing")
+            report = staging / {"visualDesign": "visual-design.json", "surfaceReconstruction": "surface-reconstruction.json",
+                                "photoTexturing": "photo-texturing.json"}[report_key]
             if not report.is_file() or report.is_symlink():
                 raise PipelineError("Photo texturing coverage report is missing")
             files[report_key] = {
@@ -157,6 +171,14 @@ def generate(request_path: Path, output_path: Path, *, blender: str | None = Non
             warnings.extend(metadata[report_key].get("warnings", []))
             if report_key == "surfaceReconstruction":
                 warnings = ["The visible model preserves observed LiDAR surfaces; RoomPlan planning proxies remain separate in the Blender file."] + metadata[report_key].get("warnings", [])
+            elif report_key == "visualDesign":
+                warnings = list(metadata[report_key].get("warnings", []))
+                profile_path = staging / "visual-design.input.json"
+                files["visualDesignInput"] = {
+                    "assetId": f"{request['projectId']}:{request['jobId']}:visualDesignInput",
+                    "fileName": profile_path.name, "mediaType": "application/json",
+                    "byteLength": profile_path.stat().st_size, "sha256": _sha256(profile_path),
+                }
         if any(e["dimensionStatus"] == "inferred" for e in request["evidence"]):
             warnings.append("Some evidence is inferred; user confirmation does not turn it into a physical measurement.")
         manifest = {

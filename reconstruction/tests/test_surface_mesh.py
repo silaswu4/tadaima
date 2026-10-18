@@ -2,6 +2,7 @@
 from copy import deepcopy
 import hashlib
 import json
+import math
 from pathlib import Path
 import stat
 import struct
@@ -164,6 +165,63 @@ class SurfaceMeshTests(unittest.TestCase):
             self.assertEqual((path.parent / "mesh.json").read_bytes(), files["mesh.json"])
             self.assertEqual(stat.S_IMODE((path.parent / "mesh.json").stat().st_mode), 0o600)
 
+    def test_full_detail_budget_accepts_original_dense_topology_without_reduction(self):
+        # This exceeds both previous caps and reaches the new 600k triangle cap.
+        # A shared planar grid gives real, unique, nondegenerate triangles rather
+        # than repeated face references or mocked validation work.
+        manifest, _, mesh = mesh_bundle()
+        columns, rows = 1000, 300
+        vertices = [[x*.01,y*.01,0.] for y in range(rows+1) for x in range(columns+1)]
+        faces = []
+        for y in range(rows):
+            for x in range(columns):
+                corner = y*(columns+1)+x
+                faces.extend(([corner,corner+1,corner+columns+2],
+                              [corner,corner+columns+2,corner+columns+1]))
+        mesh["anchors"][0].update(vertices=vertices, faces=faces, classifications=[1]*len(faces))
+        result = validate_mesh(mesh, manifest)
+        self.assertIs(result, mesh)
+        self.assertEqual(len(result["anchors"][0]["vertices"]), 301301)
+        self.assertEqual(len(result["anchors"][0]["faces"]), 600000)
+        self.assertEqual(result["anchors"][0]["faces"][-1], faces[-1])
+        # The immediately lower budgets must still fail before any truncation.
+        for bound, maximum in (("MAX_VERTICES",len(vertices)-1), ("MAX_FACES",len(faces)-1)):
+            with self.subTest(bound=bound), patch("reconstruction.roomplan.mesh."+bound,maximum), self.assertRaises(RoomPlanError):
+                validate_mesh(mesh,manifest)
+        self.assertEqual(len(mesh["anchors"][0]["faces"]),600000)
+
+    def test_larger_detailed_archive_keeps_legacy_and_mesh_byte_bounds(self):
+        from reconstruction.roomplan import mesh as mesh_module, photo_bundle as bundle_module
+        self.assertEqual(mesh_module.MAX_MESH_BYTES,96*1024*1024)
+        self.assertEqual(mesh_module.MAX_VERTICES,400000)
+        self.assertEqual(mesh_module.MAX_FACES,600000)
+        self.assertEqual(bundle_module.MAX_ZIP_BYTES,144*1024*1024)
+        self.assertEqual(bundle_module.LEGACY_MAX_ZIP_BYTES,36*1024*1024)
+        legacy, legacy_files = fixture()
+        legacy_length = len(archive_bytes(legacy,legacy_files))
+        manifest,files,_ = mesh_bundle()
+        with patch("reconstruction.roomplan.photo_bundle.LEGACY_MAX_ZIP_BYTES",legacy_length-1):
+            with self.assertRaisesRegex(RoomPlanError,"legacy ZIP"):
+                self.read(legacy,legacy_files)
+            self.assertIn("mesh",self.read(manifest,files))
+        with patch("reconstruction.roomplan.photo_bundle.MAX_ZIP_BYTES",len(archive_bytes(manifest,files))-1):
+            with self.assertRaisesRegex(RoomPlanError,"ZIP exceeds"):
+                self.read(manifest,files)
+        with patch("reconstruction.roomplan.photo_bundle.MAX_MESH_BYTES",len(files["mesh.json"])-1):
+            with self.assertRaises(RoomPlanError):
+                self.read(manifest,files)
+
+    def test_mesh_budgets_aggregate_across_individually_valid_anchors(self):
+        manifest,_,mesh = mesh_bundle()
+        other = deepcopy(mesh["anchors"][0])
+        other["id"] = "mesh-00000000-0000-4000-8000-000000000002"
+        mesh["anchors"].append(other)
+        for bound, maximum in (("MAX_VERTICES",7),("MAX_FACES",3)):
+            # Each anchor individually fits; accepting both would bypass the
+            # total budget by splitting one scan into multiple anchors.
+            with self.subTest(bound=bound), patch("reconstruction.roomplan.mesh."+bound,maximum), self.assertRaisesRegex(RoomPlanError,"total vertex or triangle"):
+                validate_mesh(mesh,manifest)
+
     @unittest.skipUnless(BLENDER, "Set BLENDER_BIN for observed mesh and real JPEG projection")
     def test_actual_blender_nonbox_observed_geometry_photo_pixels_and_portability(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -177,6 +235,12 @@ class SurfaceMeshTests(unittest.TestCase):
             # and packed outputs must survive private staging cleanup.
             root = Path(temporary)
             manifest, files, _ = mesh_bundle()
+            # A rotated irregular chunk needs exact referenced-vertex bounds,
+            # rather than transformed local bounding-box corners.
+            rotated = mesh_fixture(manifest)
+            cosine, sine = math.cos(.41), math.sin(.41)
+            rotated["anchors"][0]["transform"] = [cosine,0,-sine,0,0,1,0,0,sine,0,cosine,0,.4,1.25,-.2,1]
+            attach_mesh(manifest, files, rotated)
             photo = manifest["photos"][0]
             photo_data = (root / "synthetic-camera.jpg").read_bytes()
             files[photo["path"]] = photo_data

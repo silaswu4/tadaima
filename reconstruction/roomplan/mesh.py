@@ -3,10 +3,10 @@ from __future__ import annotations
 
 import re
 
-MAX_MESH_BYTES = 48 * 1024 * 1024
+MAX_MESH_BYTES = 96 * 1024 * 1024
 MAX_ANCHORS = 128
-MAX_VERTICES = 200_000
-MAX_FACES = 300_000
+MAX_VERTICES = 400_000
+MAX_FACES = 600_000
 _ANCHOR_ID = re.compile(r"mesh-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 
 
