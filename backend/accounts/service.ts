@@ -2,7 +2,8 @@ import "server-only";
 
 import type { Evidence, FurnitureCategory, PlacedItem, ProductCandidate, RoomPlan } from "@/backend/contracts";
 import { applyPlanChanges, getProject } from "@/backend/plan/operations";
-import { demoPlan } from "@/backend/fixtures/demo-room";
+import { demoPlan, realCatalog } from "@/backend/fixtures/demo-room";
+import { getTadaimaRooms } from "@/spatial/fixtures/roomsCatalog";
 import { costOf, validate } from "@/backend/plan/rules";
 import { accountKv, createPlan, getPlan, savePlan } from "@/backend/plan/store";
 
@@ -72,12 +73,39 @@ export async function listRooms(sender: string) {
   return { user, rooms: rooms.filter((r) => r !== null) };
 }
 
-/** Starts a room for an address from the prepared floor plan, as an unconfirmed draft. */
-export async function createRoom(sender: string, address: string, unit: string | null, label = "Living room") {
+/** The demo rooms from the website's room gallery, usable as a starting room in chat. */
+export function roomTemplates() {
+  return getTadaimaRooms().map((r) => {
+    const xs = r.plan.geometry.rooms[0]?.floorPolygon.map((p) => p[0]) ?? [0];
+    const zs = r.plan.geometry.rooms[0]?.floorPolygon.map((p) => p[1]) ?? [0];
+    return {
+      slug: r.slug,
+      label: r.label,
+      widthM: Math.round((Math.max(...xs) - Math.min(...xs)) * 10) / 10,
+      depthM: Math.round((Math.max(...zs) - Math.min(...zs)) * 10) / 10,
+      itemCount: r.plan.items.length,
+    };
+  });
+}
+
+function templatePlan(slug: string | null): RoomPlan {
+  if (!slug) return structuredClone(demoPlan);
+  const room = getTadaimaRooms().find((r) => r.slug === slug);
+  if (!room) throw new AccountError(`no demo room ${slug}`);
+  const plan = structuredClone(room.plan);
+  // every room shops the same real retailer catalog
+  const known = new Set(plan.products.map((p) => p.id));
+  return { ...plan, products: [...plan.products, ...realCatalog.filter((p) => !known.has(p.id))] };
+}
+
+/** Starts a room as an unconfirmed draft: from the prepared floor plan for an address, or from a demo room. */
+export async function createRoom(sender: string, address: string, unit: string | null, label = "Living room", template: string | null = null) {
   const user = await userForSender(sender);
   if (!user) throw new AccountError("no account for this chat yet");
   const projectId = id("proj_u");
-  const plan: RoomPlan = { ...structuredClone(demoPlan), projectId, revision: 1 };
+  const base = templatePlan(template);
+  const plan: RoomPlan = { ...base, projectId, revision: 1, constraints: { ...base.constraints, clearance: base.constraints.clearance ?? 0.3 } };
+  if (template) label = getTadaimaRooms().find((r) => r.slug === template)!.label;
   if (!(await createPlan(plan))) throw new AccountError("room id collision, try again");
   const room: Room = { projectId, userId: user.id, label, address, unit, status: "draft", style: null, createdAt: new Date().toISOString() };
   await accountKv.set(`room:${projectId}`, room);

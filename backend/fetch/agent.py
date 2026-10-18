@@ -804,14 +804,38 @@ async def onboard_start(ctx: Context, sender: str):
     ))
 
 
+def public_url(path: str) -> str | None:
+    base = os.getenv("PUBLIC_URL") or ""
+    return base.rstrip("/") + path if base.startswith("https://") else None
+
+
+async def demo_rooms_card() -> MetadataContent | None:
+    try:
+        templates = (await api("GET", "/api/agent/rooms"))["templates"]
+    except (BackendError, Rejected):
+        return None
+    items = [
+        CarouselItem(
+            id=t["slug"], image=public_url(f"/rooms/renders/{t['slug']}.jpg"), title=t["label"],
+            subtitle=f"{t['widthM']:.1f} x {t['depthM']:.1f} m", secondary_text=f"{t['itemCount']} pieces already in it",
+            primary_cta=CtaAction(label="Use this room", primary=True, selection={"action": "demo_room", "slug": t["slug"]}),
+        )
+        for t in templates
+    ]
+    return create_card_content(CarouselCardPayload(title="Or try a demo room", items=items[:10]), card_id=uuid4()) if items else None
+
+
 async def ask_address(ctx: Context, sender: str, lead: str):
     await ctx.send(sender, msg(
-        lead + " Where's the place? I'll pull up its floor plan.",
+        lead + " Type your address and I'll pull up its floor plan, or pick one of our demo rooms below to try things out.",
         form_card("Your place", [
             {"name": "address", "kind": "text", "label": "Street address", "required": True, "placeholder": "1234 Westwood Blvd, Los Angeles, CA"},
             {"name": "unit", "kind": "text", "label": "Unit (optional)", "placeholder": "4B"},
         ], "Find my room", "address"),
     ))
+    card = await demo_rooms_card()
+    if card:
+        await ctx.send(sender, msg(card))
 
 
 async def onboard_profile(ctx: Context, sender: str, sel: dict | None, text: str):
@@ -849,13 +873,19 @@ def setup_form(plan: dict) -> MetadataContent:
 
 
 async def onboard_address(ctx: Context, sender: str, sel: dict | None, text: str):
-    address = ((sel or {}).get("address") or text or "").strip()
-    unit = ((sel or {}).get("unit") or "").strip() or None
+    template = (sel or {}).get("slug") if (sel or {}).get("action") == "demo_room" else None
+    address = "Demo room" if template else ((sel or {}).get("address") or text or "").strip()
+    unit = None if template else ((sel or {}).get("unit") or "").strip() or None
     if len(address) < 3:
-        return await ctx.send(sender, msg("What's the street address? A unit number helps too."))
-    created = await api("POST", "/api/agent/rooms", {"sender": sender, "address": address, "unit": unit})
+        return await ctx.send(sender, msg("What's the street address? A unit number helps too. Or pick a demo room."))
+    created = await api("POST", "/api/agent/rooms", {"sender": sender, "address": address, "unit": unit, "template": template})
     room, plan = created["room"], created["plan"]
-    set_conv(ctx, sender, step="confirm", projectId=room["projectId"])
+    set_conv(ctx, sender, step="confirm", projectId=room["projectId"], template=template)
+    if template:
+        render = public_url(f"/rooms/renders/{template}.jpg")
+        walk = public_url(f"/rooms/{template}")
+        intro = (f"![{room['label']}]({render})\n\n" if render else "") + f"Here's the **{room['label']}**{room_size(plan)}." + (f" [Walk it in 3D]({walk})." if walk else "")
+        return await ctx.send(sender, msg(intro + "\n\nTell me what's yours and what you're working with.", setup_form(plan)))
     budget = plan["constraints"].get("budget")
     where = address + (f", unit {unit}" if unit else "")
     openings = plan["geometry"].get("openings", [])
