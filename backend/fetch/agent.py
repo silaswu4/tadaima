@@ -26,6 +26,8 @@ import brain
 import checkout
 from payments import PaymentsUnavailable, StripeError, handle_chat_confirmation, on_paid, payment_protocol, request_fee
 from viz import images_enabled, plan_image_url, proposal_image_url
+from protocols import FitRequest, FitVerdict, ResearchRequest, fit_protocol
+import scout_client
 from uagents import Agent, Context, Protocol
 from uagents_core.contrib.protocols.chat import (
     ChatAcknowledgement,
@@ -55,6 +57,8 @@ BACKEND = os.getenv("BACKEND_URL", "http://localhost:3000").rstrip("/")
 BYPASS = os.getenv("VERCEL_PROTECTION_BYPASS")
 # Shared secret for /api/agent/* (acts on behalf of a sender). Matches AGENT_API_KEY on the backend.
 AGENT_API_KEY = os.getenv("AGENT_API_KEY")
+# the tadaima-fitcheck agent, asked about doorways and delivery
+FITCHECK = os.getenv("FITCHECK_ADDRESS", "agent1qw8a0tffhe420xzu7ultv2naf8k80dkwndq79pnn2ha84v0aam906uprl6v")
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 agent = Agent(
@@ -534,7 +538,7 @@ def tools_for(ctx: Context, sender: str, project: str) -> dict:
 
     async def search_products(a):
         spot = await spot_of(project, a)
-        body = {"category": a["category"], "spot": spot, "maxPriceUsd": a.get("max_price_usd"), "request": a.get("style"), "live": a.get("live", True)}
+        body = {"category": a["category"], "spot": spot, "maxPriceUsd": a.get("max_price_usd"), "request": a.get("style"), "live": False}
         job = await api("POST", f"/api/projects/{project}/shop", body, timeout=60)
         out = job.get("output") or {}
         results = out.get("results", [])
@@ -575,6 +579,42 @@ def tools_for(ctx: Context, sender: str, project: str) -> dict:
     async def lock_item(a):
         return json.dumps(await change(ctx, sender, project, [{"kind": "lock", "itemId": a["item_id"], "locked": bool(a["locked"])}], "Locked." if a["locked"] else "Unlocked."))
 
+    async def hire_scout(a):
+        spot = await spot_of(project, a)
+        plan = (await api("GET", f"/api/projects/{project}"))["plan"]
+        near = by_id(plan["items"]).get(a.get("near_item_id") or "")
+        dims = (near or {}).get("dimensions")
+        req = ResearchRequest(
+            request_id=f"rr_{uuid4().hex[:12]}", category=a["category"], query=a.get("style") or a["category"],
+            max_price_usd=a.get("max_price_usd"), max_width_m=round(dims[0] + 0.3, 2) if dims else None,
+            merchants=a.get("merchants") or ["IKEA", "Target"], limit=4,
+        )
+        await ctx.send(sender, msg(f"Hiring the **Scout** agent to check {' and '.join(req.merchants)} live (paid per search in testnet FET). Takes about 2 to 4 minutes; I'll post what fits."))
+        asyncio.create_task(scout_and_show(ctx, sender, project, req, spot, a.get("near_item_id")))
+        return json.dumps({"hired": True, "request_id": req.request_id, "note": "results post to the chat when Scout finishes"})
+
+    async def check_delivery(a):
+        plan = (await api("GET", f"/api/projects/{project}"))["plan"]
+        products = by_id(plan["products"])
+        item = by_id(plan["items"]).get(a.get("item_id") or "")
+        product = products.get(a.get("product_id") or "") or (products.get(item.get("productId") or "") if item else None)
+        dims = (product or {}).get("dimensions") or (item or {}).get("dimensions")
+        label = (product or item or {}).get("label", "that piece")
+        if not dims:
+            return json.dumps({"error": f"no size known for {label}"})
+        rid = f"fit_{uuid4().hex[:12]}"
+        await ctx.send(sender, msg(f"Asking the **Fit Check** agent whether {label} gets through your door..."))
+        reply, _status = await ctx.send_and_receive(FITCHECK, FitRequest(
+            request_id=rid, dimensions_wdh_m=list(dims), door_width_m=a.get("door_width_m"), door_height_m=a.get("door_height_m"),
+            ceiling_m=(plan["geometry"]["rooms"] or [{}])[0].get("height"),
+        ), response_type=FitVerdict, timeout=30)
+        if not isinstance(reply, FitVerdict) or reply.request_id != rid:
+            await ctx.send(sender, msg("Fit Check didn't answer in time, so I can't say for sure. Measure the narrowest doorway and I'll ask again."))
+            return json.dumps({"error": "fit check timed out"})
+        head = {"yes": "Yes, it should get in.", "no": "No, it won't get through as is.", "unknown": "Too close to call."}[reply.fits]
+        await ctx.send(sender, msg(f"**Fit Check:** {head}\n" + "\n".join(f"- {r}" for r in reply.reasons)))
+        return json.dumps({"fits": reply.fits, "reasons": reply.reasons})
+
     async def show_cart(_a):
         await cart(ctx, sender, project)
         return "shown to the shopper"
@@ -582,8 +622,36 @@ def tools_for(ctx: Context, sender: str, project: str) -> dict:
     return {
         "get_room": get_room, "show_room": show, "propose_change": propose_change, "apply_proposal": apply_proposal,
         "search_products": search_products, "place_product": place_product, "move_item": move_item, "put_away": put_away,
-        "set_constraints": set_constraints, "lock_item": lock_item, "show_cart": show_cart,
+        "set_constraints": set_constraints, "lock_item": lock_item, "show_cart": show_cart, "check_delivery": check_delivery,
+        "hire_scout": hire_scout,
     }
+
+
+async def scout_and_show(ctx: Context, sender: str, project: str, req: ResearchRequest, spot: dict, replace_item_id: str | None):
+    """Scout researches live; its finds join the room's catalog and are fit-checked at the spot before they're offered."""
+    async def progress(stage: str):
+        await ctx.send(sender, msg(f"Scout: {stage}"))
+
+    try:
+        result = await scout_client.hire_scout(ctx, req, on_progress=progress)
+        if not result.ok or not result.products:
+            return await ctx.send(sender, msg(f"Scout came back empty ({result.error or 'nothing matched'}). The catalog picks still stand."))
+        await api("POST", f"/api/agent/rooms/{project}/products", {"source": "Scout agent", "products": [{
+            "id": p.id, "category": p.category or req.category, "merchant": p.merchant, "label": p.label, "sourceUrl": p.source_url,
+            "imageUrl": p.image_url, "priceUsd": p.price_usd, "dimensions": p.dimensions_wdh_m, "seats": p.seats,
+            "availability": p.availability if p.availability in ("available", "unavailable", "unknown") else "unknown",
+            "observedAt": p.observed_at or "",
+        } for p in result.products]})
+        job = await api("POST", f"/api/projects/{project}/shop", {"category": req.category, "spot": spot, "maxPriceUsd": req.max_price_usd, "request": req.query, "live": False})
+        ids = {p.id for p in result.products}
+        mine = [r for r in (job.get("output") or {}).get("results", []) if r["product"]["id"] in ids]
+        fits = [r for r in mine if r["fits"]]
+        links = "\n".join(f"- [{p.label}]({p.source_url}): {'$%.0f' % p.price_usd if p.price_usd else 'price unknown'}" for p in result.products)
+        head = f"Scout found {len(result.products)} live; {len(fits)} fit your room there." + ("" if fits else " None fit at that spot, here they are anyway:")
+        await ctx.send(sender, msg(head + "\n" + links, result_card(mine, job["id"], spot, replace_item_id, "Found live by Scout")))
+    except Exception as e:  # a background task: say what happened instead of going quiet
+        ctx.logger.exception("scout task failed")
+        await ctx.send(sender, msg(f"Scout ran into a problem ({type(e).__name__}). The catalog picks still stand."))
 
 
 def placed_text(r: dict, ok_text: str) -> str:
@@ -907,6 +975,8 @@ async def on_ack(ctx: Context, sender: str, m: ChatAcknowledgement):
 
 agent.include(chat, publish_manifest=True)
 agent.include(payment_protocol, publish_manifest=True)
+agent.include(fit_protocol)
+scout_client.attach(agent)
 
 if __name__ == "__main__":
     agent.run()

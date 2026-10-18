@@ -69,14 +69,13 @@ TOOLS = [
     },
     {
         "name": "search_products",
-        "description": "Search real retailer products that fit at a spot in the room. Shows the shopper a carousel of the ones that fit right away from the catalog, and keeps a live store search running that posts more results in a few minutes. Returns the top results.",
+        "description": "Search our catalog of real retailer products for ones that fit at a spot in the room. Instant; shows the shopper a carousel of those that fit. For fresh live store results, use hire_scout.",
         "input_schema": {
             "type": "object",
             "properties": {
                 "category": {"type": "string", "enum": ["sofa", "chair", "table", "desk", "storage", "bed", "rug", "lamp", "decor", "other"]},
                 "style": {"type": ["string", "null"], "description": "Style or color words, e.g. 'green velvet, mid-century'."},
                 "max_price_usd": {"type": ["number", "null"]},
-                "live": {"type": "boolean", "description": "Also browse the store live (takes minutes). Default true."},
                 **_spot,
             },
             "required": ["category"],
@@ -122,6 +121,35 @@ TOOLS = [
         "name": "lock_item",
         "description": "Lock (keep no matter what) or unlock an item.",
         "input_schema": {"type": "object", "properties": {"item_id": {"type": "string"}, "locked": {"type": "boolean"}}, "required": ["item_id", "locked"]},
+    },
+    {
+        "name": "hire_scout",
+        "description": "Hire the Scout agent to search stores live (IKEA, Target) for a piece that fits at a spot. Costs a small testnet FET fee and takes 2 to 4 minutes; results post to the chat on their own, fit-checked against the room, with Add buttons. Use after search_products when the catalog has nothing good, or when the shopper wants fresh options.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "category": {"type": "string", "enum": ["sofa", "chair", "table", "desk", "storage", "bed", "rug", "lamp", "decor", "other"]},
+                "style": {"type": ["string", "null"]},
+                "max_price_usd": {"type": ["number", "null"]},
+                "merchants": {"type": ["array", "null"], "items": {"type": "string", "enum": ["IKEA", "Target"]}},
+                **_spot,
+            },
+            "required": ["category"],
+        },
+    },
+    {
+        "name": "check_delivery",
+        "description": "Ask the Fit Check agent whether a piece (an item in the room or a product from a search) gets through the shopper's door: tries every orientation, tilting, ceiling. Shows the verdict to the shopper.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "item_id": {"type": ["string", "null"]},
+                "product_id": {"type": ["string", "null"]},
+                "door_width_m": {"type": "number", "description": "Clear door opening width in meters (convert from cm/in)."},
+                "door_height_m": {"type": ["number", "null"]},
+            },
+            "required": ["door_width_m"],
+        },
     },
     {
         "name": "show_cart",

@@ -1,6 +1,7 @@
 import "server-only";
 
-import type { PlacedItem, ProductCandidate, RoomPlan } from "@/backend/contracts";
+import type { Evidence, FurnitureCategory, PlacedItem, ProductCandidate, RoomPlan } from "@/backend/contracts";
+import { applyPlanChanges, getProject } from "@/backend/plan/operations";
 import { demoPlan } from "@/backend/fixtures/demo-room";
 import { costOf, validate } from "@/backend/plan/rules";
 import { accountKv, createPlan, getPlan, savePlan } from "@/backend/plan/store";
@@ -138,4 +139,57 @@ export async function confirmRoom(
 
 export async function getRoom(sender: string, projectId: string) {
   return (await mustOwn(sender, projectId)).room;
+}
+
+export interface ResearchedProduct {
+  id: string;
+  category: FurnitureCategory;
+  merchant: string;
+  label: string;
+  sourceUrl: string;
+  imageUrl: string | null;
+  priceUsd: number | null;
+  dimensions: [number, number, number] | null;
+  seats: number | null;
+  availability: ProductCandidate["availability"];
+  observedAt: string;
+}
+
+/** Adds live observations to the plan's catalog (one evidence record each). Products already in the catalog are skipped. */
+export async function addResearchedProducts(projectId: string, found: ResearchedProduct[], source: string) {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const { plan } = await getProject(projectId);
+    const known = new Set(plan.products.map((p) => p.id));
+    const fresh = found.filter((p) => !known.has(p.id));
+    if (!fresh.length) return { added: 0, revision: plan.revision };
+    const evidence: Evidence[] = fresh.map((p) => ({
+      id: `ev_${p.id}`.slice(0, 120),
+      sourceUrl: p.sourceUrl,
+      privateAssetId: null,
+      observedAt: p.observedAt,
+      claim: `${source} observed price, size and stock on the product page`,
+      dimensionStatus: p.dimensions ? "source_dimension" : null,
+      confirmedByUserAt: null,
+    }));
+    const products: ProductCandidate[] = fresh.map((p, i) => ({
+      id: p.id,
+      category: p.category,
+      merchant: p.merchant,
+      sourceUrl: p.sourceUrl,
+      variantId: null,
+      label: p.label,
+      dimensions: p.dimensions,
+      seats: p.seats,
+      price: p.priceUsd === null ? null : { amountMinor: Math.round(p.priceUsd * 100), currency: "USD" },
+      availability: p.availability,
+      imageUrl: p.imageUrl,
+      observedAt: p.observedAt,
+      evidenceIds: [evidence[i].id],
+      fixture: false,
+    }));
+    const r = await applyPlanChanges(projectId, plan.revision, [{ kind: "add_products", products, evidence }]);
+    if (r.ok) return { added: products.length, revision: r.plan.revision };
+    if (r.reason !== "stale_revision") throw new AccountError("couldn't add those products to the room");
+  }
+  throw new AccountError("the room kept changing, try again");
 }
