@@ -35,6 +35,9 @@ struct ScanScreen: View {
                         description: Text("RoomPlan uses the camera and LiDAR. No photos or scans are uploaded by this app."))
                 }
                 if model.phase == .review || model.phase == .exporting {
+                    if let scanName = model.scanName {
+                        Text(scanName).font(.headline).textSelection(.enabled)
+                    }
                     TextField("Room name", text: $model.roomLabel)
                         .textFieldStyle(.roundedBorder).disabled(model.isBusy)
                         .accessibilityLabel("Room name")

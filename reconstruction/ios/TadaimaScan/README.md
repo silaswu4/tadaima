@@ -11,7 +11,7 @@ The native companion is the user-approved exception to the original web-only cap
 3. Under **Signing & Capabilities**, select your Apple development team. No team, certificate, provisioning profile, or Apple account is configured in this repository. Change `dev.tadaima.scan` to an available bundle identifier if your team needs a unique identifier.
 4. Select the connected iPhone as the run destination, then Run. Allow the camera permission when prompted.
 5. Tap **Start room scan**, move slowly around one room, and follow Apple's guidance. Capture the full wall perimeter, openings, floor edges and upper wall edges. Include existing furniture from several visible angles. Tap **Finish & review** after covering the room.
-6. Review the built-in processed model. Name the room, then choose **Share scan JSON**. AirDrop or save `roomplan.json` for local worker import. **Share USDZ** creates a separate optional native reference model.
+6. Review the built-in processed model. Name the room, then choose **Share scan JSON**. AirDrop or save the timestamped JSON for local worker import. **Share USDZ** creates a separate optional native reference model.
 7. **Scan again** discards the current scan/export references and starts a fresh scan identity. Nothing is uploaded automatically.
 
 The runtime checks `RoomCaptureSession.isSupported`. Unsupported hardware and Simulator show an explanation instead of a fake scan. Camera denial has a Settings action. An active scan, permission request, post-processing operation, or export is invalidated when the app backgrounds; late callbacks cannot replace a new scan. A completed review stays available in memory until rescan or app termination. Export errors retain the current processed scan for an explicit retry.
@@ -20,7 +20,7 @@ The runtime checks `RoomCaptureSession.isSupported`. Unsupported hardware and Si
 
 New exports use `roomplan-scan/1.1`. The packet contains:
 
-- `projectId: "local-roomplan"`, a fresh safe `scan-<UUID>` job ID, revision zero, an ISO 8601 UTC capture timestamp, native room identifier and user-entered room label.
+- `projectId: "local-roomplan"`, a fresh safe `scan-<UUID>` job ID, revision zero, an ISO 8601 UTC capture timestamp, native room identifier and room label with its capture date/time.
 - Device information from `UIDevice.model` and `systemVersion`; `model` is a general device class such as `iPhone`, not a claim that the exact model was independently verified.
 - All native **walls, doors, windows and openings** with their identifiers, dimensions in meters, confidence and native parent identifier or explicit JSON `null`.
 - Sixteen transform values in **column-major order**: columns 0, 1, 2, 3. Translation occupies indices 12, 13 and 14. Native ARKit coordinates remain right-handed and Y up. No extra rotation, scaling, wall-thickness offset or scene alignment is applied by the app.
@@ -46,7 +46,7 @@ The worker remains responsible for authorization/revision checks when integrated
 
 ## Local Files and Lifecycle
 
-Exports are written under the app's private `Documents/Scans/scan-<UUID>/` directory with complete iOS file protection, private POSIX permissions and backup exclusion. JSON is written atomically. USDZ export runs on a separate actor, and only a successful current-scan export can be shared. Rescanning invalidates stale callbacks and removes the previous scan's export directory on a best-effort basis. A file already copied through the share sheet is outside the app's control. Current files can remain in the sandbox after the app exits; uninstalling the app removes its sandbox. No shared directory or backend credentials are used.
+Exports are written under the app's private `Documents/Scans/scan-<UUID>/` directory with complete iOS file protection, private POSIX permissions and backup exclusion. The review title and exported room label include the capture date/time in the phone’s timezone at capture completion. JSON and USDZ share a filesystem-safe basename, for example `living-room_2026-10-18_03-05-41-0700_ff42b20e.json` and `.usdz`. The suffix identifies the scan when multiple captures share a timestamp. Re-sharing uses the original capture time rather than the share time; the wire `capturedAt` remains ISO 8601 UTC. The editable room-name field stays separate from the appended timestamp. Private UUID directory names and scan IDs remain unchanged. JSON is written atomically. USDZ export runs on a separate actor, and only a successful current-scan export can be shared. Rescanning invalidates stale callbacks and removes the previous scan's export directory on a best-effort basis. A file already copied through the share sheet is outside the app's control. Current files can remain in the sandbox after the app exits; uninstalling the app removes its sandbox. No shared directory or backend credentials are used.
 
 `ScanCoordinator` bridges nonisolated SDK delegates to the main actor. Its only mutable cross-thread state is a lock-protected finalization gate. The app accepts `didPresent` only after the user requests completion and only for the current scan identity. Cancelled/error results and live interim room snapshots are not exported.
 

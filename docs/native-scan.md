@@ -20,7 +20,7 @@ A Safari camera page cannot invoke this native framework as a browser API. The o
 2. Name the room and start scanning. Grant camera access when requested.
 3. Walk around the room using RoomPlan's built-in guidance; include corners, walls, doors and windows.
 4. Finish the scan and inspect the resulting room preview.
-5. Share the JSON export to Files/AirDrop and transfer it to the reconstruction worker machine. Optional USDZ is a reference export.
+5. Share the timestamp-named JSON export to Files/AirDrop and transfer it to the reconstruction worker machine. Optional USDZ is a reference export.
 6. Import and validate the JSON, then generate the editable Blender scene and GLB.
 7. Review the modeled room before relying on furniture clearances. Production upload and viewer handoff are separate integration work.
 
@@ -88,3 +88,7 @@ Required device check: run on the iPhone 14 Pro, complete a real scan, export it
 ## Subsequent physical-device verification
 
 The user completed a real iPhone scan and shared its JSON and parametric USDZ. The structural JSON successfully generated the editable room and GLB. The paired USDZ allowed one-time recovery of 22 existing-object size proxies after all 12 structural wall UUIDs/transforms were matched to the JSON. This verifies the physical capture-to-reconstruction path and object recovery, not surveyed dimensional accuracy or exact textured furniture reconstruction. The new direct v1.1 object export has compile/protocol checks; a fresh v1.1 physical export remains a separate device test. Private exports and artifacts remain outside Git.
+
+## Scan naming
+
+The native review title, exported room label, and shared JSON/USDZ filenames now include the capture date/time. Filenames use the capture timezone’s numeric UTC offset and an eight-character scan-ID suffix, for example `living-room_2026-10-18_03-05-41-0700_ff42b20e.json`. The paired USDZ uses the same basename. Re-sharing a scan preserves its original capture time; `capturedAt` remains UTC in the packet. User-entered room names are sanitized only for filenames, and the underlying UUID job identity/private directory remains unchanged.

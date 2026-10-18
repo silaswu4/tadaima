@@ -1,6 +1,33 @@
 import Foundation
 import simd
 
+/// Human names use the capture's local time; wire timestamps remain UTC.
+struct ScanNames {
+    let displayName: String
+    let fileStem: String
+
+    init(roomLabel: String, capturedAt: Date, scanID: UUID, timeZone: TimeZone = .current) {
+        let trimmed = String(roomLabel.trimmingCharacters(in: .whitespacesAndNewlines).prefix(100))
+        let label = trimmed.isEmpty ? "My room" : trimmed
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.timeZone = timeZone
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss zzz"
+        displayName = label + " · " + formatter.string(from: capturedAt)
+        formatter.dateFormat = "yyyy-MM-dd_HH-mm-ssZ"
+        let timestamp = formatter.string(from: capturedAt)
+        let folded = label.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: formatter.locale)
+        let slug = folded.unicodeScalars.map { scalar -> String in
+            let allowed = (97...122).contains(scalar.value) || (48...57).contains(scalar.value)
+            return allowed ? String(scalar) : "-"
+        }.joined().split(separator: "-").joined(separator: "-")
+        let prefix = slug.isEmpty ? "room" : String(slug.prefix(40))
+        // Keep same-second scans distinct after AirDrop flattens directories.
+        fileStem = prefix + "_" + timestamp + "_" + scanID.uuidString.lowercased().prefix(8)
+    }
+}
+
 /// Data-only interchange. World transforms retain native ARKit meters/Y-up.
 struct RoomPlanPacket: Codable, Sendable {
     let schemaVersion: String

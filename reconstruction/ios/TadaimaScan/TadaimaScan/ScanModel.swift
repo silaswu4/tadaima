@@ -14,7 +14,8 @@ final class ScanModel: ObservableObject {
     @Published private(set) var cameraDenied = false
     @Published var roomLabel = "Living room"
     private(set) var room: CapturedRoom?
-    private var capturedAt: String?
+    private var capturedAt: Date?
+    private var capturedTimeZone = TimeZone.current
     private var gate: ScanGate?
     private var coordinator: ScanCoordinator?
     private let exports = ScanExportStore()
@@ -29,6 +30,11 @@ final class ScanModel: ObservableObject {
     var isBusy: Bool { [.requestingPermission, .processing, .exporting].contains(phase) }
     var surfaceCount: Int { room.map { $0.walls.count + $0.doors.count + $0.windows.count + $0.openings.count } ?? 0 }
     var objectCount: Int { room?.objects.count ?? 0 }
+    var scanName: String? {
+        guard let capturedAt else { return nil }
+        return ScanNames(roomLabel: roomLabel, capturedAt: capturedAt, scanID: scanID,
+                         timeZone: capturedTimeZone).displayName
+    }
 
     func start() async {
         guard supported, !isBusy, phase != .scanning else { return }
@@ -94,12 +100,14 @@ final class ScanModel: ObservableObject {
         let token = scanID
         phase = .exporting
         message = nil
-        let label = String(roomLabel.trimmingCharacters(in: .whitespacesAndNewlines).prefix(100))
-        let packet = ScanWire.packet(room: room, scanID: token, capturedAt: capturedAt,
-            label: label.isEmpty ? "My room" : label,
+        let names = ScanNames(roomLabel: roomLabel, capturedAt: capturedAt, scanID: token,
+                              timeZone: capturedTimeZone)
+        let packet = ScanWire.packet(room: room, scanID: token,
+            capturedAt: ISO8601DateFormatter().string(from: capturedAt), label: names.displayName,
             device: ScanDevice(model: UIDevice.current.model, systemVersion: UIDevice.current.systemVersion))
         do {
-            let url = try await exports.export(room: room, packet: packet, includeUSDZ: includeUSDZ)
+            let url = try await exports.export(room: room, packet: packet,
+                                               fileStem: names.fileStem, includeUSDZ: includeUSDZ)
             guard scanID == token, phase == .exporting else {
                 await exports.remove(scanID: token)
                 return nil
@@ -122,7 +130,8 @@ final class ScanModel: ObservableObject {
             return
         }
         room = result
-        capturedAt = ISO8601DateFormatter().string(from: Date())
+        capturedAt = Date()
+        capturedTimeZone = .current
         phase = .review
         message = nil
     }

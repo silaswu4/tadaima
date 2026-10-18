@@ -4,6 +4,28 @@ import simd
 @main
 struct PacketMappingTests {
     static func main() throws {
+        let captureDate = ISO8601DateFormatter().date(from: "2026-10-18T10:05:41Z")!
+        let captureZone = TimeZone(identifier: "America/Los_Angeles")!
+        let firstID = UUID(uuidString: "FF42B20E-147A-4E85-A3AF-BD4129D859EA")!
+        let names = ScanNames(roomLabel: "Living room", capturedAt: captureDate, scanID: firstID, timeZone: captureZone)
+        precondition(names.displayName == "Living room · 2026-10-18 03:05:41 PDT")
+        precondition(names.fileStem == "living-room_2026-10-18_03-05-41-0700_ff42b20e")
+        precondition(names.fileStem == ScanNames(roomLabel: "Living room", capturedAt: captureDate,
+            scanID: firstID, timeZone: captureZone).fileStem, "Re-sharing must retain capture time")
+        precondition(names.fileStem != ScanNames(roomLabel: "Living room", capturedAt: captureDate,
+            scanID: UUID(uuidString: "AB42B20E-147A-4E85-A3AF-BD4129D859EA")!, timeZone: captureZone).fileStem)
+        let safe = ScanNames(roomLabel: "../../ Café / Living room\n", capturedAt: captureDate,
+            scanID: firstID, timeZone: captureZone)
+        precondition(safe.fileStem.hasPrefix("cafe-living-room_"))
+        precondition(!safe.fileStem.contains("/") && !safe.fileStem.contains(".."))
+        precondition(ScanNames(roomLabel: "  ", capturedAt: captureDate, scanID: firstID,
+            timeZone: captureZone).displayName.hasPrefix("My room · "))
+        let beforeFallBack = ScanNames(roomLabel: "Room", capturedAt: ISO8601DateFormatter().date(from: "2026-11-01T08:30:00Z")!,
+            scanID: firstID, timeZone: captureZone)
+        let afterFallBack = ScanNames(roomLabel: "Room", capturedAt: ISO8601DateFormatter().date(from: "2026-11-01T09:30:00Z")!,
+            scanID: firstID, timeZone: captureZone)
+        precondition(beforeFallBack.fileStem.contains("01-30-00-0700") && afterFallBack.fileStem.contains("01-30-00-0800"))
+        print("PASS: timestamped scan names, capture timezone, stable re-share names, same-second scan IDs, safe filenames and daylight-saving offsets")
         var transform = matrix_identity_float4x4
         transform.columns.0 = SIMD4<Float>(0, 0, -1, 0)
         transform.columns.2 = SIMD4<Float>(1, 0, 0, 0)
