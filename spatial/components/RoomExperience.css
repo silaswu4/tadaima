@@ -1305,3 +1305,7 @@
 .room-x__slot-tip small { color: rgba(245, 242, 235, 0.7); font-size: 10px; }
 .room-x__slot[data-filled]:hover .room-x__slot-tip, .room-x__slot[data-filled]:focus-visible .room-x__slot-tip { opacity: 1; transform: translateX(-50%); }
 @media (max-width: 520px) { .room-x__slot { width: 36px; height: 36px; } .room-x__slot-glyph { width: 18px; height: 18px; } }
+
+/* toasts sit under the title, clear of the bottom tools and hotbar */
+.room-x__toast { top: 72px; bottom: auto; background: rgba(43, 26, 16, 0.82); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); text-overflow: ellipsis; overflow: hidden; }
+.room-x:has(.room-x__card[data-docked]) .room-x__toast { bottom: auto; }
