@@ -26,6 +26,7 @@ def main(argv=None):
     parser.add_argument("--listing-url", action="append", default=[])
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--discovery-file", type=Path, help="Explicit pre-researched/recorded discovery; bypasses Browser Use")
+    parser.add_argument("--proposal-file", type=Path, help="Hash-attested geometry handoff from Codex or another external agent; requires --discovery-file, bypasses OpenAI")
     parser.add_argument("--collect-only", action="store_true", help="Acquire evidence without model extraction")
     parser.add_argument("--rounds", type=int, choices=[1, 2], default=2)
     parser.add_argument("--research-timeout", type=float, default=240)
@@ -35,6 +36,8 @@ def main(argv=None):
     parser.add_argument("--preview", action="store_true")
     args = parser.parse_args(argv)
     try:
+        if args.proposal_file and (not args.discovery_file or args.collect_only):
+            raise ResearchError("--proposal-file requires --discovery-file and cannot be combined with --collect-only")
         request = read_json(args.input) if args.input else {
             "projectId": args.project_id, "jobId": args.job_id or "research-" + uuid.uuid4().hex[:16],
             "inputRevision": 0, "address": args.address, "unit": args.unit,
@@ -44,8 +47,12 @@ def main(argv=None):
         research = None if discovery is not None else BrowserUseResearchProvider(
             os.environ.get("BROWSER_USE_API_KEY", ""), timeout_seconds=args.research_timeout,
             max_cost_usd=args.max_cost_per_round, model=os.environ.get("BROWSER_USE_MODEL"))
-        geometry = None if args.collect_only else OpenAIGeometryProvider(
-            os.environ.get("OPENAI_API_KEY", ""), os.environ.get("OPENAI_MODEL", ""))
+        if args.proposal_file:
+            from .handoff import FileGeometryProvider
+            geometry = FileGeometryProvider(args.proposal_file)
+        else:
+            geometry = None if args.collect_only else OpenAIGeometryProvider(
+                os.environ.get("OPENAI_API_KEY", ""), os.environ.get("OPENAI_MODEL", ""))
         dossier = run(request, args.output, research_provider=research, geometry_provider=geometry,
                       discovery=discovery, collect_only=args.collect_only, research_rounds=args.rounds,
                       render_draft=args.render_draft, blender=args.blender, preview=args.preview)
@@ -57,7 +64,8 @@ def main(argv=None):
                           "downloadedAssetCount": sum(a["status"] == "downloaded" for a in dossier["assets"]),
                           "dossierPath": str(args.output.resolve() / "dossier.json"),
                           "reconstructionRequestPath": dossier.get("reconstructionRequestPath"),
-                          "draftManifestPath": dossier.get("draftManifestPath")}, allow_nan=False))
+                          "draftManifestPath": dossier.get("draftManifestPath"),
+                          "execution": dossier["execution"]}, allow_nan=False))
         return 0
     except (ResearchError, ProviderError, GeometryError, PipelineError, OSError, ValueError) as error:
         # Known exception messages avoid provider response bodies and API secrets.

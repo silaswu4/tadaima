@@ -32,4 +32,6 @@ Structured Outputs and successful parsing do not establish factual accuracy. The
 
 ## Verification
 
+For a keyless Codex-assisted run, `FileGeometryProvider` in [handoff.py](handoff.py) accepts a data-only `geometry-handoff/1.0` packet. It requires SHA-256 attestations for every cited asset and verifies them against the actual downloaded attachments before returning the proposal. It executes no code and calls no provider. Producer metadata is explicitly declared rather than verified identity. The existing grounding, geometry validation, and unconfirmed draft semantics still apply. See [keyless verification instructions](README.md#keyless-codex-verification).
+
 `python3 -m unittest reconstruction.tests.test_address_providers -v` exercises the actual request sequence and payloads with mocked HTTP transport, including cancellation, output/refusal handling, payload caps, and sanitized errors. These tests make no paid calls and do not establish live provider account access or model performance.

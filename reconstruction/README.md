@@ -1,6 +1,6 @@
 # Reconstruction · Project lead
 
-Owner: **you, the project lead**. Implemented stages: address research → private source/image bundle → vision-based geometry proposal → validated metric room geometry → editable Blender scene → standalone GLB and a revision-bound manifest. The address stage needs configured provider credentials; camera upload, calibrated photo reconstruction, and application integration remain separate work. Read [address pipeline setup and limitations](address/README.md) and [technical research and primary sources](RESEARCH.md).
+Owner: **you, the project lead**. Implemented stages: address research → private source/image bundle → vision-based geometry proposal → validated metric room geometry → editable Blender scene → standalone GLB and a revision-bound manifest. Hosted address providers need credentials; a [keyless Codex file handoff](address/README.md#keyless-codex-verification) can exercise the same validation/rendering path using inspected real evidence. Camera upload, calibrated photo reconstruction, and application integration remain separate work. Read [address pipeline setup and limitations](address/README.md) and [technical research and primary sources](RESEARCH.md).
 
 ## Requirements and quick start
 

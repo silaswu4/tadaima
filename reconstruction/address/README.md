@@ -2,7 +2,7 @@
 
 This worker implements **address + optional unit/listing URLs → Browser Use research → downloaded spatial evidence → OpenAI vision geometry proposal → local geometric validation → optional editable Blender and GLB draft**. It reuses the existing `RoomGeometry`, `Evidence`, and reconstruction worker. No new app, client provider keys, public upload directory, or generated AI Python execution is introduced.
 
-This is an implemented local/server worker, not a connected onboarding screen or deployed job service. Provider protocol and full orchestration are tested with synthetic responses. Live provider access/model performance require configured credentials; offline tests do not establish that an arbitrary apartment can be reconstructed accurately.
+This is an implemented local/server worker, not a connected onboarding screen or deployed job service. Provider protocol and full orchestration are tested with synthetic responses. A keyless file handoff also lets Codex inspect real evidence and supply a proposal to the same validation/rendering pipeline. Live hosted-provider access/model performance require configured credentials; neither passing tests nor rendering a plausible draft establishes as-built accuracy.
 
 ## Run
 
@@ -19,6 +19,8 @@ Set these in the worker's environment using your normal secret manager or local 
 | `BLENDER_BIN` | Only for `--render-draft` | Blender 4.5 LTS executable |
 
 The standalone Python CLI does **not** automatically load Next.js `.env.local`. A Node worker inherits its configured server environment. Never prefix these with `NEXT_PUBLIC_` or put them in requests, frontend code, logs, source control, or browser storage.
+
+The keyless Codex/file handoff described below bypasses both providers and requires none of these API keys.
 
 ```bash
 python3 -m reconstruction.address \
@@ -98,6 +100,25 @@ python3 -m reconstruction.address --input /private/request.json \
 ```
 
 To exercise acquisition from an explicitly pre-researched or recorded discovery object, use `--discovery-file /private/discovery.json`. Its shape is `DISCOVERY_SCHEMA` in [schema.py](schema.py). This bypasses Browser Use entirely and must not be described as a live agent run. It can be combined with `--collect-only` without provider credentials, or with OpenAI extraction. The output retains the discovery and downloaded evidence. Production Browser Use is the default when this flag is absent.
+
+### Keyless Codex verification
+
+Use Codex as the research/visual reasoning agent, then pass its **data** to this worker. This is a Codex-assisted handoff, not a hosted Browser Use/OpenAI run or an autonomous Codex subprocess.
+
+1. Have Codex research public sources and write a private `DISCOVERY_SCHEMA` result. Run `--discovery-file ... --collect-only` to download the evidence and obtain canonical source/candidate/asset IDs and SHA-256 hashes.
+2. Have Codex inspect the actual downloaded floor-plan/photo bytes and write a `geometry-handoff/1.0` JSON packet. Its exact top-level fields are `schemaVersion`, `producer` (a nonempty declaration of at most 100 characters), `assetSha256` (asset-ID → 64-character SHA-256 hex digest), and `proposal` (a complete `PROPOSAL_SCHEMA` object). Every asset cited by a claim must be attested. Use the canonical IDs from the acquired dossier, not the discovery agent's original IDs.
+3. Run the normal CLI with both handoff files and a **fresh** output directory:
+
+```bash
+python3 -m reconstruction.address --input /private/request.json \
+  --discovery-file /private/discovery.json \
+  --proposal-file /private/proposal.handoff.json \
+  --output reconstruction/output/codex-verification-001 --render-draft --preview
+```
+
+The worker reacquires public evidence, checks every attested ID against actual vision-input bytes and SHA-256, then applies the normal source/candidate/numeric-binding checks and geometric validation. A changed image, missing vision attachment, or incorrect citation fails instead of silently accepting the wrong evidence. Inputs and geometry stay data; no handoff code or commands execute. The file provider cannot repair its own proposal: revise the packet in Codex after inspecting validation failures.
+
+The dossier/CLI receipt records `execution.research = discovery_file`, `execution.geometry = file_handoff`, and `execution.declaredProducer`. The producer is a declaration, not cryptographic proof of who authored the file or that extraction was correct. This verifies a real-evidence path through the pipeline without paid API calls, while leaving hosted-provider execution and dimensional accuracy separate to verify.
 
 ```bash
 python3 -m unittest discover -s reconstruction/tests -p 'test_*.py' -v

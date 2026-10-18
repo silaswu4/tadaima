@@ -327,6 +327,9 @@ def run(raw_request, output_path, *, research_provider=None, geometry_provider=N
     (output / "assets").mkdir(mode=0o700)
     dossier = {"schemaVersion": "address-research/1.0", "status": "researching",
                "request": request, "observedAt": datetime.now(timezone.utc).isoformat(),
+               "execution": {"research": "discovery_file" if discovery is not None else "research_provider",
+                             "geometry": "not_requested" if collect_only else getattr(geometry_provider, "mode", "geometry_provider"),
+                             "declaredProducer": getattr(geometry_provider, "producer", None)},
                "reviewRequired": True, "sources": [], "candidates": [], "assets": [],
                "discoveryGaps": [], "discoveryConflicts": [], "rounds": [], "warnings": [
                    "All geometry is a proposal. Source applicability and dimensions require review.",

@@ -18,6 +18,12 @@ export interface AddressResearchReceipt extends Pick<ReconstructionRequest, "pro
   dossierPath: string;
   reconstructionRequestPath: string | null;
   draftManifestPath: string | null;
+  /** Explicitly distinguish file handoff verification from hosted provider calls. */
+  execution?: {
+    research: "discovery_file" | "research_provider";
+    geometry: "not_requested" | "file_handoff" | "geometry_provider";
+    declaredProducer: string | null;
+  };
 }
 
 export interface AddressResearchProcessor {
