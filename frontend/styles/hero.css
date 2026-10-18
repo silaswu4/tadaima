@@ -17,23 +17,25 @@
 }
 
 /* ---------- the three ways in, down the left side ---------- */
+/* one block with the wordmark: the options sit right above it, on its left edge */
+.tadaima-hero {
+  --hero-word-size: 15vw;
+}
 .tadaima-hero .hero-side {
   position: absolute;
   z-index: 3;
-  top: 50%;
-  left: max(var(--hero-left), 6vw);
-  transform: translateY(-50%);
+  bottom: calc(var(--hero-word-size) * 0.92 + 28px);
+  left: var(--hero-left);
   display: flex;
   flex-direction: column;
-  gap: 28px;
-  width: min(420px, calc(100% - 2 * var(--hero-left)));
+  width: max-content;
   /* keeps the options legible where the window light falls behind them */
   text-shadow: 0 1px 14px rgba(43, 26, 16, 0.55);
 }
 .tadaima-hero .hero-list {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 10px;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -83,7 +85,7 @@
 .tadaima-hero .hero-row__inner:focus-visible { outline: none; }
 
 /* typing an address: the row becomes an underlined field */
-.tadaima-hero .hero-row__inner.is-form { cursor: text; }
+.tadaima-hero .hero-row__inner.is-form { width: min(380px, calc(100vw - 2 * var(--hero-left))); cursor: text; }
 .tadaima-hero .hero-row__field {
   display: flex;
   flex: 1 1 auto;
@@ -117,12 +119,20 @@
 }
 .tadaima-hero .hero-row__go:focus-visible { text-decoration: underline; outline: none; }
 
+.tadaima-hero .hero-error,
+.tadaima-hero .hero-qr {
+  position: absolute;
+  left: calc(100% + 32px);
+  bottom: 0;
+}
 .tadaima-hero .hero-error {
+  width: 260px;
   font-size: 13px;
   line-height: 18px;
   color: var(--hero-sun);
 }
 .tadaima-hero .hero-qr {
+  width: 240px;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -141,7 +151,7 @@
   margin: 0;
   font-family: var(--font-display), system-ui, sans-serif;
   font-weight: 500;
-  font-size: 15vw;
+  font-size: var(--hero-word-size);
   line-height: 0.92;
   letter-spacing: -0.055em;
   color: var(--hero-fg);
@@ -235,9 +245,13 @@
 /* ---------- phone ---------- */
 @media (max-width: 809px) {
   .tadaima-hero { --hero-left: 16px; }
-  .tadaima-hero .hero-list { gap: 16px; }
+  .tadaima-hero { --hero-word-size: 21vw; }
+  .tadaima-hero .hero-list { gap: 8px; }
   .tadaima-hero .hero-row__label { font-size: 18px; line-height: 22px; }
-  .tadaima-hero .hero-word { font-size: 21vw; }
+  .tadaima-hero .hero-side { bottom: calc(var(--hero-word-size) * 0.92 + 20px); }
+  /* no room beside the options on a phone, so these open above them */
+  .tadaima-hero .hero-error,
+  .tadaima-hero .hero-qr { left: 0; bottom: calc(100% + 16px); }
 }
 
 @media (prefers-reduced-motion: reduce) {
