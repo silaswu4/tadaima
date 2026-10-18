@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import type { RoomPlan } from "../../backend/contracts";
-import { createXRMenu } from "./workspace-xr-menu";
+import { createXRMenu, XR_MENU_INK } from "./workspace-xr-menu";
 import { insideFloor } from "./window-daylight";
 
 export type WorkspaceXRSupport = { supported: boolean; reason: string };
@@ -169,7 +169,7 @@ export function createWorkspaceXR(options: WorkspaceXROptions) {
   menu.mesh.material.depthTest = false;
   hud.add(menu.mesh);
   const menuPointers = controllers.map(() => {
-    const dot = new THREE.Mesh(new THREE.CircleGeometry(.006, 16), new THREE.MeshBasicMaterial({ color: "#315c48", depthTest: false, depthWrite: false }));
+    const dot = new THREE.Mesh(new THREE.CircleGeometry(.006, 16), new THREE.MeshBasicMaterial({ color: XR_MENU_INK, depthTest: false, depthWrite: false }));
     dot.visible = false; dot.renderOrder = 22; dot.raycast = () => {};
     hud.add(dot); return dot;
   });

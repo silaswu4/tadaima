@@ -3,17 +3,37 @@ import test from "node:test";
 import * as THREE from "three";
 import { createXRMenu, XR_MENU_WIDTH, XR_MENU_HEIGHT } from "../room/workspace-xr-menu.ts";
 
-function fixture() {
+function fixture(documentOverrides = {}) {
   let draws = 0;
-  const context = new Proxy({ clearRect() { draws++; }, measureText(text) { return { width: text.length * 15 }; } }, { get: (target, key) => key in target ? target[key] : () => {} });
-  globalThis.document = { createElement: () => ({ getContext: () => context }) };
+  const fontsUsed = [];
+  const context = new Proxy({ clearRect() { draws++; }, fillText() { fontsUsed.push(this.font); }, measureText(text) { return { width: text.length * 15 }; } }, { get: (target, key) => key in target ? target[key] : () => {} });
+  globalThis.document = { createElement: () => ({ getContext: () => context }), ...documentOverrides };
   const calls = [];
   const menu = createXRMenu({ onPreviewOffer: (id) => calls.push(["preview", id]), onConfirmOffer: () => calls.push(["confirm"]), onAction: (id) => calls.push(["action", id]), onLocomotionToggle: () => calls.push(["locomotion"]), onExit: () => calls.push(["exit"]), onClose: () => calls.push(["close"]) });
   const state = { offers: [{ id: "sku:chair", label: "Chair", detail: "$99 · IKEA · catalog" }], actions: ["search-chair", "search-rug", "search-lamp", "rotate-selected", "store-selected", "cancel-preview"].map((id) => ({ id, label: id })), basketLabel: "Basket 0 · $0.00", selectedItemLabel: "Your chair", status: "Choose a piece." };
   menu.setState(state, "walk");
   const uv = (id) => { const target = menu.targets.find((item) => item.id === id); assert.ok(target, id); return new THREE.Vector2((target.x + target.width / 2) / XR_MENU_WIDTH, 1 - (target.y + target.height / 2) / XR_MENU_HEIGHT); };
-  return { menu, state, calls, uv, draws: () => draws };
+  return { menu, state, calls, uv, draws: () => draws, fontsUsed };
 }
+
+test("site fonts repaint the existing texture after loading and never repaint a disposed menu", async () => {
+  const loaded = [], finish = [];
+  const documentFonts = {
+    defaultView: { getComputedStyle: () => ({ getPropertyValue: (name) => name === "--font-display" ? '"Display Test"' : '"Body Test"' }) },
+    fonts: { load: (font) => { loaded.push(font); return new Promise((resolve) => finish.push(resolve)); } },
+  };
+  const { menu, draws, fontsUsed } = fixture(documentFonts), texture = menu.mesh.material.map, before = draws();
+  assert.ok(fontsUsed.some((font) => font.includes('"Body Test"')));
+  assert.ok(fontsUsed.some((font) => font.includes('"Display Test"')));
+  assert.equal(loaded.length, 3);
+  finish.splice(0).forEach((resolve) => resolve([]));
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(draws(), before + 1); assert.equal(menu.mesh.material.map, texture); menu.dispose();
+  const closed = fixture(documentFonts); closed.menu.dispose(); const lastDraw = closed.draws();
+  finish.forEach((resolve) => resolve([]));
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(closed.draws(), lastDraw);
+});
 
 test("VR menu has one stable texture, large contained targets and no redraw for unchanged visible content or hover", () => {
   const { menu, state, uv, draws } = fixture();
