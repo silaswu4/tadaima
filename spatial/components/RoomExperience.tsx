@@ -39,6 +39,31 @@ const CATEGORY_LABEL: Record<FurnitureCategory, string> = {
 const LOADING_STEPS = ["Laying the floor", "Raising the walls", "Placing your furniture", "Letting the light in"];
 
 /** Keys the engine listens for; held back while a panel is open so they do not act on the room. */
+const HOTBAR_SLOTS = 9;
+/** Bump to give every browser a fresh server room (v2: demo rooms start with an empty basket and nothing locked). */
+const ROOM_SESSION_VERSION = 2;
+
+/** A small line drawing per kind of piece, for inventory slots. */
+function CategoryGlyph({ category }: { category: FurnitureCategory }) {
+  const paths: Record<string, string> = {
+    sofa: "M3 13v-3a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v3M2 13h20v4H2zM4 17v2M20 17v2M6 8V6h12v2",
+    chair: "M7 4h10v8H7zM5 12h14v3H5zM6 15v5M18 15v5",
+    table: "M3 9h18M5 9v10M19 9v10M3 7h18v2H3z",
+    desk: "M3 8h18v2H3zM5 10v9M19 10v9M14 10h5v5h-5z",
+    storage: "M5 3h14v18H5zM5 9h14M5 15h14",
+    bed: "M3 18V8M3 13h18v5M21 18v-5M6 13v-2a2 2 0 0 1 2-2h3a2 2 0 0 1 2 2v2",
+    rug: "M4 6h16v12H4zM7 9h10v6H7z",
+    lamp: "M9 3h6l2 6H7zM12 9v10M8 21h8",
+    decor: "M9 4h6v3a5 5 0 1 1-6 0z",
+    other: "M4 7l8-4 8 4v10l-8 4-8-4zM4 7l8 4 8-4M12 11v10",
+  };
+  return (
+    <svg viewBox="0 0 24 24" className="room-x__slot-glyph" aria-hidden="true">
+      <path d={paths[category] ?? paths.other} />
+    </svg>
+  );
+}
+
 const ENGINE_KEYS = new Set(["g", "r", "q", "e", "w", "a", "s", "d", "delete", "backspace", "z", "enter", "arrowup", "arrowdown", "arrowleft", "arrowright"]);
 const HINT_KEY = "tadaima.walkHintSeen";
 const ROTATE_STEP = Math.PI / 4;
@@ -211,7 +236,7 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
   const [liveSearch] = useState(true);
   const [searchSpot, setSearchSpot] = useState<FloorSpot | null>(null);
   const [pendingPlacement, setPendingPlacement] = useState<{ spot: FloorSpot; revision: number; jobId?: string; swapId?: string; raiseBudgetTo?: number } | null>(null);
-  const shopping = useRoomShopping({ roomId: room.id, sourceProjectId: room.plan.projectId, persist: onPlanChange, notice: setNotice });
+  const shopping = useRoomShopping({ roomId: `${room.id}-v${ROOM_SESSION_VERSION}`, sourceProjectId: room.plan.projectId, persist: onPlanChange, notice: setNotice });
   const shoppingRef = useRef(shopping);
   useLayoutEffect(() => { shoppingRef.current = shopping; });
   const searchRef = useRef<(spot?: FloorSpot, live?: boolean) => void>(() => {});
@@ -309,11 +334,16 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
         openPanel(open[e.code as keyof typeof open]);
         return;
       }
-      const n = /^Digit([1-5])$/.exec(e.code);
-      if (n && showResultsRef.current) {
-        const result = resultsRef.current[Number(n[1]) - 1];
-        if (result) { e.preventDefault(); quickAddRef.current(result); }
+      const n = /^Digit([1-9])$/.exec(e.code);
+      if (!n) return;
+      const slot = Number(n[1]) - 1;
+      if (showResultsRef.current) {
+        const result = resultsRef.current[slot];
+        if (result && slot < 5) { e.preventDefault(); quickAddRef.current(result); }
+        return;
       }
+      const stashed = inventoryRef.current[slot];
+      if (stashed) { e.preventDefault(); carryOutRef.current(stashed); }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -332,6 +362,8 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
     return () => { document.removeEventListener("pointerlockchange", sync); window.removeEventListener("keydown", onTab); };
   }, [panel]);
   const showResultsRef = useRef(false);
+  const inventoryRef = useRef<WalkItem[]>([]);
+  const carryOutRef = useRef<(item: WalkItem) => void>(() => {});
   useLayoutEffect(() => { showResultsRef.current = showResults && !panel; });
 
   /* --- engine --- */
@@ -516,6 +548,9 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
     setNotice(`Removed ${item.label}`);
   };
 
+  /** Moving, turning or stashing your own piece by hand is all the permission it needs. */
+  const unlockFor = (item: WalkItem) => { if (item.locked) api()?.setLocked(item.id, false); };
+
   const putAway = (item: WalkItem) => {
     api()?.store(item.id);
     setNotice(`Put away ${item.label}`);
@@ -676,6 +711,7 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
     [items],
   );
   const inventory = useMemo(() => items.filter((i) => i.stored), [items]);
+  useLayoutEffect(() => { inventoryRef.current = inventory; carryOutRef.current = (item) => { try { carryOut(item); } catch (err) { setNotice(err instanceof Error ? err.message : "Couldn't pick that up."); } }; });
   const basketTotal = formatTotals(basket);
   const xrActions = useMemo(() => roomXRActions({ connected: Boolean(shopping.session), busy: blocked, pending: Boolean(pending), moving, selected }), [shopping.session, blocked, pending, moving, selected]);
   useLayoutEffect(() => {
@@ -917,15 +953,26 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
             <span>Add furniture</span>
           </button>
         </div>
-          {/* stashed pieces wait here; pick one up to carry it back into the room */}
-          <div className="room-x__dock" data-tour="inventory" role="list" aria-label="Inventory">
-            {inventory.length ? inventory.map((item) => (
-              <button key={item.id} type="button" role="listitem" className="room-x__dock-item" disabled={blocked}
-                onClick={() => safely(() => carryOut(item))} title={`Pick up ${item.label.split(",")[0]}`}>
-                <span>{item.label.split(",")[0]}</span>
-                <small>{formatDimensions(item.dimensions).split(" · ")[0]}</small>
-              </button>
-            )) : <span className="room-x__dock-empty">Inventory is empty. Select a piece and press Del to stash it.</span>}
+          {/* hotbar: stashed pieces wait in numbered slots; press the number or click to pick one up */}
+          <div className="room-x__hotbar" data-tour="inventory" role="list" aria-label="Inventory">
+            {Array.from({ length: HOTBAR_SLOTS }, (_, i) => {
+              const item = inventory[i];
+              return item ? (
+                <button key={item.id} type="button" role="listitem" className="room-x__slot" data-filled disabled={blocked}
+                  onClick={() => safely(() => carryOut(item))} aria-label={`Slot ${i + 1}: ${item.label.split(",")[0]}. Pick up`}>
+                  <CategoryGlyph category={item.category} />
+                  <span className="room-x__slot-n">{i + 1}</span>
+                  <span className="room-x__slot-tip" role="tooltip">
+                    {item.label.split(",")[0]}
+                    <small>{formatDimensions(item.dimensions).split(" · ")[0]}</small>
+                  </span>
+                </button>
+              ) : (
+                <span key={`empty-${i}`} role="listitem" className="room-x__slot" aria-label={`Slot ${i + 1}: empty`}>
+                  <span className="room-x__slot-n">{i + 1}</span>
+                </span>
+              );
+            })}
           </div>
         </div>
       ) : null}
@@ -938,23 +985,15 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
       {selected && ready && !pending && !moving ? (
         <div ref={cardRef} className="room-x__toolbar" role="toolbar" aria-label={`Edit ${selected.label}`}>
           <span className="room-x__toolbar-name">{selected.label.split(",")[0]}</span>
-          {selected.locked ? (
-            <button type="button" className="room-x__tool" onClick={() => safely(() => api()?.setLocked(selected.id, false))} aria-label="Unlock to edit" title="Locked. Unlock to edit">
-              {Icon.unlock}
-            </button>
-          ) : (
-            <>
-              <button type="button" className="room-x__tool" onClick={() => safely(() => beginMove(selected))} aria-label="Pick up and move" title="Move (G)">
-                {Icon.move}<span className="room-x__key">G</span>
-              </button>
-              <button type="button" className="room-x__tool" onClick={() => safely(() => api()?.rotate(selected.id, ROTATE_STEP))} aria-label="Rotate" title="Rotate (R)">
-                {Icon.rotate}<span className="room-x__key">R</span>
-              </button>
-              <button type="button" className="room-x__tool" onClick={() => safely(() => putAway(selected))} aria-label="Put away in inventory" title="Put away (Del)">
-                {Icon.close}<span className="room-x__key">Del</span>
-              </button>
-            </>
-          )}
+          <button type="button" className="room-x__tool" onClick={() => safely(() => { unlockFor(selected); beginMove({ ...selected, locked: false }); })} aria-label="Pick up and move" title="Move (G)">
+            {Icon.move}<span className="room-x__key">G</span>
+          </button>
+          <button type="button" className="room-x__tool" onClick={() => safely(() => { unlockFor(selected); api()?.rotate(selected.id, ROTATE_STEP); })} aria-label="Rotate" title="Rotate (R)">
+            {Icon.rotate}<span className="room-x__key">R</span>
+          </button>
+          <button type="button" className="room-x__tool" onClick={() => safely(() => { unlockFor(selected); putAway(selected); })} aria-label="Put away in inventory" title="Put away (Del)">
+            {Icon.close}<span className="room-x__key">Del</span>
+          </button>
         </div>
       ) : null}
 

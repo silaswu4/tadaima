@@ -1293,3 +1293,15 @@
 .room-x__cursor-chip { position: absolute; left: 16px; bottom: max(18px, env(safe-area-inset-bottom)); z-index: 2; margin: 0; padding: 7px 12px; border: 1px solid rgba(255, 255, 255, 0.5); border-radius: 999px; background: rgba(245, 242, 235, 0.5); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); color: var(--muted); font-size: 11px; pointer-events: none; }
 .room-x__cap-key { display: inline-block; margin: 0 2px; padding: 0 6px; border: 1px solid var(--line); border-radius: 6px; background: rgba(255, 255, 255, 0.6); color: var(--ink); font-size: 10px; line-height: 16px; }
 @media (max-width: 760px) { .room-x__cursor-chip { display: none; } }
+
+/* ---------- hotbar inventory: nine numbered slots ---------- */
+.room-x__hotbar { display: flex; gap: 4px; padding: 4px; border: 1px solid rgba(255, 255, 255, 0.5); border-radius: 14px; background: rgba(43, 26, 16, 0.18); -webkit-backdrop-filter: blur(18px) saturate(1.3); backdrop-filter: blur(18px) saturate(1.3); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35); }
+.room-x__slot { position: relative; display: grid; place-items: center; width: 48px; height: 48px; padding: 0; border: 1px solid rgba(255, 255, 255, 0.35); border-radius: 10px; background: rgba(255, 255, 255, 0.14); color: var(--paper); font: inherit; }
+.room-x__slot[data-filled] { background: rgba(255, 255, 255, 0.62); border-color: rgba(255, 255, 255, 0.85); color: var(--ink); cursor: grab; animation: room-x-stash 0.5s var(--ease) both; transition: transform 0.2s ease, background-color 0.2s ease; }
+.room-x__slot[data-filled]:hover:not(:disabled), .room-x__slot[data-filled]:focus-visible { background: rgba(255, 255, 255, 0.9); transform: translateY(-3px); outline: none; }
+.room-x__slot-glyph { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
+.room-x__slot-n { position: absolute; top: 3px; left: 5px; font-size: 9px; opacity: 0.7; }
+.room-x__slot-tip { position: absolute; bottom: calc(100% + 8px); left: 50%; display: grid; gap: 1px; padding: 6px 10px; border-radius: 8px; background: rgba(43, 26, 16, 0.88); color: var(--paper); font-size: 12px; white-space: nowrap; transform: translateX(-50%) translateY(4px); opacity: 0; pointer-events: none; transition: opacity 0.15s ease, transform 0.15s ease; }
+.room-x__slot-tip small { color: rgba(245, 242, 235, 0.7); font-size: 10px; }
+.room-x__slot[data-filled]:hover .room-x__slot-tip, .room-x__slot[data-filled]:focus-visible .room-x__slot-tip { opacity: 1; transform: translateX(-50%); }
+@media (max-width: 520px) { .room-x__slot { width: 36px; height: 36px; } .room-x__slot-glyph { width: 18px; height: 18px; } }
