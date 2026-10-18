@@ -8,6 +8,7 @@ import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
 import { RectAreaLightUniformsLib } from "three/addons/lights/RectAreaLightUniformsLib.js";
 import type { FloorSpot, PlacedItem, PointXZ, ProductCandidate, RoomPlan, Vector3Meters } from "../../backend/contracts";
 import { LIBRARY, assetFor, assetTransform, itemAsset, type LibraryModel } from "../../backend/shopping/assets";
+import { canShare } from "../../backend/plan/rules";
 import type { AddRequest, WalkCallbacks, WalkItem, WalkMode, WalkOptions, WalkProductPreview, WalkProductPreviewOptions, WalkScene } from "./walk-api";
 import { block, rug, standingLamp, surface } from "./parts";
 import { createRoomLighting, setMetricSurfaceUVs } from "./lighting";
@@ -797,14 +798,22 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
     return rooms.some((r) => footprintInside(corners, r.floorPolygon));
   }
 
+  // a floor lamp only blocks the floor its base stands on (same rule as backend collisionFootprint)
+  const base = (category: string, w: number, d: number): [number, number] => (category === "lamp" ? [Math.min(w, 0.32), Math.min(d, 0.32)] : [w, d]);
+
   function overlapsOthers(id: string, x: number, y: number, z: number, rotation: number, dims: Size) {
     if (dims[1] < FLAT_HEIGHT) return false;
-    const mine = footprint([x, 0, z], rotation, dims[0], dims[2]);
+    const me = entries.get(id)?.item ?? storedItems.get(id);
+    const [mw, md] = base(me?.category ?? "other", dims[0], dims[2]);
+    const mine = footprint([x, 0, z], rotation, mw, md);
     for (const [otherId, other] of entries) {
       if (otherId === id || other.flat) continue;
+      // chairs tuck under tables and desks, decor sits on surfaces: realistic, not solid boxes
+      if (me && canShare(me, other.item)) continue;
       const oy = other.item.position[1];
       if (y >= oy + other.dims[1] - 0.01 || oy >= y + dims[1] - 0.01) continue;
-      if (footprintsOverlap(mine, footprint(other.item.position, other.item.rotationY, other.dims[0], other.dims[2]))) return true;
+      const [ow, od] = base(other.item.category, other.dims[0], other.dims[2]);
+      if (footprintsOverlap(mine, footprint(other.item.position, other.item.rotationY, ow, od))) return true;
     }
     return false;
   }

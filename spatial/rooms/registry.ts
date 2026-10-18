@@ -7,7 +7,7 @@ const DATABASE = "tadaima-private-rooms";
 const STORE = "rooms";
 const DRAFT_STORE = "catalog-drafts";
 /** Bump when demo rooms change shape (v2: pieces are the shopper's own and unlocked), so old drafts are ignored. */
-const DRAFT_VERSION = 3;
+const DRAFT_VERSION = 4;
 const draftKey = (id: string) => `${id}@v${DRAFT_VERSION}`;
 const CHANGE_EVENT = "tadaima:rooms-changed";
 const CHANNEL = "tadaima-private-rooms";

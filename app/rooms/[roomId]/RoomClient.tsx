@@ -4,7 +4,7 @@ import { use, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import type { RoomPlan } from "@/backend/contracts";
 import { RoomExperience, type ExperienceRoom } from "@/spatial/components/RoomExperience";
-import { getTadaimaRooms, hydrateCatalogRoom } from "@/spatial/fixtures/roomsCatalog";
+import { getTadaimaRooms, hydrateCatalogRoom, withHandClearance } from "@/spatial/fixtures/roomsCatalog";
 import { getRoom, getRoomDraft, saveEditedPlan, saveRoomDraft } from "@/spatial/rooms/registry";
 
 export function RoomClient({ params }: { params: Promise<{ roomId: string }> }) {
@@ -22,7 +22,7 @@ export function RoomClient({ params }: { params: Promise<{ roomId: string }> }) 
       }
       else {
         const local = await getRoom(roomId);
-        if (local) room = { id: local.id, label: local.label, plan: local.editedPlan,
+        if (local) room = { id: local.id, label: local.label, plan: withHandClearance(local.editedPlan),
           sourceDescription: local.model ? "Measured layout · photo-informed furniture and finishes" : "Measured layout · furniture stand-ins",
           reconstruction: local.model ? { plan: local.sourcePlan, texturedModel: local.model, binding: local.binding } : undefined };
       }
