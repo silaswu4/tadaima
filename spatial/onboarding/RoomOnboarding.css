@@ -1,0 +1,290 @@
+/* Room tour. Plain prefixed classes: next.config makes every .css global. */
+
+.room-tour {
+  --tour-ink: #2b1a10;
+  --tour-muted: #8a6e4e;
+  --tour-paper: #fbf8f2;
+  --tour-well: #efe8dc;
+  --tour-line: rgba(43, 26, 16, 0.12);
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  color: var(--tour-ink);
+  font-family: var(--font-body), Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+  pointer-events: none;
+  animation: room-tour-in 0.4s ease both;
+  transition: opacity 0.28s ease;
+}
+
+.room-tour[data-closing] {
+  opacity: 0;
+}
+
+@keyframes room-tour-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* the room's own look-around hints would repeat step one */
+html[data-room-tour] .room-x__hint,
+html[data-room-tour] .room-x__cursor-chip {
+  opacity: 0 !important;
+}
+
+.room-tour .room-tour__scrim {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  fill: initial;
+  stroke: none;
+  pointer-events: auto;
+}
+
+.room-tour .room-tour__ring {
+  stroke: #fff;
+  stroke-width: 2;
+  filter: drop-shadow(0 0 10px rgba(255, 236, 200, 0.55));
+}
+
+.room-tour .room-tour__pulse {
+  stroke: #fff6e4;
+  stroke-width: 1.5;
+}
+
+/* ---------- mascot ---------- */
+
+.room-tour__mascot {
+  position: absolute;
+  left: 0;
+  top: 0;
+  will-change: transform;
+  filter: drop-shadow(0 12px 14px rgba(29, 20, 13, 0.26));
+  transition: opacity 0.18s ease;
+}
+
+.room-tour .room-tour__mascot svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  fill: initial;
+  stroke: none;
+}
+
+/* ---------- card ---------- */
+
+.room-tour__card {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: min(320px, calc(100vw - 32px));
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.room-tour__card[data-show] {
+  visibility: visible;
+  pointer-events: auto;
+}
+
+.room-tour__card-inner {
+  padding: 14px 16px 14px 18px;
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  border-radius: 20px;
+  background: var(--tour-paper);
+  box-shadow:
+    0 28px 60px -24px rgba(26, 16, 8, 0.55),
+    0 4px 14px -4px rgba(26, 16, 8, 0.18);
+  opacity: 0;
+  transform: translateY(8px) scale(0.96);
+  transform-origin: 30% 50%;
+}
+
+.room-tour__card[data-show] .room-tour__card-inner {
+  opacity: 1;
+  transform: none;
+  transition:
+    opacity 0.22s ease,
+    transform 0.46s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.room-tour__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.room-tour__dots {
+  display: flex;
+  gap: 5px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.room-tour__dots li {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(43, 26, 16, 0.16);
+  transition:
+    width 0.3s cubic-bezier(0.34, 1.56, 0.64, 1),
+    background 0.2s ease;
+}
+
+.room-tour__dots li[data-done] {
+  background: rgba(43, 26, 16, 0.4);
+}
+
+.room-tour__dots li[data-on] {
+  width: 18px;
+  background: #f0b429;
+}
+
+.room-tour__skip,
+.room-tour__back {
+  border: 0;
+  background: none;
+  color: var(--tour-muted);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.room-tour__skip {
+  margin: -6px -8px -6px 0;
+  padding: 6px 8px;
+  border-radius: 8px;
+}
+
+.room-tour__skip:hover,
+.room-tour__back:hover {
+  color: var(--tour-ink);
+}
+
+.room-tour .room-tour__title {
+  margin: 0 0 4px;
+  font-family: var(--font-display), var(--font-body), Inter, system-ui, sans-serif;
+  font-size: 17px;
+  font-weight: 650;
+  line-height: 1.2;
+  letter-spacing: -0.015em;
+}
+
+.room-tour .room-tour__body {
+  margin: 0;
+  color: #5c4632;
+  font-size: 14px;
+  line-height: 1.45;
+  text-wrap: pretty;
+}
+
+.room-tour__keys {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-right: auto;
+}
+
+.room-tour .room-tour__keys kbd {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  min-width: 22px;
+  padding: 0 7px;
+  border: 1px solid var(--tour-line);
+  border-bottom-width: 2px;
+  border-radius: 6px;
+  background: var(--tour-well);
+  color: var(--tour-ink);
+  font-family: var(--font-body), Inter, system-ui, sans-serif;
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.room-tour__foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px 8px;
+  margin-top: 12px;
+}
+
+.room-tour__nav {
+  display: flex;
+  margin-left: auto;
+  align-items: center;
+  gap: 6px;
+}
+
+.room-tour__back {
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 999px;
+  font-size: 13px;
+}
+
+.room-tour__next {
+  height: 34px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--tour-ink);
+  color: #f5f2eb;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1),
+    background 0.2s ease;
+}
+
+.room-tour__next:hover {
+  background: #3d2718;
+  transform: translateY(-1px);
+}
+
+.room-tour__next:active {
+  transform: scale(0.96);
+}
+
+.room-tour .room-tour__card :focus-visible {
+  outline: 2px solid #f0b429;
+  outline-offset: 2px;
+  box-shadow: none;
+}
+
+/* ---------- help button (place it in the top bar) ---------- */
+
+.room-tour__help {
+  justify-content: center;
+  width: 38px;
+  padding: 0 !important;
+  font-weight: 650;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .room-tour {
+    animation-duration: 0.01s;
+  }
+
+  .room-tour__card-inner,
+  .room-tour__card[data-show] .room-tour__card-inner {
+    transform: none;
+    transition: opacity 0.18s ease;
+  }
+
+  .room-tour__dots li,
+  .room-tour__next {
+    transition: none;
+  }
+}
