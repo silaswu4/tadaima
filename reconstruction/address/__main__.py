@@ -28,6 +28,9 @@ def main(argv=None):
     parser.add_argument("--discovery-file", type=Path, help="Explicit pre-researched/recorded discovery; bypasses Browser Use")
     parser.add_argument("--proposal-file", type=Path, help="Hash-attested geometry handoff from Codex or another external agent; requires --discovery-file, bypasses OpenAI")
     parser.add_argument("--collect-only", action="store_true", help="Acquire evidence without model extraction")
+    appearance = parser.add_mutually_exclusive_group()
+    appearance.add_argument("--appearance-file", type=Path, help="Hash-bound room-finish handoff; no appearance provider call")
+    appearance.add_argument("--infer-appearance", action="store_true", help="Send downloaded room photos for finish estimation")
     parser.add_argument("--rounds", type=int, choices=[1, 2], default=2)
     parser.add_argument("--research-timeout", type=float, default=240)
     parser.add_argument("--max-cost-per-round", type=float, default=2)
@@ -38,6 +41,8 @@ def main(argv=None):
     try:
         if args.proposal_file and (not args.discovery_file or args.collect_only):
             raise ResearchError("--proposal-file requires --discovery-file and cannot be combined with --collect-only")
+        if args.collect_only and (args.infer_appearance or args.appearance_file):
+            raise ResearchError("Appearance inference cannot be combined with --collect-only")
         request = read_json(args.input) if args.input else {
             "projectId": args.project_id, "jobId": args.job_id or "research-" + uuid.uuid4().hex[:16],
             "inputRevision": 0, "address": args.address, "unit": args.unit,
@@ -53,9 +58,13 @@ def main(argv=None):
         else:
             geometry = None if args.collect_only else OpenAIGeometryProvider(
                 os.environ.get("OPENAI_API_KEY", ""), os.environ.get("OPENAI_MODEL", ""))
+        appearance_provider = (OpenAIGeometryProvider(os.environ.get("OPENAI_API_KEY", ""),
+                                                    os.environ.get("OPENAI_MODEL", ""))
+                               if args.infer_appearance else None)
         dossier = run(request, args.output, research_provider=research, geometry_provider=geometry,
                       discovery=discovery, collect_only=args.collect_only, research_rounds=args.rounds,
-                      render_draft=args.render_draft, blender=args.blender, preview=args.preview)
+                      render_draft=args.render_draft, blender=args.blender, preview=args.preview,
+                      appearance_provider=appearance_provider, appearance_file=args.appearance_file)
         # Return compact receipt: full address/photos/source text stay in private files.
         print(json.dumps({"schemaVersion": dossier["schemaVersion"], "status": dossier["status"],
                           "projectId": request["projectId"], "jobId": request["jobId"],

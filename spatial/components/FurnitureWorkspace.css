@@ -230,3 +230,12 @@
   .furniture-viewActions button,
   .furniture-item { transition: color .15s ease, background-color .15s ease; }
 }
+.furniture-roomInputs { display: flex; gap: 8px; flex-wrap: wrap; margin: 20px 0 10px; }
+.furniture-roomInputs button { border: 1px solid var(--surface-deep); background: var(--surface); color: var(--ink); font: inherit; font-size: 11px; min-height: 44px; padding: 10px 14px; cursor: pointer; }
+.furniture-roomInputs button[aria-pressed="true"] { border-color: var(--accent-deep); color: var(--accent-deep); }
+.furniture-roomInputs input { display: none; }
+.furniture-intro .furniture-fileHelp { max-width: 760px; color: var(--ink-soft); font-size: 10px; line-height: 1.8; }
+.furniture-importError { color: var(--accent-deep); font-size: 11px; line-height: 1.7; }
+.furniture-appearanceNote { display: grid; gap: 7px; padding: 14px 16px; border-top: 1px solid var(--surface-deep); background: var(--surface); color: var(--ink-soft); font-size: 10px; line-height: 1.7; }
+.furniture-appearanceNote strong { color: var(--ink); font-weight: 500; }
+.furniture-appearanceNote a { color: var(--accent-deep); text-underline-offset: 3px; }

@@ -18,7 +18,9 @@ scene = bpy.context.scene
 assert scene.unit_settings.system == "METRIC"
 assert scene.unit_settings.scale_length == 1.0
 assert int(scene["inputRevision"]) == source["inputRevision"]
-textured = manifest.get("renderProfile") == "pbr-daylight-v1"
+textured = manifest.get("renderProfile") in ("pbr-daylight-v1", "pbr-window-daylight-v2")
+window_profile = manifest.get("renderProfile") == "pbr-window-daylight-v2"
+source_surfaces = {surface["entityId"]: surface for surface in source.get("appearance", {}).get("surfaces", [])}
 if textured:
     assert scene.get("renderProfile") == manifest["renderProfile"]
     assert scene.render.engine == "CYCLES", "Photoreal preview requires the path tracer"
@@ -39,6 +41,37 @@ if textured:
                 assert projected.z > 0, "Room bounds must be in front of the preview camera"
                 assert .01 <= projected.x <= .99 and .01 <= projected.y <= .99, (
                     "Preview clips room bounds: " + str(tuple(projected)))
+if window_profile:
+    lighting = manifest["lighting"]
+    assert json.loads(scene["lightingSummaryJson"]) == lighting
+    assert json.loads(scene["appearanceSummaryJson"]) == manifest["appearance"]
+    assert not any(obj.type == "LIGHT" and obj.data.type == "SUN" for obj in scene.objects), "No invented geolocated sun"
+    actual_window_lights = {obj["openingId"]: obj for obj in scene.objects if obj.type == "LIGHT" and "openingId" in obj}
+    assert set(actual_window_lights) == {item["openingId"] for item in lighting["windows"]}
+    assert len(actual_window_lights) <= 12
+    for item in lighting["windows"]:
+        opening = next(value for value in source["geometry"]["openings"] if value["id"] == item["openingId"])
+        wall = next(value for value in source["geometry"]["walls"] if value["id"] == opening["wallId"])
+        assert opening["kind"] == "window"
+        assert item["width"] == opening["width"] and item["height"] == opening["height"]
+        fraction = (opening["offset"] + opening["width"] / 2) / math.dist(wall["start"], wall["end"])
+        expected_center = [wall["start"][0] + fraction * (wall["end"][0] - wall["start"][0]),
+                           opening["sillHeight"] + opening["height"] / 2,
+                           wall["start"][1] + fraction * (wall["end"][1] - wall["start"][1])]
+        assert max(abs(a - b) for a, b in zip(expected_center, item["center"])) < 1e-7
+        obj = actual_window_lights[item["openingId"]]
+        assert obj.data.type == "AREA" and obj.data.shape == "RECTANGLE"
+        assert abs(obj.data.size - opening["width"]) < 1e-5 and abs(obj.data.size_y - opening["height"]) < 1e-5
+        expected_position = Vector((item["position"][0], -item["position"][2], item["position"][1]))
+        assert (obj.location - expected_position).length < 1e-5
+        inward = Vector((item["inward"][0], -item["inward"][2], item["inward"][1]))
+        emitted = obj.matrix_world.to_quaternion() @ Vector((0, 0, -1))
+        assert emitted.dot(inward) > .99999, "Window light must face into the room"
+        vertical_axis = obj.matrix_world.to_quaternion() @ Vector((0, 1, 0))
+        assert abs(vertical_axis.z) > .99999, "Rectangular window light height must stay vertical"
+        center = Vector((item["center"][0], -item["center"][2], item["center"][1]))
+        assert (center - obj.location).dot(inward) > wall["thickness"] / 2, "Source must sit outside wall"
+    assert bool(actual_window_lights) == (lighting["mode"] == "window_daylight")
 entities = {obj["entityId"]: obj for obj in scene.objects if "entityId" in obj}
 assert len(entities) == len(manifest["objects"])
 for item in manifest["objects"]:
@@ -70,9 +103,20 @@ for obj in entities.values():
                 assert images and all(image and image.packed_file for image in images), "Material maps must be packed"
                 assert any(node.type == "NORMAL_MAP" and node.inputs["Color"].is_linked for node in material.node_tree.nodes), "Use a tangent-space normal map"
                 assert any(image.colorspace_settings.name == "Non-Color" for image in images), "Normal maps are linear data"
-                if obj["role"] == "room_floor":
-                    assert shaders[0].inputs["Base Color"].is_linked, "Floor needs a base-color texture"
-                    assert shaders[0].inputs["Roughness"].is_linked, "Floor needs a roughness texture"
+                spec = source_surfaces.get(obj["entityId"])
+                expected_finish = spec["finish"] if spec else ("wood" if obj["role"] == "room_floor" else "paint")
+                if window_profile:
+                    assert obj["finish"] == material["finish"] == expected_finish
+                    assert obj["appearanceStatus"] == ("photo_estimate" if spec else "styling_default")
+                    if spec and expected_finish != "wood":
+                        encoded = [int(spec["color"][index:index + 2], 16) / 255 for index in (1, 3, 5)]
+                        expected_color = [value / 12.92 if value <= .04045 else ((value + .055) / 1.055) ** 2.4 for value in encoded]
+                        actual_color = shaders[0].inputs["Base Color"].default_value
+                        assert max(abs(a - b) for a, b in zip(expected_color, actual_color)) < 1e-6
+                        assert abs(shaders[0].inputs["Roughness"].default_value - spec["roughness"]) < 1e-6
+                if expected_finish == "wood":
+                    assert shaders[0].inputs["Base Color"].is_linked, "Wood needs a base-color texture"
+                    assert shaders[0].inputs["Roughness"].is_linked, "Wood needs a roughness texture"
                     assert any(image.colorspace_settings.name == "sRGB" for image in images), "Base color uses sRGB"
 for wall in source["geometry"]["walls"]:
     obj = entities[wall["id"]]

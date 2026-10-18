@@ -52,6 +52,28 @@ export interface RoomGeometry {
   }>;
 }
 
+/** Photo-derived styling, independent of geometry and never a measured BRDF. */
+export interface RoomAppearance {
+  schemaVersion: "room-appearance/1.0";
+  reviewRequired: true;
+  /** Building gallery photos must not silently become exact-unit evidence. */
+  scope: "captured_room" | "exact_unit" | "building_reference" | "unknown";
+  sources: Array<{ evidenceId: string; sha256: string }>;
+  surfaces: Array<{
+    /** Room ID for a floor; wall ID for a wall. Unlisted surfaces keep defaults. */
+    entityId: string;
+    finish: "wood" | "paint" | "tile" | "carpet";
+    /** Display sRGB hex; wood multiplies the proxy oak map, others are plain color. */
+    color: string;
+    roughness: number;
+    tileMeters: number;
+    rotationDegrees: number;
+    confidence: "low" | "medium" | "high";
+    evidenceIds: string[];
+  }>;
+  notes: string[];
+}
+
 export interface ProductCandidate {
   id: string;
   merchant: string;
@@ -84,6 +106,7 @@ export interface RoomPlan {
   projectId: string;
   revision: number;
   geometry: RoomGeometry;
+  appearance?: RoomAppearance;
   evidence: Evidence[];
   items: PlacedItem[];
   products: ProductCandidate[];

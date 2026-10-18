@@ -7,7 +7,7 @@ Owner: **Silas**. Build the browser-based 3D viewer and Quest 3S interaction lay
 - [`components/FurnitureWorkspace.tsx`](components/FurnitureWorkspace.tsx): responsive furniture workspace at `/room`, with explode/return, camera reset, selectable inventory, loading/error states, and model dimensions. The ASCII homepage and old pencil viewer are preserved.
 - [`room/workspace-scene.ts`](room/workspace-scene.ts): lazy Three.js cutaway renderer, GLB loading with Meshopt, orbit/pan/zoom, raycast selection, camera framing, reduced motion, and GPU cleanup. `createFurnitureWorkspace(canvas, callbacks, options)` accepts an optional canonical `RoomPlan`; it snapshots input rather than changing shared state.
 - [`room/lighting.ts`](room/lighting.ts): local image-based lighting, AgX-compatible PBR surface loading, and meter-scaled surface UVs. Appearance is independent of furniture placement and shared room geometry.
-- [`room/workspace-fixture.ts`](room/workspace-fixture.ts): explicit nine-piece demonstration plan using seven existing GLBs plus a procedural rug and lamp. The route currently mounts this sample, not an uploaded scan or address reconstruction.
+- [`room/workspace-fixture.ts`](room/workspace-fixture.ts): explicit nine-piece demonstration plan using seven existing GLBs plus a procedural rug and lamp. The route defaults to this sample with clearly labeled photo-reference finishes; local reconstruction JSON can replace its geometry through Open room file.
 - [`room/explode.ts`](room/explode.ts): reusable size-aware inventory layout and reversible object animation. Stable item IDs map to independent loaded object roots; furniture keeps its original size and orientation. Inventory boxes sit beyond the room's +X boundary without overlapping. Return restores original local position, quaternion, and scale exactly, including after interrupted transitions.
 - [`components/AsciiHero.tsx`](components/AsciiHero.tsx): latest homepage hero configuration, visibility/playback handling, and ASCII renderer composition.
 - [`components/AsciiField.tsx`](components/AsciiField.tsx): incoming WebGL2 ASCII rendering implementation, preserved without behavior changes.
@@ -66,3 +66,11 @@ npm run build
 The 13 layout/controller checks cover variable sizes, pivots, rotated/scaled roots, transformed parents, non-overlap, deterministic ordering, exact restoration, rapid reversals, reduced motion, immutable bounds/input, and disposal. Browser checks should additionally cover actual asset loading, canvas/list selection, camera controls, narrow-screen framing, and navigation/unmount.
 
 Navigation regression check: explode the room, select a piece, follow **Capture a room**, then go back. Both the inventory mode and selection must reappear in the renderer as well as the controls. Next.js Activity preserves React state but cleans up effects, so the asynchronous scene initialization explicitly reapplies the latest committed view state.
+
+## Photo finishes and window daylight
+
+The workspace accepts optional shared `RoomAppearance` estimates per floor/wall, including tint, roughness, physical texture scale and UV rotation. The default photo reference styles sample geometry using an inspected building gallery image and explicitly labels its unverified unit attribution. Toggle Photo reference finishes to compare styling defaults. Open room file reads a bounded local reconstruction request/scene JSON without uploading it; imported shells contain no furniture.
+
+`window-daylight.ts` derives exterior-window centers and inward normals via polygon probes, including concave rooms and shared partitions. Sized RectAreaLights supply PBR illumination; one window-aligned directional proxy supplies approximate shadows. No established windows means a disclosed studio fallback. This is not measured illumination, solar positioning or realtime indirect illumination. See [photo appearance](../docs/photo-appearance.md) for input/provenance and rendering limits.
+
+Run `node --experimental-strip-types --test spatial/tests/test-room-appearance.mjs spatial/tests/test-explode.mjs` for the pure window/import/UV and furniture behavior checks.

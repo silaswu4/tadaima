@@ -25,6 +25,9 @@ def main(argv=None):
     inference = parser.add_mutually_exclusive_group()
     inference.add_argument("--proposal-file", type=Path, help="Hash-bound Codex vision handoff; no provider keys")
     inference.add_argument("--infer", action="store_true", help="Send capture images to the configured OpenAI vision provider")
+    appearance = parser.add_mutually_exclusive_group()
+    appearance.add_argument("--appearance-file", type=Path, help="Hash-bound room-finish handoff; no provider keys")
+    appearance.add_argument("--infer-appearance", action="store_true", help="Send room photos for finish estimation after geometry is available")
     parser.add_argument("--model", help="Vision-capable model; alternatively set OPENAI_VISION_MODEL")
     parser.add_argument("--expected-project")
     parser.add_argument("--expected-job")
@@ -32,16 +35,18 @@ def main(argv=None):
     args = parser.parse_args(argv)
     try:
         provider = None
-        if args.infer:
+        if args.infer or args.infer_appearance:
             model = args.model or os.environ.get("OPENAI_VISION_MODEL")
             if not model:
                 raise ProviderError("Set --model or OPENAI_VISION_MODEL for hosted inference")
             provider = OpenAIGeometryProvider(os.environ.get("OPENAI_API_KEY", ""), model)
         elif args.model:
-            raise ProviderError("--model requires --infer")
+            raise ProviderError("--model requires --infer or --infer-appearance")
         dossier = run(args.input, args.output, render=args.render, preview=args.preview, blender=args.blender,
                       expected_project=args.expected_project, expected_job=args.expected_job,
-                      expected_revision=args.expected_revision, geometry_provider=provider, proposal_file=args.proposal_file)
+                      expected_revision=args.expected_revision, geometry_provider=provider if args.infer else None,
+                      proposal_file=args.proposal_file, appearance_provider=provider if args.infer_appearance else None,
+                      appearance_file=args.appearance_file)
         print(json.dumps({key: dossier[key] for key in (
             "schemaVersion", "projectId", "jobId", "inputRevision", "status", "reviewRequired", "method", "photoUsage",
             "photoCount", "missingMeasurements", "inferenceRequestPath", "proposalPath", "reconstructionRequestPath", "draftManifestPath")}, allow_nan=False))

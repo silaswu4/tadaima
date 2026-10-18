@@ -31,9 +31,13 @@ def _has_four_views(manifest):
 
 def run(bundle_path, output_path, *, render=False, blender=None, preview=False,
         expected_project=None, expected_job=None, expected_revision=None,
-        geometry_provider=None, proposal_file=None):
+        geometry_provider=None, proposal_file=None, appearance_provider=None,
+        appearance_file=None):
     if geometry_provider is not None and proposal_file is not None:
         raise BundleError("Choose either a vision provider or a proposal file")
+    if appearance_provider is not None and appearance_file is not None:
+        raise BundleError("Choose either an appearance provider or an appearance file")
+    appearance_requested = appearance_provider is not None or appearance_file is not None
     bundle = read_bundle(bundle_path)
     manifest = bundle["manifest"]
     for field, expected in (("projectId", expected_project), ("jobId", expected_job), ("inputRevision", expected_revision)):
@@ -94,14 +98,51 @@ def run(bundle_path, output_path, *, render=False, blender=None, preview=False,
                 _write(output / "vision.proposal.json", compiled["proposal"])
                 dossier["proposalPath"] = "vision.proposal.json"
         if compiled["request"] is not None:
+            if appearance_requested:
+                dossier["appearanceStatus"] = "needs_capture" if needs_views else "needs_photos"
+                if not needs_views:
+                    from reconstruction.appearance import FileAppearanceProvider, infer_appearance, prepare_appearance
+                    from .vision import _bundle_inputs
+                    context = _bundle_inputs(bundle)
+                    prefix = f"capture:{manifest['projectId']}:{manifest['jobId']}:"
+                    by_asset = {entry["privateAssetId"]: entry["id"]
+                                for entry in compiled["request"]["evidence"]
+                                if entry["dimensionStatus"] is None}
+                    photos = [{**asset, "sha256": photo["sha256"],
+                               "evidenceId": by_asset[prefix + photo["fileName"]],
+                               "scope": "captured_room"}
+                              for photo, asset in zip(context["photos"], context["assets"])]
+                    if photos:
+                        _write(output / "reconstruction.request.json", compiled["request"])
+                        _write(output / "appearance.inference.request.json", prepare_appearance(compiled["request"], photos))
+                        dossier["reconstructionRequestPath"] = "reconstruction.request.json"
+                        dossier["appearanceInferenceRequestPath"] = "appearance.inference.request.json"
+                        provider = (FileAppearanceProvider(appearance_file, compiled["request"], photos)
+                                    if appearance_file is not None else appearance_provider)
+                        compiled["request"] = infer_appearance(compiled["request"], photos, provider)
+                        dossier["photoUsage"] = "vision_input"
+                        dossier["appearanceStatus"] = ("estimated_needs_review" if compiled["request"]["appearance"]["surfaces"]
+                                                       else "needs_photo_review")
+                        dossier["appearancePhotoIds"] = [photo["id"] for photo in photos]
+                        dossier["warnings"].append(
+                            "Room finishes are photo-derived estimates; colors and material properties require review."
+                            if compiled["request"]["appearance"]["surfaces"] else
+                            "No visible finishes could be bound to room surfaces; styling defaults remain unverified.")
+                    else:
+                        dossier["warnings"].append("No usable room photos were available for appearance; styling defaults remain unverified.")
             _write(output / "reconstruction.request.json", compiled["request"])
             dossier["reconstructionRequestPath"] = "reconstruction.request.json"
+        elif appearance_requested:
+            dossier["appearanceStatus"] = "needs_geometry"
         _write(output / "capture.dossier.json", dossier)
         if render and compiled["request"] is not None and dossier["status"] != "needs_capture":
             rendered = generate(output / "reconstruction.request.json", output / "draft", blender=blender, preview=preview)
             rendered["warnings"].append(
                 "Photo-only vision draft: scale and dimensions are unverified; review capture.dossier.json before relying on fit."
-                if photo_mode else "Mobile measured-room draft. Photos are reference-only; review capture.dossier.json before relying on fit.")
+                if photo_mode else
+                "Mobile declared-dimension draft with estimated photo appearance; review capture.dossier.json before relying on fit or finishes."
+                if appearance_requested else
+                "Mobile measured-room draft. Photos are reference-only; review capture.dossier.json before relying on fit.")
             _write(output / "draft/manifest.json", rendered)
             dossier["draftManifestPath"] = "draft/manifest.json"
         _write(output / "capture.dossier.json", dossier)

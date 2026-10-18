@@ -382,7 +382,10 @@ def validate_request(raw: object) -> dict:
     rejected rather than silently discarded. Every room boundary must be
     covered by wall segments, and every wall must lie on room boundaries.
     """
-    request = _object(raw, "request", {"jobId", "projectId", "inputRevision", "geometry", "evidence"})
+    fields = {"jobId", "projectId", "inputRevision", "geometry", "evidence"}
+    if isinstance(raw, dict) and "appearance" in raw:
+        fields.add("appearance")
+    request = _object(raw, "request", fields)
     revision = request["inputRevision"]
     if isinstance(revision, bool) or not isinstance(revision, int) or not 0 <= revision <= 9_007_199_254_740_991:
         _fail("inputRevision", "expected nonnegative safe integer")
@@ -466,5 +469,9 @@ def validate_request(raw: object) -> dict:
             "evidenceIds": _refs(obj["evidenceIds"], f"{path}.evidenceIds", known_evidence)})
     for wall in geometry["walls"]:
         _validate_openings(wall, [o for o in geometry["openings"] if o["wallId"] == wall["id"]])
-    return {"jobId": _id(request["jobId"], "jobId"), "projectId": _id(request["projectId"], "projectId"),
-            "inputRevision": revision, "geometry": geometry, "evidence": evidence}
+    result = {"jobId": _id(request["jobId"], "jobId"), "projectId": _id(request["projectId"], "projectId"),
+              "inputRevision": revision, "geometry": geometry, "evidence": evidence}
+    if "appearance" in request:
+        from reconstruction.appearance_model import validate_appearance
+        result["appearance"] = validate_appearance(request["appearance"], geometry, evidence)
+    return result

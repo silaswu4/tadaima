@@ -1,4 +1,4 @@
-import type { Evidence, RoomGeometry } from "@/backend/contracts";
+import type { Evidence, RoomAppearance, RoomGeometry } from "@/backend/contracts";
 
 /** Input to the local headless worker. Geometry uses wall centerlines in meters. */
 export interface ReconstructionRequest {
@@ -7,6 +7,7 @@ export interface ReconstructionRequest {
   inputRevision: number;
   /** Structurally validated geometry; source accuracy/review status remains upstream. */
   geometry: RoomGeometry;
+  appearance?: RoomAppearance;
   evidence: Evidence[];
 }
 

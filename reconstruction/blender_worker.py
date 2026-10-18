@@ -187,18 +187,23 @@ def generate(request, output: Path, preview: bool):
         collection = bpy.data.collections.new(name)
         scene.collection.children.link(collection)
         collections[name] = collection
-    floor_mat, wall_mat = room_materials()
-    objects = [build_floor(room, collections["Floors"], floor_mat) for room in geometry["rooms"]]
+    materials, appearance_summary = room_materials(geometry, request.get("appearance"))
+    scene["appearanceSummaryJson"] = json.dumps(appearance_summary, separators=(",", ":"))
+    objects = [build_floor(room, collections["Floors"], materials[room["id"]][0]) for room in geometry["rooms"]]
     for wall in geometry["walls"]:
         openings = [o for o in geometry["openings"] if o["wallId"] == wall["id"]]
-        obj = build_wall(wall, openings, geometry["walls"], geometry["openings"], collections["Walls"], wall_mat)
+        obj = build_wall(wall, openings, geometry["walls"], geometry["openings"], collections["Walls"], materials[wall["id"]][0])
         objects.append(obj)
         objects.extend(build_opening(o, obj, wall["thickness"], collections["Openings"]) for o in openings)
     bpy.context.view_layer.update()
     for obj in objects:
-        metric_uvs(obj, 1.2 if obj["role"] == "room_floor" else 1)
+        if obj.type == "MESH":
+            material, tile, rotation = materials[obj["entityId"]]
+            obj["finish"] = material["finish"]
+            obj["appearanceStatus"] = material["appearanceStatus"]
+            metric_uvs(obj, tile, rotation)
     bounds = bounds_of(objects)
-    add_preview_setup(scene, bounds, objects)
+    lighting_summary = add_preview_setup(scene, bounds, objects, geometry)
     bpy.context.view_layer.update()
     bpy.ops.object.select_all(action="DESELECT")
     for obj in objects:
@@ -220,6 +225,8 @@ def generate(request, output: Path, preview: bool):
     metadata = {
         "blenderVersion": bpy.app.version_string,
         "renderProfile": RENDER_PROFILE,
+        "lighting": lighting_summary,
+        "appearance": appearance_summary,
         "bounds": bounds,
         "objects": [{"id": obj["entityId"], "role": obj["role"], "name": obj.name,
                      "evidenceIds": json.loads(obj["evidenceIdsJson"])} for obj in objects],

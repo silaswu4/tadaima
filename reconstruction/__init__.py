@@ -1,3 +1,3 @@
 """Validated metric room geometry to editable Blender and glTF artifacts."""
 
-GENERATOR_VERSION = "tadaima-shell/1.1.0"
+GENERATOR_VERSION = "tadaima-shell/1.2.0"

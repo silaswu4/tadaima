@@ -53,7 +53,9 @@ async function verify(directory, validatorModule) {
   const bytes = await readFile(resolve(directory, "scene.glb"));
   const embedded = inspectEmbeddedImages(bytes);
   const textured = embedded.images.length > 0;
-  if (manifest.renderProfile === "pbr-daylight-v1") assert(textured, "PBR profile must export embedded material images");
+  const windowProfile = manifest.renderProfile === "pbr-window-daylight-v2";
+  const sourceSurfaces = new Map((source.appearance?.surfaces ?? []).map((surface) => [surface.entityId, surface]));
+  if (windowProfile || manifest.renderProfile === "pbr-daylight-v1") assert(textured, "PBR profile must export embedded material images");
   const decodedBefore = decodedImages.length;
   const data = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
   const gltf = await new GLTFLoader().parseAsync(data, "");
@@ -77,9 +79,21 @@ async function verify(directory, validatorModule) {
         for (const material of materials) {
           assert(material.normalMap?.image?.data?.length > 0, "Packed normal map must actually decode");
           assert.equal(material.metalness, 0, "Room surfaces must not become metallic");
-          if (object.userData.role === "room_floor") {
-            assert(material.map?.image?.data?.length > 0, "Floor base color must actually decode");
-            assert(material.roughnessMap?.image?.data?.length > 0, "Floor roughness must actually decode");
+          const spec = sourceSurfaces.get(object.userData.entityId);
+          const finish = spec?.finish ?? (object.userData.role === "room_floor" ? "wood" : "paint");
+          if (windowProfile) {
+            assert.equal(object.userData.finish, finish, "Finish must match source surface binding");
+            assert.equal(object.userData.appearanceStatus, spec ? "photo_estimate" : "styling_default");
+            if (spec && finish !== "wood") {
+              const encoded = [1, 3, 5].map((offset) => parseInt(spec.color.slice(offset, offset + 2), 16) / 255);
+              const linear = encoded.map((value) => value <= .04045 ? value / 12.92 : ((value + .055) / 1.055) ** 2.4);
+              material.color.toArray().forEach((value, index) => assert(Math.abs(value - linear[index]) < 1e-6, "PBR color must preserve photo estimate"));
+              assert(Math.abs(material.roughness - spec.roughness) < 1e-6, "PBR roughness must preserve photo estimate");
+            }
+          }
+          if (finish === "wood") {
+            assert(material.map?.image?.data?.length > 0, "Wood base color must actually decode");
+            assert(material.roughnessMap?.image?.data?.length > 0, "Wood roughness must actually decode");
           }
         }
       }
