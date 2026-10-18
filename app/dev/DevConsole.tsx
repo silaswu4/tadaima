@@ -5,6 +5,7 @@ import type { ApplyResult, Job, PlanChange, PlanProposal, ResearchJobOutput, Roo
 import { api, failingIds, meters, money, seatsOf, type ProjectView } from "./api";
 import { RoomMap } from "./RoomMap";
 import { VoicePanel } from "./VoicePanel";
+import { CheckoutPanel } from "./CheckoutPanel";
 
 interface LogEntry {
   id: number;
@@ -249,6 +250,8 @@ export function DevConsole() {
             </section>
           </div>
         </div>
+
+        <CheckoutPanel key={base} base={base} plan={plan} onPlanChanged={refresh} />
 
         <ActivityLog log={log} onClear={() => setLog([])} />
       </main>
