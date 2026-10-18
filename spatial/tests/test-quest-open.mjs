@@ -10,7 +10,7 @@ function fakeAdb(listing, models = { QUEST_A: "Meta Quest 3S" }, overrides = {})
     if (args[0] === "devices") return { status: 0, stdout: `List of devices attached\n${listing}\n`, stderr: "" };
     if (args.includes("getprop")) return { status: 0, stdout: models[args[1]] ?? "Pixel 9", stderr: "" };
     if (args.includes("reverse")) return overrides.reverse ?? { status: 0, stdout: "3017", stderr: "" };
-    if (args.includes("start")) return overrides.start ?? { status: 0, stdout: `Starting: Intent { dat=http://localhost:3017/room#local-scan=${token} }`, stderr: "" };
+    if (args.includes("start")) return overrides.start ?? { status: 0, stdout: `Starting: Intent { dat=http://localhost:3017/rooms#local-scan=${token} }`, stderr: "" };
     throw new Error("Unexpected ADB command");
   };
   return { calls, run };
@@ -57,7 +57,7 @@ test("one authorized Quest is verified, forwarded and opened without exposing AD
   const result = run(fake);
   assert.equal(result.ok, true);
   assert.deepEqual(fake.calls.at(-2), ["-s", "QUEST_A", "reverse", "tcp:3017", "tcp:3017"]);
-  assert.deepEqual(fake.calls.at(-1), ["-s", "QUEST_A", "shell", "am", "start", "-a", "android.intent.action.VIEW", "-d", `http://localhost:3017/room#local-scan=${token}`]);
+  assert.deepEqual(fake.calls.at(-1), ["-s", "QUEST_A", "shell", "am", "start", "-a", "android.intent.action.VIEW", "-d", `http://localhost:3017/rooms#local-scan=${token}`]);
 });
 
 test("duplicate device listing rows count as one Quest", () => {

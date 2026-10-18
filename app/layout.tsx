@@ -15,7 +15,7 @@ const display = Inter_Tight({ subsets: ["latin"], variable: "--font-display" });
 const body = Inter({ subsets: ["latin"], variable: "--font-body" });
 
 export const metadata: Metadata = {
-  title: "Michael",
+  title: "tadaima",
   description: "Scan your room, swap anything, buy what fits.",
 };
 

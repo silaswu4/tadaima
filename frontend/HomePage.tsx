@@ -74,8 +74,8 @@ function Loader({ onLift, onDone, reduced }: { onLift: () => void; onDone: () =>
 
 type Row = { key: "scan" | "type" | "demo"; label: string; note: string };
 const ROWS: Row[] = [
-  { key: "scan", label: "Scan room", note: "Pro phone" },
-  { key: "type", label: "Type address", note: "Anywhere" },
+  { key: "scan", label: "Scan room", note: "Photos or LiDAR" },
+  { key: "type", label: "Type address", note: "Saved for setup" },
   { key: "demo", label: "Explore demo rooms", note: "Walk in" },
 ];
 
@@ -90,6 +90,7 @@ export default function Home() {
   const [qr, setQr] = useState<string | null>(null);
   const [captureUrl, setCaptureUrl] = useState("/capture");
   const [address, setAddress] = useState("");
+  const [addressError, setAddressError] = useState("");
   const addressRef = useRef<HTMLInputElement>(null);
   const reveal = useCallback(() => setRevealed(true), []);
   const finishLoading = useCallback(() => setLoaderGone(true), []);
@@ -131,7 +132,17 @@ export default function Home() {
     e.preventDefault();
     const v = address.trim();
     if (!v) return;
-    wipe(`/room?address=${encodeURIComponent(v)}`);
+    if (v.length > 512) {
+      setAddressError("Keep the address and unit under 512 characters.");
+      return;
+    }
+    try {
+      window.sessionStorage.setItem("tadaima:pending-address", v);
+      setAddressError("");
+      wipe("/rooms?onboarding=address");
+    } catch {
+      setAddressError("Your browser could not save this address privately. Enable session storage, or explore the demo rooms.");
+    }
   };
 
   const markStyle = { WebkitMaskImage: `url(${mark.src})`, maskImage: `url(${mark.src})` } as CSSProperties;
@@ -189,9 +200,14 @@ export default function Home() {
                     name="address"
                     type="text"
                     autoComplete="street-address"
+                    maxLength={512}
+                    aria-describedby={addressError ? "hero-address-error" : undefined}
                     placeholder="580 Gayley Ave, Los Angeles"
                     value={address}
-                    onChange={(e) => setAddress(e.target.value)}
+                    onChange={(e) => {
+                      setAddress(e.target.value);
+                      setAddressError("");
+                    }}
                     onKeyDown={(e) => e.key === "Escape" && setOpen(null)}
                   />
                   <button type="submit" className="hero-row__go">
@@ -215,6 +231,12 @@ export default function Home() {
             </li>
           ))}
         </ul>
+
+        {addressError ? (
+          <small className="hero-error" id="hero-address-error" role="alert">
+            {addressError}
+          </small>
+        ) : null}
 
         {open === "scan" && (
           <div className="hero-qr">

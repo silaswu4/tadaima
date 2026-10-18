@@ -8,6 +8,8 @@ import { createRoomLighting, setMetricSurfaceUVs } from "./lighting";
 import { createFurnitureProxy, placeFurnitureModel } from "./furniture-model";
 import { galleryPart } from "./gallery-parts";
 import { LIBRARY, assetTransform, type LibraryModel } from "../../backend/shopping/assets";
+import type { WalkOptions } from "./walk-api";
+import { bindTexturedRoom, validateLocalTexturedGlb } from "./textured-model";
 
 export type IsoGallery = {
   ready: Promise<void>;
@@ -28,7 +30,7 @@ export type BakedRoom = {
   /** Longest floor side in meters after scaling, so baked rooms sit at the same size as plan rooms. */
   footprint?: number;
 };
-export type GallerySource = { plan?: RoomPlan; baked?: BakedRoom };
+export type GallerySource = { plan?: RoomPlan; baked?: BakedRoom; reconstruction?: WalkOptions["reconstruction"] };
 
 const BACKGROUND = "#f5f2eb";
 const CLAY = "#e4ddd1";
@@ -83,16 +85,29 @@ outgoingLight = mix(uClay, outgoingLight, isoMask);
 const libraryModels = Object.values(LIBRARY).flat();
 const libraryByUrl = (url: string) => libraryModels.find((m) => m.url === url) ?? null;
 
-function release(root: THREE.Object3D) {
-  root.traverse((node) => {
+function releaseAll(roots: Iterable<THREE.Object3D>) {
+  const geometries = new Set<THREE.BufferGeometry>();
+  const materials = new Set<THREE.Material>();
+  const textures = new Set<THREE.Texture>();
+  for (const root of roots) root.traverse((node) => {
     if (!(node instanceof THREE.Mesh)) return;
-    node.geometry.dispose();
+    geometries.add(node.geometry);
     for (const m of Array.isArray(node.material) ? node.material : [node.material]) {
-      for (const value of Object.values(m)) if (value instanceof THREE.Texture) value.dispose();
-      m.dispose();
+      materials.add(m);
+      for (const value of Object.values(m)) if (value instanceof THREE.Texture) textures.add(value);
     }
   });
+  for (const geometry of geometries) geometry.dispose();
+  const images = new Set<ImageBitmap>();
+  for (const texture of textures) {
+    if (typeof ImageBitmap !== "undefined" && texture.image instanceof ImageBitmap) images.add(texture.image);
+    texture.dispose();
+  }
+  for (const image of images) image.close();
+  for (const material of materials) material.dispose();
 }
+
+const release = (root: THREE.Object3D) => releaseAll([root]);
 
 type RoomView = {
   pivot: THREE.Group;
@@ -134,17 +149,20 @@ export function createIsoGallery(canvas: HTMLCanvasElement, sources: GallerySour
   const stage = new THREE.Group();
   scene.add(stage);
   const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).setDRACOLoader(dracoLoader());
+  // Binding reparents source entities. Keep resource owners even if an item is
+  // removed/stored or binding fails partway through the private reconstruction.
+  const retained = new Set<THREE.Object3D>();
   let disposed = false;
 
-  function buildRoom(plan: RoomPlan): { view: RoomView; loaded: Promise<void> } {
+  function buildRoom(plan: RoomPlan, reconstruction?: WalkOptions["reconstruction"]): { view: RoomView; loaded: Promise<void> } {
     const pivot = new THREE.Group();
     const content = new THREE.Group();
     pivot.add(content);
     pivot.visible = false;
     stage.add(pivot);
     const floorPlan = plan.geometry.rooms[0];
-    const xs = floorPlan.floorPolygon.map((p) => p[0]);
-    const zs = floorPlan.floorPolygon.map((p) => p[1]);
+    const xs = plan.geometry.rooms.flatMap((room) => room.floorPolygon.map((p) => p[0]));
+    const zs = plan.geometry.rooms.flatMap((room) => room.floorPolygon.map((p) => p[1]));
     const center = new THREE.Vector3((Math.min(...xs) + Math.max(...xs)) / 2, 0, (Math.min(...zs) + Math.max(...zs)) / 2);
     content.position.copy(center).negate();
     const uniforms: Uniforms = {
@@ -154,20 +172,22 @@ export function createIsoGallery(canvas: HTMLCanvasElement, sources: GallerySour
       uSpan: { value: Math.hypot(Math.max(...xs) - Math.min(...xs), Math.max(...zs) - Math.min(...zs)) / 2 },
     };
 
-    const shape = new THREE.Shape(floorPlan.floorPolygon.map(([x, z]) => new THREE.Vector2(x - center.x, -(z - center.z))));
-    const geometry = new THREE.ExtrudeGeometry(shape, { depth: 0.14, bevelEnabled: false });
-    geometry.rotateX(-Math.PI / 2);
-    setMetricSurfaceUVs(geometry, 1.2);
-    const floorMesh = new THREE.Mesh(geometry, lighting.makeSurface("floor"));
-    floorMesh.receiveShadow = true;
     const floor = new THREE.Group();
-    floor.position.set(center.x, -0.14, center.z);
-    floor.add(floorMesh);
+    if (!reconstruction) {
+      const shape = new THREE.Shape(floorPlan.floorPolygon.map(([x, z]) => new THREE.Vector2(x - center.x, -(z - center.z))));
+      const geometry = new THREE.ExtrudeGeometry(shape, { depth: 0.14, bevelEnabled: false });
+      geometry.rotateX(-Math.PI / 2);
+      setMetricSurfaceUVs(geometry, 1.2);
+      const floorMesh = new THREE.Mesh(geometry, lighting.makeSurface("floor"));
+      floorMesh.receiveShadow = true;
+      floor.position.set(center.x, -0.14, center.z);
+      floor.add(floorMesh);
+    }
     content.add(floor);
 
     // Cutaway: keep only the walls facing away from the camera, with real openings.
     const walls: RoomView["walls"] = [];
-    for (const wall of plan.geometry.walls) {
+    for (const wall of reconstruction ? [] : plan.geometry.walls) {
       const dx = wall.end[0] - wall.start[0];
       const dz = wall.end[1] - wall.start[1];
       const length = Math.hypot(dx, dz);
@@ -209,9 +229,54 @@ export function createIsoGallery(canvas: HTMLCanvasElement, sources: GallerySour
       walls.push({ root, height: wall.height });
     }
 
+    const sourceReady = reconstruction ? (async () => {
+      validateLocalTexturedGlb(reconstruction.texturedModel);
+      // Never bind against an edited shopping revision or accept shell edits.
+      if (plan.projectId !== reconstruction.plan.projectId || JSON.stringify(plan.geometry) !== JSON.stringify(reconstruction.plan.geometry)) {
+        throw new Error("Gallery room geometry does not match its reconstruction source.");
+      }
+      const gltf = await loader.parseAsync(reconstruction.texturedModel, "");
+      if (disposed) { release(gltf.scene); return null; }
+      gltf.scene.traverse((node) => { if (node instanceof THREE.Mesh) retained.add(node); });
+      const bound = bindTexturedRoom(gltf.scene, reconstruction.plan, reconstruction.binding);
+      for (const room of reconstruction.plan.geometry.rooms) {
+        const node = bound.shell.children.find((child) => child.userData.entityId === room.id);
+        if (node) floor.add(node);
+      }
+      for (const wall of reconstruction.plan.geometry.walls) {
+        const node = bound.shell.children.find((child) => child.userData.entityId === wall.id);
+        if (!node) continue;
+        const root = new THREE.Group();
+        root.add(node);
+        for (const opening of reconstruction.plan.geometry.openings.filter((entry) => entry.wallId === wall.id)) {
+          const trim = bound.shell.children.find((child) => child.userData.entityId === opening.id);
+          if (trim) root.add(trim);
+        }
+        const midpoint = new THREE.Vector3((wall.start[0] + wall.end[0]) / 2, 0, (wall.start[1] + wall.end[1]) / 2);
+        root.visible = new THREE.Vector3(VIEW.x, 0, VIEW.z).dot(midpoint.sub(center)) <= 0;
+        content.add(root);
+        if (root.visible) walls.push({ root, height: wall.height });
+      }
+      return bound;
+    })() : Promise.resolve(null);
+
     const furniture: RoomView["furniture"] = [];
     const loaded = Promise.all(
-      plan.items.map(async (item) => {
+      plan.items.filter((item) => !item.stored).map(async (item) => {
+        const bound = await sourceReady;
+        if (disposed) return;
+        const captured = bound?.furniture.get(item.id);
+        if (captured) {
+          const original = reconstruction!.plan.items.find((entry) => entry.id === item.id)!;
+          if (JSON.stringify(item.dimensions) !== JSON.stringify(original.dimensions)) throw new Error("Captured furniture dimensions cannot change in the gallery.");
+          // The bound wrapper already owns the canonical pose and its children
+          // are local. Apply the editable pose once, without mesh recentering.
+          captured.position.fromArray(item.position);
+          captured.rotation.y = item.rotationY;
+          content.add(captured);
+          furniture.push({ root: captured, rest: captured.position.clone(), order: Math.hypot(captured.position.x - center.x, captured.position.z - center.z) });
+          return;
+        }
         const size = item.dimensions;
         let model: THREE.Object3D | null = galleryPart(item.id, size, { category: item.category, assetUrl: item.assetUrl });
         let library: LibraryModel | null = null;
@@ -257,7 +322,10 @@ export function createIsoGallery(canvas: HTMLCanvasElement, sources: GallerySour
         content.add(root);
         furniture.push({ root, rest: root.position.clone(), order: Math.hypot(root.position.x - center.x, root.position.z - center.z) });
       }),
-    ).then(() => {
+    ).then(async () => {
+      // Empty/stored-only rooms must still validate and load their shell.
+      await sourceReady;
+      if (disposed) return;
       furniture.sort((a, b) => a.order - b.order);
       content.traverse((node) => {
         if (node instanceof THREE.Mesh) for (const m of Array.isArray(node.material) ? node.material : [node.material]) withReveal(m, uniforms);
@@ -374,7 +442,7 @@ void main() {
     return { view, loaded };
   }
 
-  const built = sources.map((src) => (src.baked ? buildBaked(src.baked) : buildRoom(src.plan!)));
+  const built = sources.map((src) => (src.baked ? buildBaked(src.baked) : buildRoom(src.plan!, src.reconstruction)));
   const rooms = built.map((b) => b.view);
   let current = Math.min(Math.max(options.initial ?? 0, 0), Math.max(0, rooms.length - 1));
   let step = 12;
@@ -563,7 +631,8 @@ void main() {
       observer.disconnect();
       window.removeEventListener("pointermove", onPointer);
       lighting.dispose();
-      release(scene);
+      releaseAll([scene, ...retained]);
+      retained.clear();
       sun.shadow.dispose();
       renderer.dispose();
     },

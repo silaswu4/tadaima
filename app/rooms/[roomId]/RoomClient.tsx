@@ -1,42 +1,45 @@
 "use client";
 
-import { use, useEffect, useMemo, useState } from "react";
-import { notFound } from "next/navigation";
+import { use, useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import type { RoomPlan } from "@/backend/contracts";
-import { RoomExperience } from "@/spatial/components/RoomExperience";
-import type { WalkEnvironment } from "@/spatial/room/walk-api";
+import { RoomExperience, type ExperienceRoom } from "@/spatial/components/RoomExperience";
 import { getTadaimaRooms } from "@/spatial/fixtures/roomsCatalog";
-
-type WalkRoom = { id: string; label: string; plan: RoomPlan; environment?: WalkEnvironment };
-
-// Optional machine-local walkable rooms (public/local-rooms/walk-manifest.json, never committed).
-async function loadLocalWalkRoom(id: string): Promise<WalkRoom | null> {
-  try {
-    const res = await fetch("/local-rooms/walk-manifest.json", { cache: "no-store" });
-    if (!res.ok) return null;
-    const rooms = (await res.json()) as WalkRoom[];
-    return (Array.isArray(rooms) && rooms.find((r) => r.id === id && r.plan)) || null;
-  } catch {
-    return null;
-  }
-}
+import { getRoom, getRoomDraft, saveEditedPlan, saveRoomDraft } from "@/spatial/rooms/registry";
 
 export function RoomClient({ params }: { params: Promise<{ roomId: string }> }) {
   const { roomId } = use(params);
-  const own = useMemo(() => getTadaimaRooms().find((r) => r.id === roomId || r.slug === roomId) ?? null, [roomId]);
-  const [local, setLocal] = useState<WalkRoom | null | undefined>(own ? null : undefined);
-
+  const [loaded, setLoaded] = useState<{ routeId: string; room?: ExperienceRoom; error?: string } | null>(null);
+  const saves = useRef<Promise<unknown>>(Promise.resolve());
   useEffect(() => {
-    if (own) return;
     let live = true;
-    loadLocalWalkRoom(roomId).then((r) => live && setLocal(r));
-    return () => {
-      live = false;
-    };
-  }, [own, roomId]);
+    (async () => {
+      const own = getTadaimaRooms().find((r) => r.id === roomId || r.slug === roomId);
+      let room: ExperienceRoom | undefined;
+      if (own) room = { ...own, plan: await getRoomDraft(own.id) ?? own.plan };
+      else {
+        const local = await getRoom(roomId);
+        if (local) room = { id: local.id, label: local.label, plan: local.editedPlan,
+          sourceDescription: local.model ? "Measured layout · photo-informed furniture and finishes" : "Measured layout · furniture stand-ins",
+          reconstruction: local.model ? { plan: local.sourcePlan, texturedModel: local.model, binding: local.binding } : undefined };
+      }
+      if (!live) return;
+      if (room) { try { sessionStorage.setItem("tadaima:last-room", room.id); } catch { /* optional */ } }
+      setLoaded({ routeId: roomId, room });
+    })().catch((cause) => { if (live) setLoaded({ routeId: roomId, error: cause instanceof Error ? cause.message : "The room could not load." }); });
+    return () => { live = false; };
+  }, [roomId]);
 
-  const room = own ?? local;
-  if (room === undefined) return <main style={{ height: "100svh", background: "#f5f2eb" }} />;
-  if (!room) notFound();
-  return <RoomExperience key={room.id} room={room} backHref="/rooms" />;
+  const save = useCallback((plan: RoomPlan) => {
+    const snapshot = structuredClone(plan);
+    const id = loaded?.routeId === roomId ? loaded.room?.id ?? roomId : roomId;
+    const next = saves.current.catch(() => undefined).then(() => id.startsWith("local-scan-")
+      ? saveEditedPlan(id, snapshot) : saveRoomDraft(id, snapshot));
+    saves.current = next;
+    return next.then(() => undefined);
+  }, [roomId, loaded]);
+
+  if (!loaded || loaded.routeId !== roomId) return <main className="rooms-page__message" role="status">Opening your room…</main>;
+  if (!loaded.room) return <main className="rooms-page__message"><h1>This room is not available here</h1><p>{loaded.error ?? "Private scans are saved in the browser where you imported them. Open your scan here, or choose a demo room."}</p><Link href="/rooms">Back to rooms</Link></main>;
+  return <RoomExperience key={roomId} room={loaded.room} onPlanChange={save} backHref="/rooms" />;
 }

@@ -2,14 +2,15 @@
 
 import Image from "next/image";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import type { FurnitureCategory, ProductCandidate, RoomPlan, Vector3Meters } from "../../backend/contracts";
+import type { FloorSpot, FurnitureCategory, ProductCandidate, RoomPlan, Vector3Meters } from "../../backend/contracts";
 import catalogJson from "../../backend/fixtures/real-catalog.json";
-import type { WalkCallbacks, WalkCore, WalkEnvironment, WalkItem, WalkMode, WalkScene } from "../room/walk-api";
+import type { WalkCallbacks, WalkEnvironment, WalkItem, WalkMode, WalkOptions, WalkScene } from "../room/walk-api";
 import mark from "../assets/tadaima-mark.png";
 import { WipeLink } from "./PageWipe";
 import "./RoomExperience.css";
 
-type Props = { room: { id: string; label: string; plan: RoomPlan; environment?: WalkEnvironment }; backHref?: string };
+export type ExperienceRoom = { id: string; label: string; plan: RoomPlan; environment?: WalkEnvironment; reconstruction?: WalkOptions["reconstruction"]; sourceDescription?: string };
+type Props = { room: ExperienceRoom; backHref?: string; onPlanChange?: (plan: RoomPlan) => Promise<void> };
 type Panel = "catalog" | "basket" | "inventory" | null;
 type Anchor = { x: number; y: number } | null;
 
@@ -92,11 +93,6 @@ function readHintSeen(): boolean {
   }
 }
 
-/** Touch pad support: the contract has no locomotion input, so the pad speaks the engine's WASD keys. */
-function sendKey(type: "keydown" | "keyup", key: string) {
-  document.dispatchEvent(new KeyboardEvent(type, { key, code: `Key${key.toUpperCase()}`, bubbles: true }));
-}
-
 /* ---------- icons ---------- */
 
 const Icon = {
@@ -136,10 +132,12 @@ const Icon = {
 
 /* ---------- component ---------- */
 
-export function RoomExperience({ room, backHref = "/rooms" }: Props) {
+export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
   const walkRef = useRef<WalkScene | null>(null);
+  const retainedPlan = useRef(room.plan);
+  const retainedSource = useRef(room.plan);
   const statusRef = useRef<"loading" | "ready" | "error">("loading");
   const anchorRef = useRef<Anchor>(null);
   const openerRef = useRef<HTMLElement | null>(null);
@@ -157,6 +155,14 @@ export function RoomExperience({ room, backHref = "/rooms" }: Props) {
   const [moving, setMoving] = useState(false);
   const [canUndo, setCanUndo] = useState(false);
   const [xr, setXr] = useState(false);
+  const [presenting, setPresenting] = useState(false);
+  const [exploded, setExploded] = useState(false);
+  const [pending, setPending] = useState<ProductCandidate | null>(null);
+  const [floorSpot, setFloorSpot] = useState<FloorSpot | null>(null);
+  const saveRef = useRef(onPlanChange);
+  useLayoutEffect(() => { saveRef.current = onPlanChange; }, [onPlanChange]);
+  const previewRef = useRef<(product: ProductCandidate) => void>(() => {});
+  const confirmRef = useRef<() => void>(() => {});
   const [panel, setPanel] = useState<Panel>(null);
   const [swapTarget, setSwapTarget] = useState<WalkItem | null>(null);
   const [category, setCategory] = useState<FurnitureCategory | "all">("all");
@@ -195,6 +201,7 @@ export function RoomExperience({ room, backHref = "/rooms" }: Props) {
   const openPanel = useCallback((next: Exclude<Panel, null>) => {
     if (document.pointerLockElement) document.exitPointerLock();
     if (document.activeElement instanceof HTMLElement) openerRef.current = document.activeElement;
+    walkRef.current?.setMoveInput({ forward: 0, right: 0 });
     setPanel(next);
   }, []);
 
@@ -202,10 +209,6 @@ export function RoomExperience({ room, backHref = "/rooms" }: Props) {
     setSwapTarget(null);
     openPanel("catalog");
   }, [openPanel]);
-  const openCatalogRef = useRef(openCatalog);
-  useEffect(() => {
-    openCatalogRef.current = openCatalog;
-  }, [openCatalog]);
 
   const closePanel = useCallback(() => {
     setPanel(null);
@@ -243,6 +246,10 @@ export function RoomExperience({ room, backHref = "/rooms" }: Props) {
     const canvas = canvasRef.current;
     if (!canvas) return;
     let cancelled = false;
+    if (retainedSource.current !== room.plan) { retainedSource.current = room.plan; retainedPlan.current = room.plan; }
+    setStatus("loading");
+    setPending(null);
+    setExploded(false);
     let walk: WalkScene | null = null;
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const lite = window.innerWidth < 768 || window.matchMedia("(pointer: coarse)").matches;
@@ -260,7 +267,20 @@ export function RoomExperience({ room, backHref = "/rooms" }: Props) {
         setSelected((prev) => (prev ? (next.find((i) => i.id === prev.id) ?? null) : null));
         setMoving(false);
         refreshUndo();
+        setPending(null);
+        if (walkRef.current) {
+          const snapshot = walkRef.current.getPlan();
+          retainedPlan.current = snapshot;
+          saveRef.current?.(snapshot).catch((cause) => { if (!cancelled) setNotice(cause instanceof Error ? cause.message : "Could not save this edit. Keep this room open and try again."); });
+        }
       },
+      onMoveChange(value) { if (!cancelled) setMoving(value); },
+      onProductPreviewChange(preview) { if (!cancelled && !preview) setPending(null); },
+      onExplodeChange(value) { if (!cancelled) { setExploded(value); setPending(null); } },
+      onShoppingFloor(spot) { if (!cancelled) { setFloorSpot(spot); setNotice("Shopping spot selected. Choose a piece to preview here."); } },
+      onPreviewOffer(id) { const product = CATALOG.find((p) => p.id === id); if (product) previewRef.current(product); },
+      onConfirmOffer() { confirmRef.current(); },
+      onXRChange(value) { if (!cancelled) setPresenting(value); },
       onSelect(selection) {
         if (cancelled) return;
         anchorRef.current = selection?.anchor ?? null;
@@ -298,16 +318,13 @@ export function RoomExperience({ room, backHref = "/rooms" }: Props) {
 
     (async () => {
       try {
-        const [{ createWalkScene }, { attachWalkXR }] = await Promise.all([
-          import("../room/walk-scene"),
-          import("../room/walk-xr"),
-        ]);
+        const { createWalkScene } = await import("../room/walk-scene");
         if (cancelled) return;
-        const scene: WalkScene = createWalkScene(canvas, room.plan, callbacks, {
+        const scene: WalkScene = createWalkScene(canvas, retainedPlan.current, callbacks, {
           reducedMotion,
           lite,
           environment: room.environment,
-          attachXR: (core: WalkCore) => attachWalkXR(core, { onRequestAdd: () => openCatalogRef.current() }),
+          reconstruction: room.reconstruction,
         });
         walk = scene;
         walkRef.current = scene;
@@ -329,11 +346,12 @@ export function RoomExperience({ room, backHref = "/rooms" }: Props) {
 
     return () => {
       cancelled = true;
+      if (walk) { walk.cancelMove(); walk.cancelProductPreview(); retainedPlan.current = walk.getPlan(); }
       walk?.dispose();
       walkRef.current = null;
       statusRef.current = "loading";
     };
-  }, [room.id, room.plan, room.environment, placeCard]);
+  }, [room.id, room.plan, room.environment, room.reconstruction, placeCard]);
 
   // Quiet progress copy while the room builds. There is no real progress signal, so no percentages.
   useEffect(() => {
@@ -353,12 +371,13 @@ export function RoomExperience({ room, backHref = "/rooms" }: Props) {
 
   const setMode = (next: WalkMode) => {
     if (next === mode) return;
+    api()?.cancelProductPreview();
+    setPending(null);
     api()?.setMode(next);
-    setModeState(next);
   };
 
   const onCanvasClick = () => {
-    if (status !== "ready" || mode !== "walk" || locked || coarse || panel) return;
+    if (status !== "ready" || mode !== "walk" || locked || coarse || panel || pending) return;
     api()?.lockPointer();
   };
 
@@ -379,8 +398,7 @@ export function RoomExperience({ room, backHref = "/rooms" }: Props) {
   };
 
   const confirmMove = () => {
-    api()?.confirmMove();
-    setMoving(false);
+    if (api()?.confirmMove()) setMoving(false);
   };
 
   const cancelMove = () => {
@@ -416,17 +434,34 @@ export function RoomExperience({ room, backHref = "/rooms" }: Props) {
     const w = api();
     if (!w || !product.dimensions) return;
     try {
-      const id = swapTarget ? w.swap(swapTarget.id, product) : w.add({ product });
-      w.select(id);
-      setNotice(swapTarget ? `Swapped in ${product.label}` : `Added ${product.label}`);
+      w.cancelProductPreview();
+      setPending(null);
+      w.previewProduct(product, { swapId: swapTarget?.id, at: floorSpot ? [floorSpot.position[0], floorSpot.position[2]] : undefined });
+      setPending(product);
+      setNotice(`Previewing ${product.label}. Confirm placement to add it to this room.`);
       setPanel(null);
-      setSwapTarget(null);
       openerRef.current = null;
     } catch (err) {
       setNotice(err instanceof Error ? err.message : "That piece could not be placed.");
     }
   };
+  useLayoutEffect(() => { previewRef.current = addProduct; });
 
+  const confirmProduct = () => {
+    try {
+      const id = api()?.confirmProductPreview();
+      if (!id) return;
+      api()?.select(id);
+      setPending(null);
+      setSwapTarget(null);
+      setNotice("Added to your room and preview basket. Nothing purchased.");
+    } catch (err) { setNotice(err instanceof Error ? err.message : "Placement could not be confirmed."); }
+  };
+  useLayoutEffect(() => { confirmRef.current = confirmProduct; });
+  const cancelProduct = () => { api()?.cancelProductPreview(); setPending(null); setSwapTarget(null); };
+  const safely = (action: () => void) => {
+    try { action(); } catch (err) { setNotice(err instanceof Error ? err.message : "That change could not be made."); }
+  };
   /* --- derived --- */
   const basket = useMemo(
     () => items.filter((i) => !i.stored && i.productId && i.priceMinor != null && i.origin !== "existing_owned"),
@@ -435,11 +470,28 @@ export function RoomExperience({ room, backHref = "/rooms" }: Props) {
   const inventory = useMemo(() => items.filter((i) => i.stored), [items]);
   const basketTotal = formatTotals(basket);
 
+  const exportBasket = () => {
+    const url = URL.createObjectURL(new Blob([JSON.stringify({ roomId: room.id, room: room.label, previewOnly: true,
+      exportedAt: new Date().toISOString(), items: basket.map((item) => ({ ...item, sourceUrl: CATALOG.find((p) => p.id === item.productId)?.sourceUrl ?? null })) }, null, 2)], { type: "application/json" }));
+    const link = document.createElement("a"); link.href = url; link.download = `tadaima-basket-${room.id}.json`; link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
+
   const categories = useMemo(() => {
     const seen = new Set(CATALOG.map((p) => p.category));
     return (Object.keys(CATEGORY_LABEL) as FurnitureCategory[]).filter((c) => seen.has(c));
   }, []);
-  const products = category === "all" ? CATALOG : CATALOG.filter((p) => p.category === category);
+  const products = useMemo(() => category === "all" ? CATALOG : CATALOG.filter((p) => p.category === category), [category]);
+
+  useEffect(() => {
+    if (status !== "ready") return;
+    walkRef.current?.setXRShopping({
+      offers: products.filter((p) => p.dimensions && p.price && p.availability !== "unavailable").slice(0, 3).map((p) => ({ id: p.id, label: p.label, detail: p.price ? `${formatMoney(p.price.amountMinor, p.price.currency)} · ${p.merchant} · saved observation` : p.merchant })),
+      selectedItemLabel: selected?.label, pendingOfferId: pending?.id, canConfirm: Boolean(pending),
+      status: notice ?? "Trigger: select furniture or floor. Left stick: teleport. Right stick: snap turn. Preview basket only.",
+    });
+  }, [status, products, selected, pending, notice]);
 
   const ready = status === "ready";
   const showHint = ready && mode === "walk" && !hintSeen && !panel;
@@ -473,7 +525,7 @@ export function RoomExperience({ room, backHref = "/rooms" }: Props) {
           </WipeLink>
         </div>
 
-        <h1 className="room-x__title">{room.label}</h1>
+        <h1 className="room-x__title" title={room.sourceDescription ?? "Demo room"}>{room.label}</h1>
 
         <div className="room-x__bar-end">
           <div className="room-x__modes">
@@ -485,6 +537,7 @@ export function RoomExperience({ room, backHref = "/rooms" }: Props) {
                 Dollhouse
               </button>
             </div>
+            <button type="button" className="room-x__pill" aria-pressed={exploded} disabled={!ready || presenting} onClick={() => { api()?.setExploded(!exploded); }}>Explode</button>
             {xr && ready ? (
               <button type="button" className="room-x__pill" onClick={enterXR}>
                 Enter VR
@@ -551,12 +604,13 @@ export function RoomExperience({ room, backHref = "/rooms" }: Props) {
               data-area={area}
               aria-label={`Walk ${label.toLowerCase()}`}
               onPointerDown={(e) => {
+                e.preventDefault();
                 e.currentTarget.setPointerCapture(e.pointerId);
-                sendKey("keydown", key);
+                api()?.setMoveInput({ forward: key === "w" ? 1 : key === "s" ? -1 : 0, right: key === "d" ? 1 : key === "a" ? -1 : 0 });
               }}
-              onPointerUp={() => sendKey("keyup", key)}
-              onPointerCancel={() => sendKey("keyup", key)}
-              onLostPointerCapture={() => sendKey("keyup", key)}
+              onPointerUp={() => api()?.setMoveInput({ forward: 0, right: 0 })}
+              onPointerCancel={() => api()?.setMoveInput({ forward: 0, right: 0 })}
+              onLostPointerCapture={() => api()?.setMoveInput({ forward: 0, right: 0 })}
               onContextMenu={(e) => e.preventDefault()}
             >
               {Icon.arrow(rot)}
@@ -571,7 +625,7 @@ export function RoomExperience({ room, backHref = "/rooms" }: Props) {
           <button
             type="button"
             className="room-x__pill"
-            onClick={() => api()?.undo()}
+            onClick={() => safely(() => api()?.undo())}
             disabled={!canUndo}
             aria-label="Undo last change"
           >
@@ -591,8 +645,12 @@ export function RoomExperience({ room, backHref = "/rooms" }: Props) {
         </div>
       ) : null}
 
+      {pending && ready ? <div className="room-x__placement" role="region" aria-label="Confirm furniture placement">
+        <strong>{pending.label}</strong><p>{pending.price ? formatMoney(pending.price.amountMinor, pending.price.currency) : "Price unknown"} · approximate display model, listed product dimensions</p>
+        <div><button type="button" className="room-x__chip-btn" onClick={cancelProduct}>Cancel preview</button><button type="button" className="room-x__chip-btn room-x__chip-btn--ink" onClick={confirmProduct}>Confirm placement</button></div>
+      </div> : null}
       {/* ---------- selection card ---------- */}
-      {selected && ready ? (
+      {selected && ready && !pending ? (
         <div ref={cardRef} className="room-x__card" role="region" aria-label={`Selected: ${selected.label}`}>
           <div className="room-x__card-head">
             <div>
@@ -618,10 +676,10 @@ export function RoomExperience({ room, backHref = "/rooms" }: Props) {
           ) : null}
 
           {selected.locked ? (
-            <p className="room-x__locked">
-              {Icon.lock}
-              <span>Locked in place. This piece stays where it is.</span>
-            </p>
+            <div>
+              <p className="room-x__locked">{Icon.lock}<span>Locked in place. Unlock to rearrange this piece.</span></p>
+              <button type="button" className="room-x__chip-btn" onClick={() => safely(() => api()?.setLocked(selected.id, false))}>Unlock for editing</button>
+            </div>
           ) : moving ? (
             <div className="room-x__moving">
               <p>{coarse ? "Drag to place it, then confirm." : "Look where it should go, then click to set it down."}</p>
@@ -629,17 +687,18 @@ export function RoomExperience({ room, backHref = "/rooms" }: Props) {
                 <button type="button" className="room-x__chip-btn" onClick={cancelMove}>
                   Cancel <kbd>Esc</kbd>
                 </button>
-                <button type="button" className="room-x__chip-btn room-x__chip-btn--ink" onClick={confirmMove}>
+                <button type="button" className="room-x__chip-btn room-x__chip-btn--ink" onClick={() => safely(confirmMove)}>
                   Place here
                 </button>
               </div>
             </div>
           ) : (
             <div className="room-x__actions">
-              <button type="button" className="room-x__chip-btn" onClick={() => beginMove(selected)}>
+              <button type="button" className="room-x__chip-btn" onClick={() => safely(() => api()?.setLocked(selected.id, true))}>Lock</button>
+              <button type="button" className="room-x__chip-btn" onClick={() => safely(() => beginMove(selected))}>
                 Move <kbd>G</kbd>
               </button>
-              <button type="button" className="room-x__chip-btn" onClick={() => api()?.rotate(selected.id, ROTATE_STEP)}>
+              <button type="button" className="room-x__chip-btn" onClick={() => safely(() => api()?.rotate(selected.id, ROTATE_STEP))}>
                 Rotate <kbd>R</kbd>
               </button>
               <button
@@ -651,7 +710,7 @@ export function RoomExperience({ room, backHref = "/rooms" }: Props) {
                 Swap
               </button>
               {selected.origin === "existing_owned" ? (
-                <button type="button" className="room-x__chip-btn" onClick={() => putAway(selected)}>
+                <button type="button" className="room-x__chip-btn" onClick={() => safely(() => putAway(selected))}>
                   Put away <kbd>Del</kbd>
                 </button>
               ) : (
@@ -678,7 +737,7 @@ export function RoomExperience({ room, backHref = "/rooms" }: Props) {
             <p className="room-x__panel-sub">
               {swapTarget
                 ? `Replacing ${swapTarget.label}. The new piece takes its spot.`
-                : "Real pieces at their listed sizes."}
+                : "Listed dimensions, approximate display models. Prices and stock are saved observations."}
             </p>
           </div>
           <button ref={catalogCloseRef} type="button" className="room-x__icon-btn" onClick={closePanel} aria-label="Close">
@@ -722,10 +781,10 @@ export function RoomExperience({ room, backHref = "/rooms" }: Props) {
                   type="button"
                   className="room-x__chip-btn room-x__chip-btn--ink room-x__product-add"
                   onClick={() => addProduct(p)}
-                  disabled={!known || !ready}
-                  aria-label={`${swapTarget ? "Swap in" : "Add"} ${p.label}`}
+                  disabled={!known || !p.price || p.availability === "unavailable" || !ready}
+                  aria-label={`Preview ${p.label}`}
                 >
-                  {swapTarget ? "Swap in" : "Add"}
+                  {p.availability === "unavailable" ? "Unavailable" : "Preview"}
                 </button>
               </li>
             );
@@ -777,16 +836,8 @@ export function RoomExperience({ room, backHref = "/rooms" }: Props) {
             <span>Total</span>
             <span>{basketTotal}</span>
           </p>
-          {basket.length > 0 ? (
-            <a className="room-x__pill room-x__pill--ink room-x__checkout" href="/dev">
-              Check out
-            </a>
-          ) : (
-            <span className="room-x__pill room-x__pill--ink room-x__checkout" aria-disabled="true">
-              Check out
-            </span>
-          )}
-          <p className="room-x__note">Demo checkout</p>
+          <button type="button" className="room-x__pill room-x__pill--ink room-x__checkout" disabled={!basket.length} onClick={exportBasket}>Export basket</button>
+          <p className="room-x__note">Preview only. Prices and stock need rechecking; tax and delivery are unknown. No payment or order is placed.</p>
         </div>
       </div>
 
@@ -819,7 +870,7 @@ export function RoomExperience({ room, backHref = "/rooms" }: Props) {
                   <p className="room-x__line-dims">{formatDimensions(i.dimensions)}</p>
                 </div>
                 <div className="room-x__line-end">
-                  <button type="button" className="room-x__text-btn" onClick={() => takeOut(i)} aria-label={`Take out ${i.label}`}>
+                  <button type="button" className="room-x__text-btn" onClick={() => safely(() => takeOut(i))} aria-label={`Take out ${i.label}`}>
                     Take out
                   </button>
                 </div>
@@ -829,6 +880,7 @@ export function RoomExperience({ room, backHref = "/rooms" }: Props) {
         )}
       </div>
 
+      {room.sourceDescription ? <p className="room-x__source">{room.sourceDescription}</p> : null}
       {/* ---------- states ---------- */}
       <div className="room-x__veil" data-show={status === "loading" || undefined} aria-hidden={status !== "loading"}>
         <p className="room-x__veil-title">{room.label}</p>
@@ -843,9 +895,9 @@ export function RoomExperience({ room, backHref = "/rooms" }: Props) {
           <p className="room-x__veil-title">This room could not open</p>
           <p className="room-x__veil-step">{errorMessage || "Something went wrong while building the room."}</p>
           <div className="room-x__error-actions">
-            <a className="room-x__pill" href={backHref}>
+            <WipeLink className="room-x__pill" href={backHref}>
               Back to rooms
-            </a>
+            </WipeLink>
             <button type="button" className="room-x__pill room-x__pill--ink" onClick={() => window.location.reload()}>
               Try again
             </button>

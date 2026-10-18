@@ -2,7 +2,9 @@
 // Engine (room/walk-scene.ts), headset layer (room/walk-xr.ts) and the HUD
 // (components/RoomExperience.tsx) are built against these types only.
 import type * as THREE from "three";
-import type { FurnitureCategory, PlacedItem, ProductCandidate, RoomPlan, Vector3Meters } from "../../backend/contracts";
+import type { CapturedRoomBinding } from "./textured-model";
+import type { WorkspaceXRShopping } from "./workspace-xr";
+import type { FloorSpot, FurnitureCategory, PlacedItem, ProductCandidate, RoomPlan, Vector3Meters } from "../../backend/contracts";
 
 /** Everything the HUD needs to show about one piece, always in real-world meters. */
 export type WalkItem = {
@@ -36,6 +38,13 @@ export type WalkCallbacks = {
   /** Fired each frame while something is selected so the HUD card can follow it. */
   onAnchor?(anchor: { x: number; y: number } | null): void;
   onModeChange?(mode: WalkMode, pointerLocked: boolean): void;
+  onExplodeChange?(exploded: boolean): void;
+  onMoveChange?(moving: boolean): void;
+  onProductPreviewChange?(preview: WalkProductPreview | null): void;
+  onShoppingFloor?(spot: FloorSpot): void;
+  onPreviewOffer?(id: string): void;
+  onConfirmOffer?(): void;
+  onXRChange?(presenting: boolean): void;
   onError(message: string): void;
 };
 
@@ -45,8 +54,16 @@ export type AddRequest = {
   at?: [number, number];
 };
 
+export type WalkProductPreview = { productId: string; position: Vector3Meters; rotationY: number; swapId?: string };
+
 export type WalkScene = {
   ready: Promise<void>;
+  previewProduct(product: ProductCandidate, options?: { swapId?: string; at?: [number, number] }): WalkProductPreview;
+  confirmProductPreview(): string;
+  cancelProductPreview(): void;
+  setExploded(exploded: boolean): void;
+  readonly isExploded: boolean;
+  setXRShopping(state: WorkspaceXRShopping): void;
   /** Current pieces in plan form; the HUD builds the basket and saves from this. */
   getPlan(): RoomPlan;
   select(id: string | null): void;
@@ -58,16 +75,21 @@ export type WalkScene = {
   add(request: AddRequest): string;
   /** Replace a piece with a product, keeping its spot and facing. */
   swap(id: string, product: ProductCandidate): string;
+  /** Change protection only in the editable draft, including stored furniture. Undoable. */
+  setLocked(id: string, locked: boolean): void;
   rotate(id: string, radians: number): void;
   /** Start moving a piece: it follows the view (desktop) or controller (headset) until confirmed or cancelled. */
   beginMove(id: string): void;
-  confirmMove(): void;
+  /** True only when a valid move was committed. */
+  confirmMove(): boolean;
   cancelMove(): void;
   undo(): void;
   canUndo(): boolean;
   setMode(mode: WalkMode): void;
   /** Request pointer lock for mouse look (desktop walk mode). */
   lockPointer(): void;
+  /** Bounded touch/controller-free locomotion; zero also releases held movement keys. */
+  setMoveInput(input: { forward: number; right: number }): void;
   /** True when this browser can enter an immersive VR session (Quest 3S browser). */
   xrSupported(): Promise<boolean>;
   enterXR(): Promise<void>;
@@ -84,8 +106,11 @@ export type WalkEnvironment = {
 };
 
 export type WalkOptions = {
+  /** Original reconstruction, never the edited shopping snapshot. */
+  reconstruction?: { plan: RoomPlan; texturedModel: ArrayBuffer; binding: CapturedRoomBinding };
   reducedMotion?: boolean;
   lite?: boolean;
+  /** @deprecated The engine now owns the hardened workspace XR integration. Ignored. */
   attachXR?: (core: WalkCore) => WalkXR;
   /** When set, the plan supplies only floor bounds and pieces; walls and collision come from this GLB. */
   environment?: WalkEnvironment;

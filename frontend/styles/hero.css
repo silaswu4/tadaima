@@ -161,6 +161,15 @@
 }
 .tadaima-hero .hero-row__go:focus-visible { text-decoration: underline; outline: none; }
 
+.tadaima-hero .hero-error {
+  position: absolute;
+  z-index: 3;
+  top: calc(39px + 3 * 27px + 12px);
+  left: 16.53vw;
+  max-width: max(413px, 28.68vw);
+  font: 400 13px/18px var(--font-body), system-ui, sans-serif;
+  color: var(--hero-sun);
+}
 .tadaima-hero .hero-qr {
   position: absolute;
   z-index: 3;
@@ -268,6 +277,7 @@
   .tadaima-hero .hero-row__inner { height: 34px; }
   .tadaima-hero .hero-row__cue { display: none; }
   .tadaima-hero .hero-qr { left: 16px; top: calc(72px + 3 * 36px + 18px); }
+  .tadaima-hero .hero-error { left: 16px; top: calc(72px + 3 * 36px + 12px); max-width: calc(100% - 32px); }
   .tadaima-hero .hero-word { left: 12px; font-size: 25vw; }
 }
 

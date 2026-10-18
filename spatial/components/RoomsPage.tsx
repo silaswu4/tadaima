@@ -4,12 +4,11 @@ import Image from "next/image";
 import mark from "../assets/tadaima-mark.png";
 import { WipeLink } from "./PageWipe";
 import { IsoRoomGallery, type GalleryRoom } from "./IsoRoomGallery";
-import "./RoomsPage.css";
 
 export type RoomsPageRoom = GalleryRoom;
 
 /** The rooms screen: a frame around the room gallery, with scanning one step away. */
-export function RoomsPage({ rooms, scanHref = "/capture" }: { rooms: RoomsPageRoom[]; scanHref?: string }) {
+export function RoomsPage({ rooms, scanHref = "/capture", initial = 0, generation = 0, onImport, notice, onDismissNotice }: { rooms: RoomsPageRoom[]; scanHref?: string; initial?: number; generation?: number; onImport?: () => void; notice?: string; onDismissNotice?: () => void }) {
   return (
     <main className="rooms-page">
       <header className="rooms-page__header">
@@ -19,20 +18,17 @@ export function RoomsPage({ rooms, scanHref = "/capture" }: { rooms: RoomsPageRo
         </WipeLink>
         <p className="rooms-page__heading">Your rooms</p>
         <nav className="rooms-page__nav" aria-label="Rooms">
-          <WipeLink href="/#how" className="rooms-page__link">
-            How it works
-          </WipeLink>
+          <button type="button" onClick={onImport} className="rooms-page__link">Open scan</button>
           <WipeLink href={scanHref} className="rooms-page__link">
             Scan
           </WipeLink>
-          <WipeLink href="/dev" className="rooms-page__link">
-            Basket
-          </WipeLink>
+
         </nav>
       </header>
 
+      {notice ? <p className="rooms-page__notice" role="status">{notice} <button type="button" onClick={onDismissNotice}>Dismiss</button></p> : null}
       <div className="rooms-page__stage">
-        <IsoRoomGallery rooms={rooms} hrefFor={(room) => `/rooms/${room.id}`} className="rooms-page__gallery" />
+        <IsoRoomGallery key={generation} initial={initial} rooms={rooms} hrefFor={(room) => `/rooms/${room.id}`} className="rooms-page__gallery" />
         <div className="rooms-page__light" aria-hidden="true">
           <span />
           <span />
@@ -50,7 +46,7 @@ export function RoomsPage({ rooms, scanHref = "/capture" }: { rooms: RoomsPageRo
           </span>
           <span>Scan a room</span>
         </WipeLink>
-        <p className="rooms-page__note">Or step into one of ours. Every piece is at its real size.</p>
+        <p className="rooms-page__note">Open your scan, or step into a demo. Baskets stay with each room.</p>
       </footer>
     </main>
   );

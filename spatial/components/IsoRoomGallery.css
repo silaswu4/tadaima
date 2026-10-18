@@ -311,3 +311,14 @@
     transition: none !important;
   }
 }
+
+/* Imported scan names include a timestamp and must remain readable on phones. */
+.iso-gallery__caption { width: calc(100% - 80px); }
+.iso-gallery__title { max-width: 100%; }
+.iso-gallery__title .iso-gallery__swap { max-width: 100%; }
+.iso-gallery__title .iso-gallery__swap-item { white-space: normal; overflow-wrap: anywhere; }
+.iso-gallery__loading { position: absolute; top: 34%; left: 50%; transform: translateX(-50%); color: var(--muted); font-size: 13px; }
+@media (max-width: 767px) {
+  .iso-gallery__caption { width: calc(100% - 32px); }
+  .iso-gallery__title { font-size: 26px; }
+}

@@ -21,7 +21,7 @@ adb reverse tcp:3017 tcp:3017
 adb reverse --list
 ```
 
-Open `http://localhost:3017/room` **in Meta Quest Browser on the headset**, then choose the page's VR entry button and allow the immersive experience. The forwarded `localhost` is the headset's connection to the Mac; `127.0.0.1` in an unforwarded headset browser is not the Mac. These USB forwarding and remote inspection steps follow Meta's [Browser debugging guide](https://developers.meta.com/vr/documentation/web/browser-remote-debugging/).
+Open `http://localhost:3017/rooms` **in Meta Quest Browser on the headset**, select a room and choose **Step inside**, then **Enter VR** and allow the immersive experience. The selected room opens at `/rooms/[roomId]`; the old `/room` workspace remains diagnostic. The forwarded `localhost` is the headset's connection to the Mac; `127.0.0.1` in an unforwarded headset browser is not the Mac. These USB forwarding and remote inspection steps follow Meta's [Browser debugging guide](https://developers.meta.com/vr/documentation/web/browser-remote-debugging/).
 
 Keep the development server and USB connection active. The physical boundary remains the headset's boundary: a reconstructed room is not automatically registered to the real room around the wearer.
 
@@ -44,7 +44,9 @@ The headset panel is actual Three.js scene geometry. Ordinary DOM shopping contr
 
 ## Get the scanned room onto Quest
 
-The Mac browser's imported JSON/GLB and local storage are **not shared** with the headset browser. Opening the same `/room` URL alone does not transfer a room imported on the Mac. The page must load the matching room request and clean GLB in the headset, either through an explicitly configured private local asset route or files available to the headset's file picker. Use matching reconstruction artifacts; do not use the fragmented raw LiDAR mesh as the primary shopping room.
+The Mac browser's imported JSON/GLB and IndexedDB storage are **not shared** with the headset browser. Opening `/rooms` alone does not transfer a room imported on the Mac. Import the matching processed reconstruction JSON and optional clean GLB using **Open scan**, or use the private local bridge below. Successful imports persist in the headset browser's private room registry across gallery navigation and refresh. Use matching reconstruction artifacts; do not use the fragmented raw LiDAR mesh as the primary shopping room.
+
+Browser storage is scoped to the origin: `localhost:3017` and `127.0.0.1:3017` have different saved rooms, as do different browsers. Clearing site data removes these local records. There is no account sync in this integration. See [website flow](website-flow.md) for source identity, editable drafts and the preview basket boundary.
 
 Do not commit the user's room photos or generated scan assets into `public/` or expose them through a public tunnel merely to make a demo load. USB forwarding provides a local connection; it does not by itself publish anything on the internet.
 
@@ -63,10 +65,12 @@ Keep the token private. This bridge requires development mode, a loopback hostna
 After USB port forwarding, open this URL in the Quest browser, replacing the token placeholder with the same value configured for the server:
 
 ```text
-http://localhost:3017/room#local-scan=<64-character-token>
+http://localhost:3017/rooms#local-scan=<64-character-token>
 ```
 
-The page uses the fragment token to request the two artifacts with authorization headers and validates their matching identity before loading the room. URL fragments are not sent in ordinary HTTP requests, but the token is still a credential visible to someone reading the full URL. Do not put that URL in shared screenshots or documentation.
+The gallery bootstrap uses the fragment token to request the two artifacts with authorization headers and validates their exact matching identity before saving a private room. It selects the imported room in **Your rooms**; choose **Step inside**, then **Enter VR**. Reopening the same source preserves accepted furniture edits and basket lines.
+
+After successful import, the bootstrap removes `local-scan` from the URL and clears a matching legacy `sessionStorage["tadaima:local-scan"]` value. It does not persist the credential in IndexedDB or create a new stored token. Refresh and navigation use the saved room artifacts instead. Failed imports leave the link available for retry. URL fragments are not sent in ordinary HTTP requests, but the token is still a credential visible to someone reading the full URL. Do not put that URL in shared screenshots or documentation.
 
 Once the server is running and the Quest is connected, open the private scan with one command from the repository root:
 
@@ -74,7 +78,7 @@ Once the server is running and the Quest is connected, open the private scan wit
 npm run quest:open
 ```
 
-The helper reads only `TADAIMA_LOCAL_CAPTURE_TOKEN` from the current environment or a literal assignment in the repository's `.env.local`. Use the same value configured for the server; it never evaluates the environment file. It verifies an authorized Quest model, forwards port 3017, and opens the local room URL through Android's normal browser intent. ADB's output is captured because Android can echo the private URL; the helper does not print the token. It does not install software or open a remote address.
+The helper reads only `TADAIMA_LOCAL_CAPTURE_TOKEN` from the current environment or a literal assignment in the repository's `.env.local`. Use the same value configured for the server; it never evaluates the environment file. It verifies an authorized Quest model, forwards port 3017, and opens the `/rooms#local-scan=…` bootstrap through Android's normal browser intent. ADB's output is captured because Android can echo the private URL; the helper does not print the token. It does not install software or open a remote address.
 
 If more than one authorized Quest is attached, choose the serial shown by `adb devices -l`:
 
@@ -120,6 +124,6 @@ The current clean-room artifact measured 5,426,232 bytes, 75,124 triangles, 61 g
 
 ## Renderer integration
 
-`spatial/room/workspace-xr.ts` owns a temporary player rig, two target-ray controllers, teleport reticle, and an in-scene shopping panel. The renderer owner must call `renderer.setAnimationLoop` and invoke the module's `update()` before rendering, disable desktop camera controls during the session, render full-height walls, and supply the current canonical plan, selectable roots, floor surfaces, blocking surfaces, and navigation clearance callback. This follows the [Three.js WebXR manager API](https://threejs.org/docs/pages/WebXRManager.html) and [renderer animation loop API](https://threejs.org/docs/pages/WebGLRenderer.html).
+`spatial/room/workspace-xr.ts` owns a temporary player rig, two target-ray controllers, teleport reticle, and an in-scene shopping panel. The product engine `walk-scene.ts` adapts it for `/rooms/[roomId]`; it is the sole immersive owner on that route, rather than attaching the older walk XR controller layer simultaneously. The renderer owner must call `renderer.setAnimationLoop` and invoke the module's `update()` before rendering, disable desktop camera controls during the session, render full-height walls, and supply the current canonical plan, selectable roots, floor surfaces, blocking surfaces, and navigation clearance callback. This follows the [Three.js WebXR manager API](https://threejs.org/docs/pages/WebXRManager.html) and [renderer animation loop API](https://threejs.org/docs/pages/WebGLRenderer.html).
 
 The camera is reparented at entry and starts at local origin under the rig: `local-floor` supplies the measured head height, so no additional desktop 1.6-meter camera offset is added. The original camera parent, pose, scale, FOV, and aspect are restored on exit. Controller events, panel textures, and geometries are released on disposal. Canonical furniture coordinates and purchase state are never changed by this module.
