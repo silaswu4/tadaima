@@ -1,6 +1,6 @@
-# Backend · Project lead
+# Backend · Matthew
 
-Owner: **you, the project lead**. This is the application and agent integration area. Work alongside Matthew's reconstruction pipeline, Angelina's screens, and Silas's spatial viewer.
+Owner: **Matthew**. This is the application and agent integration area. Work alongside the project lead's reconstruction pipeline, Angelina's screens, and Silas's spatial viewer.
 
 ## Scope
 
@@ -16,7 +16,7 @@ Owner: **you, the project lead**. This is the application and agent integration 
 
 1. Agree on `contracts.ts` with the other three owners. The scaffold is a starting contract, not runtime validation or a complete implementation of the proposed data model.
 2. Implement one fixture-backed project/plan read and validated revision write.
-3. Connect Matthew's confirmed geometry output to the canonical plan.
+3. Connect the project lead's confirmed geometry output to the canonical plan.
 4. Expose product research and a constrained revision through the same service operations used by the frontend, voice, and ASI:One.
 5. Add exact-basket review and real cart state before payment work.
 

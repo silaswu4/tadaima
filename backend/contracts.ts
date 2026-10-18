@@ -1,6 +1,6 @@
 /**
  * Shared, browser-safe starting contracts. No runtime validation or services.
- * Owner: project lead. Coordinate changes with all consumers.
+ * Owner: Matthew. Coordinate changes with all consumers.
  * Geometry is in meters, right-handed with +Y up; rotations use radians.
  */
 export type PointXZ = readonly [x: number, z: number];

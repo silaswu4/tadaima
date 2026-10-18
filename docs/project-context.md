@@ -25,7 +25,7 @@ The user wants an ambitious hackathon project inspired by Homebuddy, with meanin
 | Reject the x402 agent-payment direction | Do not reintroduce it as an accepted requirement |
 | Document everything and push it to `silaswu4/tadaima` | Preserve decisions, uncertainty, sources, and actual repository state |
 
-The user has assigned four working areas: project lead in `backend/`, Matthew in `reconstruction/`, Angelina in `frontend/`, and Silas in `spatial/`. See [team ownership](team-ownership.md). No actual apartment address, confirmed merchant list, event registration status, implementation deadline allocation, model provider credentials, wallet provider, or final Solana choice has been supplied in the material captured here.
+The user has assigned four working areas: Matthew in `backend/`, project lead in `reconstruction/`, Angelina in `frontend/`, and Silas in `spatial/`. This includes the latest request to swap the project lead and Matthew. See [team ownership](team-ownership.md). No actual apartment address, confirmed merchant list, event registration status, implementation deadline allocation, model provider credentials, wallet provider, or final Solana choice has been supplied in the material captured here.
 
 ## Recommended product baseline
 
@@ -51,6 +51,7 @@ These are synthesis and implementation recommendations, not additional user appr
 7. **Repository handoff:** Continue in `silaswu4/tadaima`, which currently contains a stylized Three.js hero rather than the proposed application.
 8. **Team scaffold:** Split work into backend, reconstruction, frontend, and spatial folders. The later user correction assigns Angelina the product screens and Silas the spatial frontend.
 9. **Concurrent repository update:** Preserve the incoming ASCII landing hero from `34e581c` in `spatial/` and compose it from `frontend/`. Keep the earlier pencil-room renderer available; do not overwrite the newer work during scaffolding.
+10. **Backend/reconstruction swap:** The user takes reconstruction; Matthew takes backend, agents, shopping, shared contracts, and integration. Silas and Angelina keep their frontend assignments.
 
 ## Solana status at handoff
 

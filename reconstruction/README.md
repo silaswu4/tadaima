@@ -1,6 +1,6 @@
-# Reconstruction · Matthew
+# Reconstruction · Project lead
 
-Owner: **Matthew**. Turn address evidence or browser-captured room media into confirmed geometry and editable/renderable artifacts.
+Owner: **you, the project lead**. Turn address evidence or browser-captured room media into confirmed geometry and editable/renderable artifacts.
 
 ## Scope
 
@@ -20,7 +20,7 @@ Owner: **Matthew**. Turn address evidence or browser-captured room media into co
 
 ## Handoffs
 
-Angelina owns camera permission/capture/upload **UI** in `frontend/`; Matthew owns processing and geometry. The project lead owns upload authorization, persistence, and job coordination. Silas owns rendering, export compatibility checks in the browser, and Quest interactions.
+Angelina owns camera permission/capture/upload **UI** in `frontend/`; the project lead owns processing and geometry. Matthew owns upload authorization, persistence, and job coordination. Silas owns rendering, export compatibility checks in the browser, and Quest interactions.
 
 `contracts.ts` is a TypeScript integration boundary, not a requirement to run Blender in JavaScript. Python scripts and a separate worker can live here once introduced. Keep worker dependencies and invocation instructions here; all Next.js application commands still run from the repository root.
 

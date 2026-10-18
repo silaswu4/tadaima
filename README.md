@@ -6,12 +6,12 @@ Project context, product decisions, architecture, capture research, sponsor requ
 
 | Folder | Owner | Work |
 | --- | --- | --- |
-| [`backend/`](backend/README.md) | You / project lead | Shared contracts, agents, shopping, services, integration |
-| [`reconstruction/`](reconstruction/README.md) | Matthew | Address/capture processing, room geometry, Blender exports |
+| [`backend/`](backend/README.md) | Matthew | Shared contracts, agents, shopping, services, integration |
+| [`reconstruction/`](reconstruction/README.md) | You / project lead | Address/capture processing, room geometry, Blender exports |
 | [`frontend/`](frontend/README.md) | Angelina | Screens, onboarding, responsive UI, products and basket |
 | [`spatial/`](spatial/README.md) | Silas | 3D viewer, selection, placement, Quest/browser interaction |
 
-See [team ownership and first tasks](docs/team-ownership.md). These are four working areas inside one application; run the commands below from the repository root. `app/` holds thin Next.js entry points and `public/` holds shared static assets.
+See [team ownership and first tasks](docs/team-ownership.md) and [copy-paste agent prompts](docs/agent-prompts.md). These are four working areas inside one application; run the commands below from the repository root. `app/` holds thin Next.js entry points and `public/` holds shared static assets.
 
 ## Application setup
 

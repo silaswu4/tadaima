@@ -132,4 +132,4 @@ Cut research-grade reconstruction, unlimited merchants, automated delivery/assem
 
 ## Assigned ownership boundaries
 
-The user assigned four working areas and requested that Silas and Angelina focus on frontend work. The project lead owns `backend/`, Matthew owns `reconstruction/`, Angelina owns `frontend/`, and Silas owns `spatial/`. This reflects the user's later request to swap Silas and Angelina. See [team ownership](team-ownership.md) for tasks and handoffs; prior experience and registration status are not inferred from these assignments. Avoid separate copies of state or competing schema definitions.
+The user assigned four working areas and requested that Silas and Angelina focus on frontend work. Following both ownership swaps, Matthew owns `backend/`, the project lead owns `reconstruction/`, Angelina owns `frontend/`, and Silas owns `spatial/`. See [team ownership](team-ownership.md) and [agent prompts](agent-prompts.md) for tasks and handoffs; prior experience and registration status are not inferred from these assignments. Avoid separate copies of state or competing schema definitions.

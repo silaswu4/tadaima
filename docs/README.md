@@ -6,7 +6,7 @@ The repository is named `tadaima`; the existing UI, package, and older handoff s
 
 ## Start here
 
-For active development, start with [Team ownership and working boundaries](team-ownership.md): the project lead owns `backend/`, Matthew `reconstruction/`, Angelina `frontend/`, and Silas `spatial/`. The four areas share one application and one root development command.
+For active development, start with [Team ownership and working boundaries](team-ownership.md): Matthew owns `backend/`, the project lead `reconstruction/`, Angelina `frontend/`, and Silas `spatial/`. Use the updated [copy-paste agent prompts](agent-prompts.md). The four areas share one application and one root development command.
 
 1. Read [Project context and decisions](project-context.md) for what the user actually requested.
 2. Read [Repository state and implementation plan](implementation-plan.md) before changing code. The current application is a landing-page hero, not an implemented shopping agent.
@@ -18,6 +18,7 @@ For active development, start with [Team ownership and working boundaries](team-
 | Document | Purpose |
 | --- | --- |
 | [Team ownership](team-ownership.md) | Four working areas, named owners, initial tasks, and handoff boundaries |
+| [Agent prompts](agent-prompts.md) | Standalone prompts matching the latest ownership swaps |
 | [Project context](project-context.md) | Confirmed requirements, recommendations, rejected directions, and handoff |
 | [Product](product.md) | Thesis, concise user flow, scope, and Homebuddy differentiation |
 | [Architecture](architecture.md) | Data flow, shared state, jobs, integrations, and trust boundaries |
