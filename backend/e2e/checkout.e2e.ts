@@ -107,3 +107,33 @@ describe("paying (stripe test mode)", () => {
     assert.equal((await a.checkout()).json.orders.length, 0, "nothing charged");
   });
 });
+
+describe("checkout safety (stripe test mode)", () => {
+  test("a paid cart can't be approved again, and repeated test cards don't pile up", { timeout: 90_000 }, async (t) => {
+    const a = await fresh();
+    const card = await a.testCard();
+    if (card.status === 503) return t.skip("payments not configured");
+    assert.equal((await a.testCard()).json.id, card.json.id, "same test card reused");
+    const view = (await a.recheck()).json;
+    assert.equal((await a.approve(view.cart.digest, card.json.id)).status, 200);
+    assert.equal((await a.execute()).status, 200);
+    const again = await a.approve(view.cart.digest, card.json.id);
+    assert.equal(again.status, 409);
+    assert.match(again.json.error!, /already paid/);
+    assert.equal((await a.checkout()).json.paymentMethods.length, 1);
+  });
+
+  test("an approval for an older cart is reported stale, not active", { timeout: 90_000 }, async (t) => {
+    const a = await fresh();
+    const card = await a.testCard();
+    if (card.status === 503) return t.skip("payments not configured");
+    const view = (await a.recheck()).json;
+    assert.equal((await a.approve(view.cart.digest, card.json.id)).status, 200);
+    const plan = (await a.get()).json.plan;
+    const cheaper = plan.products.find((p) => p.id.includes("tagarp"))!;
+    assert.ok((await a.change(plan.revision, [{ kind: "replace", itemId: "item_lamp", productId: cheaper.id }])).json.ok);
+    const now = (await a.checkout()).json as typeof view & { staleMandate: unknown };
+    assert.equal(now.mandate, null);
+    assert.ok(now.staleMandate);
+  });
+});

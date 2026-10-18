@@ -55,6 +55,8 @@ export interface CheckoutView {
   recheck: Recheck | null;
   paymentMethods: PaymentMethod[];
   mandate: Mandate | null;
+  /** An approval given for a cart that has since changed. The agent will be refused; approve again. */
+  staleMandate: Mandate | null;
   orders: Order[];
   /** Why approval isn't possible yet, if it isn't. */
   blockers: string[];
@@ -68,12 +70,24 @@ export async function getCheckout(projectId: string): Promise<CheckoutView> {
   const recheck = rc && rc.cartDigest === cart.digest ? rc : null;
   const blockers: string[] = [];
   if (!cart.merchants.length) blockers.push("the cart is empty");
+  if (o.some((x) => x.cartDigest === cart.digest)) blockers.push("this exact cart was already paid for");
   if (cart.unpricedProductIds.length) blockers.push("some items have no known price");
   if (!recheck) blockers.push("prices and stock need a recheck");
   else if (!recheck.allOk) blockers.push("the recheck found problems");
   else if (Date.now() - Date.parse(recheck.checkedAt) > RECHECK_FRESH_MS) blockers.push("the last recheck is older than 15 minutes");
   if (!w?.methods.length) blockers.push("no card connected");
-  return { cart, recheck, paymentMethods: w?.methods ?? [], mandate: live(m), orders: o, blockers, stripePublishableKey: publishableKey() };
+  // an approval only means anything for the cart it was given for
+  const active = live(m);
+  return {
+    cart,
+    recheck,
+    paymentMethods: w?.methods ?? [],
+    mandate: active && active.cartDigest === cart.digest ? active : null,
+    staleMandate: active && active.cartDigest !== cart.digest ? active : null,
+    orders: o,
+    blockers,
+    stripePublishableKey: publishableKey(),
+  };
 }
 
 export async function runRecheck(projectId: string): Promise<CheckoutView> {
@@ -117,6 +131,8 @@ export async function finishCardSetup(projectId: string, setupIntentId: string) 
 
 export async function connectTestCard(projectId: string) {
   const w = await ensureWallet(projectId);
+  const existing = w.methods.find((m) => m.last4 === "4242");
+  if (existing) return existing;
   return addMethod(projectId, w, await attachTestVisa(w.customerId));
 }
 

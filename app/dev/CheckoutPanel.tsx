@@ -12,6 +12,7 @@ interface CheckoutView {
   recheck: Recheck | null;
   paymentMethods: PaymentMethod[];
   mandate: Mandate | null;
+  staleMandate: Mandate | null;
   orders: Order[];
   blockers: string[];
   stripePublishableKey: string | null;
@@ -311,6 +312,9 @@ export function CheckoutPanel({ base, plan, onPlanChanged }: { base: string; pla
                 <button className="btn btn-primary h-9" disabled={!!busy || view.blockers.length > 0 || !card} onClick={() => void approve()}>
                   {busy === "approve" ? "Approving..." : `Approve ${money(cart.subtotal)} at ${stores}${card ? ` with ${cardName(card)}` : ""}`}
                 </button>
+                {view.staleMandate && (
+                  <Note msg={{ kind: "warn", text: `Your earlier approval was for a different cart, so the agent can't use it. Approve this cart to continue.` }} />
+                )}
                 {paidAlready && <Note msg={{ kind: "warn", text: `This exact cart was already paid (${paidAlready.id}). Approving again would buy it twice.` }} />}
                 <p className="mt-2 text-xs leading-relaxed text-zinc-500">
                   The agent can spend up to {money(cart.subtotal)} at {stores} for 30 minutes, only for this exact cart. Any change to the cart cancels it.
