@@ -1,6 +1,6 @@
 # Reconstruction · Project lead
 
-Owner: **you, the project lead**. Implemented stages: address research → private source/image bundle → vision-based geometry proposal → validated metric room geometry → editable Blender scene → standalone GLB and a revision-bound manifest. Hosted address providers need credentials; a [keyless Codex file handoff](address/README.md#keyless-codex-verification) can exercise the same validation/rendering path using inspected real evidence. Camera upload, calibrated photo reconstruction, and application integration remain separate work. Read [address pipeline setup and limitations](address/README.md) and [technical research and primary sources](RESEARCH.md).
+Owner: **you, the project lead**. Implemented stages: address research → private source/image bundle → vision-based geometry proposal → validated metric room geometry → editable Blender scene → standalone GLB and a revision-bound manifest. Hosted address providers need credentials; a [keyless Codex file handoff](address/README.md#keyless-codex-verification) can exercise the same validation/rendering path using inspected real evidence. A [mobile web capture stage](capture/README.md) now turns guided reference photographs and explicit room dimensions into a measured rectangular shell. Automatic photo-to-geometry, hosted uploads, and application integration remain separate work. Read [address pipeline setup and limitations](address/README.md) and [technical research and primary sources](RESEARCH.md).
 
 ## Requirements and quick start
 
@@ -118,4 +118,4 @@ The verifier checks hashes, actual Three.js loading, finite positions, metadata,
 - Actual installed Three.js loader: matching bounds, meter scale, IDs, and both apertures. Blender CPU preview visually inspected.
 - Root `npm run lint` and `npm run build` passed during integration.
 
-Address research, iPhone/photo reconstruction, physical accuracy, hosted jobs/storage, browser visual integration, and Quest/mobile hardware tests remain outside this stage. Angelina owns capture/confirmation UI, Matthew backend integration, and Silas the viewer. See [team ownership](../docs/team-ownership.md).
+The [address research](address/README.md) and [mobile measured-room capture](capture/README.md) stages now feed this worker. Automatic photo-to-geometry, physical accuracy, hosted jobs/storage, product viewer integration, and Quest/mobile hardware tests remain unverified or separate work. Angelina owns capture/confirmation UI, Matthew backend integration, and Silas the viewer. See [team ownership](../docs/team-ownership.md).

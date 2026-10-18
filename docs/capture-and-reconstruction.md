@@ -2,7 +2,7 @@
 
 Research consolidated: October 17, 2026. This document describes the proposed pipeline and its limitations. It does not certify a working scanner, reconstruction service, or device integration in the repository.
 
-Implementation update: the downstream [validated geometry → editable Blender → GLB stage](../reconstruction/README.md) now works locally, with [primary-source research](../reconstruction/RESEARCH.md) and actual export/loader tests. It takes supplied geometry; neither address extraction nor photo-to-geometry processing is implemented by that stage.
+Implementation update, October 18: the [address research pipeline](../reconstruction/address/README.md) and [mobile measured-room capture](../reconstruction/capture/README.md) now feed the [validated geometry → editable Blender → GLB worker](../reconstruction/README.md). The mobile `/capture` diagnostic page exports four reference photographs plus explicitly entered rectangular-room dimensions and openings; it does not infer geometry from those photographs. Local browser export and Blender/GLB generation have been exercised. Physical iPhone camera verification, automatic multi-view reconstruction, production uploads, and product integration remain outstanding. The broader capture sequence below describes future photo-reconstruction evaluation, not the current four-reference-photo implementation.
 
 The current product requirement is **web only**, with two entry points: an address and unit number, or guided capture in an iPhone browser. Both must converge on a user-confirmed, dimensioned room model. Neither entry point guarantees an accurate reconstruction of an arbitrary apartment.
 
