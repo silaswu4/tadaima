@@ -737,7 +737,7 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
       entry.loaded = true;
       syncEntry(entry);
       pickDirty = true;
-      if (moving?.id === item.id) moving.checkedKey = "";
+      if (moving) { moving.checkedKey = ""; moving.plan = null; }
       labelKey = "";
     });
     return { entry, loaded };
@@ -2066,6 +2066,27 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
     line.scale.set(entry.dims[0] + 0.04, entry.dims[1] + 0.02, entry.dims[2] + 0.04);
   }
 
+  function drawHeadsetLabel(selected: Entry) {
+    const [w, h, d] = selected.dims;
+    const displayLabel = toWalkItem(selected).label;
+    const key = `${displayLabel}|${w}|${h}|${d}|${selected.source}`;
+    if (key !== labelKey) {
+      labelKey = key;
+      panel.draw([
+        { text: selected.source === "model" ? `${displayLabel} · model bounds` : displayLabel, size: 26, muted: true },
+        { text: `${Math.round(w * 100)} x ${Math.round(d * 100)} x ${Math.round(h * 100)} cm`, size: 46 },
+        { text: `${inches(w)} x ${inches(d)} x ${inches(h)} in`, size: 28, muted: true },
+      ]);
+    }
+    panel.mesh.visible = true;
+    panel.mesh.position.set(selected.root.position.x, selected.root.position.y + h + 0.22, selected.root.position.z);
+    camera.getWorldPosition(tmpA);
+    camera.getWorldQuaternion(tmpQ);
+    panel.mesh.quaternion.copy(tmpQ);
+    const distance = tmpA.distanceTo(panel.mesh.position);
+    panel.mesh.scale.setScalar(THREE.MathUtils.clamp(distance / 2.5, 0.7, mode === "orbit" ? 4 : 1.8));
+  }
+
   function updateOverlays() {
     const presenting = renderer.xr.isPresenting;
     crosshair.visible = !presenting && mode === "walk" && pointerLocked;
@@ -2086,24 +2107,9 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
     placeOutline(selectionOutline, selected);
     (selectionOutline.material as THREE.LineBasicMaterial).color.set(moving && !moving.valid ? INVALID : ACCENT);
 
-    const [w, h, d] = selected.dims;
-    const displayLabel = toWalkItem(selected).label;
-    const key = `${displayLabel}|${w}|${h}|${d}|${selected.source}`;
-    if (key !== labelKey) {
-      labelKey = key;
-      panel.draw([
-        { text: selected.source === "model" ? `${displayLabel} · model bounds` : displayLabel, size: 26, muted: true },
-        { text: `${Math.round(w * 100)} x ${Math.round(d * 100)} x ${Math.round(h * 100)} cm`, size: 46 },
-        { text: `${inches(w)} x ${inches(d)} x ${inches(h)} in`, size: 28, muted: true },
-      ]);
-    }
-    panel.mesh.visible = true;
-    panel.mesh.position.set(selected.root.position.x, selected.root.position.y + h + 0.22, selected.root.position.z);
-    camera.getWorldPosition(tmpA);
-    camera.getWorldQuaternion(tmpQ);
-    panel.mesh.quaternion.copy(tmpQ);
-    const distance = tmpA.distanceTo(panel.mesh.position);
-    panel.mesh.scale.setScalar(THREE.MathUtils.clamp(distance / 2.5, 0.7, mode === "orbit" ? 4 : 1.8));
+    // On screen the HTML toolbar over the piece names and sizes it; the in-world label is for the headset only.
+    if (presenting) drawHeadsetLabel(selected);
+    else panel.mesh.visible = false;
 
     if (!presenting && callbacks.onAnchor) {
       const anchor = anchorFor(selected);
@@ -2143,6 +2149,19 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
   if ((mode as WalkMode) === "orbit") { rig.position.set(0, 0, 0); rig.rotation.set(0, 0, 0); camera.fov = ORBIT_FOV; controls.enabled = true; fitOrbit(); }
   applyWallMode();
   renderer.setAnimationLoop(frame);
+  // Development-only probe for browser checks of motion feel; never shipped in production builds.
+  if (process.env.NODE_ENV !== "production") {
+    (canvas as HTMLCanvasElement & { __walkProbe?: () => unknown }).__walkProbe = () => ({
+      rig: [rig.position.x, rig.position.z],
+      speed: Math.hypot(locomotion.vx, locomotion.vz),
+      bob: camera.position.y,
+      selected: selectedId,
+      locked: selectedId ? entries.get(selectedId)?.item.locked ?? null : null,
+      moving: moving ? { id: moving.id, level: moving.level, pose: moving.pose, lift: moving.shown.lift.value } : null,
+      flights: flights.length,
+      anims: poseAnims.size,
+    });
+  }
 
   const ready = Promise.all([Promise.all(initialLoads), lighting.ready, envLoad, sourceLoad])
     .then(() => {
