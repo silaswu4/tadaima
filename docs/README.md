@@ -2,7 +2,7 @@
 
 This is the shared project context for the LA Hacks AI Hackathon 2026 furniture-shopping experience. It consolidates the product discussion, research, constraints, sponsor requirements, and a proposed implementation path as of **October 17, 2026**.
 
-The repository is named `tadaima`; the existing UI, package, and older handoff still use **Michael**. This documentation uses Tadaima as the repository label, without treating a product rename as completed or approved. “Room Service” was an earlier research working name.
+The product is named **tadaima** across the repository, UI, and package. Michael and “Room Service” were earlier working names.
 
 ## Start here
 

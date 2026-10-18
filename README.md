@@ -1,6 +1,6 @@
 # Tadaima
 
-Project context, product decisions, architecture, capture research, sponsor requirements, Solana options, and the implementation plan live in **[docs/README.md](docs/README.md)**. Start there before building. The current UI and package still use the working name Michael. The homepage uses the latest WebGL ASCII hero; the earlier Three.js room hero is retained in `spatial/`.
+Project context, product decisions, architecture, capture research, sponsor requirements, Solana options, and the implementation plan live in **[docs/README.md](docs/README.md)**. Start there before building. The product, UI and package are named tadaima (Michael was the working name). The homepage uses the latest WebGL ASCII hero; the earlier Three.js room hero is retained in `spatial/`.
 
 ## Team working folders
 

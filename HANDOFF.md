@@ -1,8 +1,8 @@
-> Historical handoff: the current project context is in [docs/README.md](docs/README.md). On October 18 the user approved an optional thin SwiftUI/RoomPlan scan companion for iPhone 14 Pro, superseding the earlier web-only restriction for this input alone. Shopping, design, and Quest remain web-based; address and browser-photo inputs remain available without tape measurements. See [native scan status](docs/native-scan.md); physical capture is not yet verified. The active repository is `silaswu4/tadaima`, while the UI still uses Michael. The original design notes below are retained for context.
+> Historical handoff: the current project context is in [docs/README.md](docs/README.md). On October 18 the user approved an optional thin SwiftUI/RoomPlan scan companion for iPhone 14 Pro, superseding the earlier web-only restriction for this input alone. Shopping, design, and Quest remain web-based; address and browser-photo inputs remain available without tape measurements. See [native scan status](docs/native-scan.md); physical capture is not yet verified. The product is now named tadaima everywhere (repository `silaswu4/tadaima`, UI and package); Michael was the working name. The original design notes below are retained for context.
 
-# Michael: what we're building
+# tadaima: what we're building
 
-Michael is a working name, so it may change. This is our LA Hacks 2026 project.
+tadaima (first called Michael, a working name) is our LA Hacks 2026 project.
 
 ## The idea
 
@@ -27,11 +27,11 @@ All the tracks are listed at https://live.lahacks.com/tracks.
 
 ## Where the landing page is at
 
-Repo: https://github.com/silaswu4/michael. Run it with `npm install` then `npm run dev`.
+Repo: https://github.com/silaswu4/tadaima. Run it with `npm install` then `npm run dev`.
 
 Only the hero is built so far:
 - **The view:** you're looking straight into a living room drawn in a black and white pencil / blueprint style. Everything is white with ink outlines on a faint floor grid.
-- **Text:** "Michael" sits big on the back wall, with one line under it and a "Scan your room" button.
+- **Text:** "tadaima" sits big on the back wall, with one line under it and a "Scan your room" button.
 - **Hover:** pointing at any piece of furniture highlights it and shows what it is plus its exact size (x / y / z).
 - **Copy:** all placeholder.
 

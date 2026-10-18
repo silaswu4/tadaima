@@ -6,7 +6,7 @@ Updated October 17, 2026. These are concrete unresolved project choices, not req
 
 | Decision | Current state | Evidence needed / recommended default |
 | --- | --- | --- |
-| Product name | Repo `tadaima`; UI/package/handoff Michael | Confirm branding before a coordinated rename; preserve existing code meanwhile |
+| Product name | Decided: tadaima in the repo, UI, and package | Done |
 | Demo property/room | None supplied | Use a permissioned, measured room and public property evidence with sensitive details redacted |
 | Merchant pair | Not selected | Favor accessible product dimensions, stable variants, usable cart flow, and asset provenance |
 | Detailed room scope | Whole-unit ambition; one-room recommendation | Prove a room before multi-room topology and capture alignment |
