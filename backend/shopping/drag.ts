@@ -1,5 +1,5 @@
 import type { PlacedItem, PlanChange, RoomPlan, Vector3Meters } from "@/backend/contracts";
-import { applyChanges, validate } from "@/backend/plan/rules";
+import { applyChanges, collides, validate } from "@/backend/plan/rules";
 import { placeAt } from "@/backend/shopping/placement";
 
 /**
@@ -42,13 +42,19 @@ export function dragCheck(plan: RoomPlan, itemId: string, position: Vector3Meter
   return { fits: false, pose: { position: at, rotationY }, snapped: false, droppable: false, problems };
 }
 
-/** The validator's own words for what's wrong with this pose. */
+/** What's wrong with this pose, about this piece only: never the rest of the room's history. */
 function whyNot(plan: RoomPlan, item: PlacedItem, position: Vector3Meters, rotationY: number, fallback: string | null) {
-  const trial: RoomPlan = { ...plan, items: plan.items.map((i) => (i.id === item.id ? { ...i, position, rotationY, stored: false } : i)) };
-  const msgs = validate(trial)
-    .filter((v) => (v.rule === "in_room" || v.rule === "no_overlap") && v.status === "fail" && v.itemIds.includes(item.id))
-    .map((v) => v.message);
-  return msgs.length ? msgs : fallback ? [fallback] : [];
+  const held = { ...item, position, rotationY, stored: false };
+  const trial: RoomPlan = { ...plan, items: plan.items.map((i) => (i.id === item.id ? held : i)) };
+  const out: string[] = [];
+  if (validate(trial).some((v) => v.rule === "in_room" && v.status === "fail" && v.itemIds.includes(item.id))) out.push("Sticks out past the wall.");
+  const gap = plan.constraints.clearance / 2;
+  const near = plan.items.filter((o) => o.id !== item.id && !o.stored && o.roomId === item.roomId && o.dimensions && collides(held, o, gap));
+  if (near.length) {
+    const names = [...new Set(near.map((o) => o.label.split(",")[0]))].slice(0, 2);
+    out.push(`Bumps into ${names.join(" and ")}${near.length > 2 ? " and more" : ""}.`);
+  }
+  return out.length ? out : fallback ? [fallback] : [];
 }
 
 /** The change to save when the shopper lets go. A stored piece comes out of inventory. */

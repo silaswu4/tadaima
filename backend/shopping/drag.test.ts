@@ -26,7 +26,7 @@ describe("dragCheck", () => {
   test("holding it against the sofa: red with the reason, snaps clear if close", () => {
     const d = dragCheck(demoPlan, "item_lamp", at(1.6, 3.4), 0);
     assert.equal(d.fits, false);
-    assert.ok(d.problems.some((p) => /Too tight/.test(p) && p.includes("Your sofa")), d.problems.join());
+    assert.ok(d.problems.some((p) => /^Bumps into .*Your sofa/.test(p)), d.problems.join());
     if (d.droppable) {
       assert.ok(d.snapped);
       const g = gate(demoPlan, [dropChange(lamp, d.pose)]);

@@ -246,6 +246,9 @@ export function getTadaimaRooms(): CarouselRoom[] {
  * suggested purchases or locked.)
  */
 const HAND_CLEARANCE = 0.03;
+/** Any room the shopper arranges by hand (demo or scan): pieces may sit 3 cm apart. */
+export const withHandClearance = (plan: RoomPlan): RoomPlan =>
+  plan.constraints.clearance <= HAND_CLEARANCE ? plan : { ...plan, constraints: { ...plan.constraints, clearance: HAND_CLEARANCE } };
 function asYours(plan: RoomPlan): RoomPlan {
   // and nothing starts locked: locks were for keeping the AI planner off pieces in tests
   // Pieces may sit right next to each other; 30 cm of walking room between everything was a planner heuristic.

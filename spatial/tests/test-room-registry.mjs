@@ -263,7 +263,7 @@ test("catalog storage isolates two room IDs sharing one project and preserves pr
     await assert.rejects(saveRoomDraft("same-project-room-a", wrongProject), /different or newer/);
     assert.deepEqual(adapter.stores.get("rooms").get("migration-sentinel"), { privateScan: "retained" });
     // drafts are stored under a versioned key so a demo-room change drops stale drafts
-  assert.deepEqual([...adapter.stores.get("catalog-drafts").keys()], ["same-project-room-a@v3", "same-project-room-b@v3"]);
+  assert.deepEqual([...adapter.stores.get("catalog-drafts").keys()], ["same-project-room-a@v4", "same-project-room-b@v4"]);
 
     const imported = await importRoom(fixture());
     await saveEditedPlan(imported.id, imported.editedPlan); // opening the identical source is harmless

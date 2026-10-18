@@ -110,6 +110,43 @@ export function footprint(item: Pick<PlacedItem, "position" | "rotationY" | "dim
   ).map(([x, z]) => [cx + x * c + z * s, cz - x * s + z * c] as PointXZ);
 }
 
+// ---------- realistic collisions ----------
+// Furniture isn't a solid box from floor to top: chairs tuck under tables and desks,
+// small decor sits on tables and shelves, rugs go under everything, and a floor
+// lamp only takes up the floor its base stands on.
+
+type Body = Pick<PlacedItem, "category" | "dimensions">;
+/** Tops with open space beneath, tall enough to tuck a chair under. */
+const TUCK_UNDER = new Set(["table", "desk"]);
+const TUCK_MIN_HEIGHT = 0.6;
+const SURFACES = new Set(["table", "desk", "storage"]);
+const LAMP_BASE = 0.32;
+
+/** Can these two pieces share floor in real life? */
+export function canShare(a: Body, b: Body): boolean {
+  if (NO_FOOTPRINT.has(a.category) || NO_FOOTPRINT.has(b.category)) return true;
+  const one = (x: Body, y: Body) =>
+    (x.category === "chair" && TUCK_UNDER.has(y.category) && (y.dimensions?.[1] ?? 0) >= TUCK_MIN_HEIGHT) ||
+    (x.category === "decor" && SURFACES.has(y.category));
+  return one(a, b) || one(b, a);
+}
+
+/** The floor a piece actually blocks: its footprint, or just the base for a floor lamp. */
+export function collisionFootprint(item: Pick<PlacedItem, "category" | "position" | "rotationY" | "dimensions">, grow = 0): PointXZ[] | null {
+  if (!item.dimensions) return null;
+  if (item.category !== "lamp") return footprint(item, grow);
+  const [w, h, d] = item.dimensions;
+  return footprint({ ...item, dimensions: [Math.min(w, LAMP_BASE), h, Math.min(d, LAMP_BASE)] }, grow);
+}
+
+/** Do two pieces really get in each other's way, keeping `gap` around each? */
+export function collides(a: Pick<PlacedItem, "category" | "position" | "rotationY" | "dimensions">, b: Pick<PlacedItem, "category" | "position" | "rotationY" | "dimensions">, gap = 0) {
+  if (canShare(a, b)) return false;
+  const fa = collisionFootprint(a, gap);
+  const fb = collisionFootprint(b, gap);
+  return !!fa && !!fb && overlaps(fa, fb);
+}
+
 export function inside(p: PointXZ, poly: readonly PointXZ[]) {
   const eps = 1e-6;
   let hit = false;
@@ -197,7 +234,7 @@ export function validate(plan: RoomPlan, base?: RoomPlan): ValidationResult[] {
   for (let a = 0; a < solid.length; a++) {
     for (let b = a + 1; b < solid.length; b++) {
       if (solid[a].roomId !== solid[b].roomId) continue;
-      if (overlaps(footprint(solid[a], gap)!, footprint(solid[b], gap)!)) clashes.push([solid[a].id, solid[b].id]);
+      if (collides(solid[a], solid[b], gap)) clashes.push([solid[a].id, solid[b].id]);
     }
   }
   const label = (id: string) => items.find((i) => i.id === id)!.label;

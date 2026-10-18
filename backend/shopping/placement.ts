@@ -1,5 +1,5 @@
 import type { FloorSpot, FurnitureCategory, Placement, PointXZ, RoomGeometry, RoomPlan, Vector3Meters } from "@/backend/contracts";
-import { footprint, inside, NO_FOOTPRINT, overlaps } from "@/backend/plan/rules";
+import { collides, footprint, inside, NO_FOOTPRINT } from "@/backend/plan/rules";
 
 /**
  * Where a piece goes when the shopper points at a spot. Pure and deterministic.
@@ -143,15 +143,14 @@ export function placeAt(
   const obstacles = solid
     ? plan.items
         .filter((i) => i.id !== opts.ignoreItemId && !i.stored && i.roomId === room.id && i.dimensions && !NO_FOOTPRINT.has(i.category))
-        .map((i) => footprint(i, gap)!)
     : [];
 
   const probe = (x: number, z: number, rotationY: number, withObstacles = true) => {
     const item = { position: [x, 0, z] as Vector3Meters, rotationY, dimensions: piece.dimensions };
     if (!footprint(item)!.every((p) => inside(p, room.floorPolygon))) return false;
     if (!withObstacles || !solid) return true;
-    const fp = footprint(item, gap)!;
-    return !obstacles.some((o) => overlaps(fp, o));
+    const held = { ...item, category: piece.category };
+    return !obstacles.some((o) => collides(held, o, gap));
   };
 
   // facings to try, cheapest first: the natural one, then a quarter turn each way, then backwards

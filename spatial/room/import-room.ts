@@ -158,7 +158,7 @@ export function parseRoomImport(source: string): RoomPlan {
   const observations = evidence(raw.evidence), known = new Set(observations.map((entry) => entry.id));
   const shape = geometry(raw.geometry, known);
   const plan: RoomPlan = { schemaVersion: "0.2", projectId, revision, geometry: shape, evidence: observations,
-    items: raw.items === undefined ? [] : furniture(raw.items, shape, known), products: [], constraints: { budget: null, minimumSeats: null, clearance: 0.3 } };
+    items: raw.items === undefined ? [] : furniture(raw.items, shape, known), products: [], constraints: { budget: null, minimumSeats: null, clearance: 0.03 } };
   if (raw.appearance !== undefined) plan.appearance = appearance(raw.appearance, shape, known);
   return plan;
 }
