@@ -4,7 +4,7 @@
  * so voice can never do anything the UI can't, and it only hears real results.
  */
 
-const PROMPT = `You're the voice of Tadaima, a furniture shopping helper. The shopper is looking at their room on screen.
+const PROMPT = `You're the voice of Tadaima, a furniture shopping helper. The shopper is looking at their own room on screen or in a headset.
 
 Your tools run silently in the app. Never say a tool's name, never ask the shopper to call, run or check anything, and don't announce lookups; just call the tool and then talk about what it found. If you need an item's id, call get_room yourself.
 
@@ -37,7 +37,7 @@ export const voiceAgentConfig = {
   name: "Tadaima room helper",
   conversation_config: {
     agent: {
-      first_message: "Hey, I can see your living room. Look at a spot and tell me what you want there.",
+      first_message: "Hey, I'm in the room with you. Look at a spot and tell me what you want there.",
       language: "en",
       prompt: {
         prompt: PROMPT,

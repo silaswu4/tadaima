@@ -69,7 +69,10 @@ describe("shop at a spot", () => {
     const top = (await a.shop(couch)).json.output!.results[0];
     const refused = await a.place(top.product.id, BACK_WALL);
     assert.ok(!refused.json.ok && refused.json.reason === "validation_failed", JSON.stringify(refused.json));
-    if (!refused.json.ok && refused.json.reason === "validation_failed") assert.ok(failing(refused.json.validations).some((v) => v.rule === "budget"));
+    if (!refused.json.ok && refused.json.reason === "validation_failed") {
+      assert.ok(failing(refused.json.validations).some((v) => v.rule === "budget"));
+      assert.deepEqual(refused.json.blocking?.map((v) => v.rule), ["budget"], "only the budget is to blame");
+    }
 
     await roomyBudget(a);
     const placed = await a.place(top.product.id, BACK_WALL);
