@@ -23,6 +23,9 @@ from uuid import uuid4
 import aiohttp
 
 import brain
+import checkout
+from payments import PaymentsUnavailable, StripeError, handle_chat_confirmation, on_paid, payment_protocol, request_fee
+from viz import images_enabled, plan_image_url, proposal_image_url
 from uagents import Agent, Context, Protocol
 from uagents_core.contrib.protocols.chat import (
     ChatAcknowledgement,
@@ -267,6 +270,10 @@ def products_carousel(plan: dict, title: str) -> MetadataContent | None:
     return create_card_content(CarouselCardPayload(title=title, items=cards[:10]), card_id=uuid4())
 
 
+def room_image(project: str, rev: int) -> str | None:
+    return f"![your room, revision {rev}]({plan_image_url(project, rev)})" if images_enabled() else None
+
+
 def msg(*blocks) -> ChatMessage:
     content = []
     for b in blocks:
@@ -281,6 +288,7 @@ def msg(*blocks) -> ChatMessage:
 GREETING = re.compile(r"^\s*(hi|hey|yo|hello|sup|start|help|what can you do)\b[\s!?.]*$", re.I)
 SHOW = re.compile(r"\b(show|see|what'?s in|current)\b.*\b(room|plan)\b|^\s*(room|plan)\s*$", re.I)
 CART = re.compile(r"\b(cart|checkout|check out|basket|buy it|purchase)\b", re.I)
+CHECKOUT = re.compile(r"\b(check ?out|checkout|pay|buy (it|them|everything)|place (the )?order)\b", re.I)
 RESET = re.compile(r"\b(reset|start over|restart)\b", re.I)
 APPROVE = re.compile(r"^\s*(apply|approve|yes|yep|do it|looks good|lgtm|ship it|apply (it|that|changes))\b", re.I)
 REJECT = re.compile(r"^\s*(no|nah|discard|reject|cancel|try (again|something else))\b", re.I)
@@ -324,7 +332,7 @@ async def show_room(ctx: Context, sender: str, project: str, intro: bool = False
         "\n\nTell me what you want, for example: *keep the sofa and desk, make the room $300 cheaper, "
         "and keep seating for four*. Say **cart** when you're happy, or **reset** to start over."
     )
-    await ctx.send(sender, msg(head + room_summary(plan, cost) + tail, products_carousel(plan, "What you'd be buying")))
+    await ctx.send(sender, msg(room_image(project, plan["revision"]), head + room_summary(plan, cost) + tail, products_carousel(plan, "What you'd be buying")))
 
 
 async def propose(ctx: Context, sender: str, project: str, intent: str, item_id: str | None = None):
@@ -361,7 +369,8 @@ async def propose(ctx: Context, sender: str, project: str, intent: str, item_id:
         approve_cta=CtaAction(label="Apply", primary=True, selection={"action": "apply", "proposalId": p["id"], "rev": p["baseRevision"]}),
         reject_cta=CtaAction(label="Try something else", selection={"action": "discard", "proposalId": p["id"]}),
     )
-    await ctx.send(sender, msg("\n".join(lines), create_card_content(card, card_id=uuid4())))
+    diff = f"![proposed change]({proposal_image_url(project, p['id'])})" if images_enabled() else None
+    await ctx.send(sender, msg(diff, "\n".join(lines), create_card_content(card, card_id=uuid4())))
     return p
 
 
@@ -383,10 +392,10 @@ async def apply(ctx: Context, sender: str, project: str, proposal_id: str | None
                 ReviewSummaryRow(label="New purchases", value=usd(cost["knownSubtotal"])),
                 ReviewSummaryRow(label="Seats", value=str(seats(plan))),
             ],
-            approve_cta=CtaAction(label="Review cart", primary=True, selection={"action": "cart"}),
+            approve_cta=CtaAction(label="Check out", primary=True, selection={"action": "checkout_start"}),
             reject_cta=CtaAction(label="Keep editing", selection={"action": "room"}),
         )
-        await ctx.send(sender, msg("Done, it's saved. " + cost_line(cost, plan), create_card_content(card, card_id=uuid4())))
+        await ctx.send(sender, msg(room_image(project, plan["revision"]), "Done, it's saved. " + cost_line(cost, plan), create_card_content(card, card_id=uuid4())))
     elif r["reason"] == "stale_revision":
         await ctx.send(sender, msg(f"The room changed since I proposed that (now revision {r['currentRevision']}), so I didn't apply it. Ask again and I'll plan against the latest version."))
     else:
@@ -414,7 +423,7 @@ async def cart(ctx: Context, sender: str, project: str):
     for merchant, lines in lines_by_merchant.items():
         out += [f"**{merchant}**"] + lines + [""]
     out.append(cost_line(cost, plan))
-    out.append("\nI don't buy anything on my own. Prices and stock get rechecked before checkout, and you finish payment with the merchant.")
+    out.append("\nSay **check out** when you're ready. I recheck prices and stock first, and nothing is charged until you approve the exact amount.")
     await ctx.send(sender, msg("\n".join(out)))
 
 
@@ -603,6 +612,20 @@ async def change(ctx: Context, sender: str, project: str, changes: list[dict], o
     r = await api("POST", f"/api/projects/{project}/changes", {"expectedRevision": rev, "changes": changes})
     await ctx.send(sender, msg(placed_text(r, ok_text)))
     return {"ok": r["ok"], "reason": r.get("reason")}
+
+
+async def start_checkout(ctx: Context, sender: str, project: str):
+    # RequestPayment must go out before any model call, or ASI:One shows plain text instead of the pay card
+    try:
+        await request_fee(ctx, sender, project)
+    except (PaymentsUnavailable, StripeError) as e:
+        ctx.logger.error(f"service fee unavailable: {e}")
+        await checkout.start_checkout(ctx, sender, project, api)
+
+
+@on_paid
+async def _fee_paid(ctx: Context, sender: str, project_id: str):
+    await checkout.start_checkout(ctx, sender, project_id, api)
 
 
 async def think(ctx: Context, sender: str, project: str, text: str):
@@ -795,6 +818,8 @@ async def handle_turn(ctx: Context, sender: str, m: ChatMessage):
 
     sel = parse_selection(m)
     text = clean_text(m) if sel is None else ""
+    if sel and await handle_chat_confirmation(ctx, sender, sel):
+        return
     photos = [c for c in m.content if isinstance(c, ResourceContent)]
     action = (sel or {}).get("action")
     step = conv(ctx, sender)["step"]
@@ -825,6 +850,10 @@ async def handle_turn(ctx: Context, sender: str, m: ChatMessage):
 
     project = project_for(ctx, sender)
     if sel:
+        if action == "checkout_start":
+            return await start_checkout(ctx, sender, project)
+        if await checkout.handle_selection(ctx, sender, project, sel, api):
+            return
         if action == "apply":
             return await apply(ctx, sender, project, sel.get("proposalId"), sel.get("rev"))
         if action == "discard":
@@ -850,6 +879,8 @@ async def handle_turn(ctx: Context, sender: str, m: ChatMessage):
         return await show_room(ctx, sender, project)
     if APPROVE.match(text) and len(text) < 30 and (ctx.storage.get(f"pending:{sender}") or {}).get("proposalId"):
         return await apply(ctx, sender, project, None, None)
+    if CHECKOUT.search(text):
+        return await start_checkout(ctx, sender, project)
     return await think(ctx, sender, project, text)
 
 
@@ -875,6 +906,7 @@ async def on_ack(ctx: Context, sender: str, m: ChatAcknowledgement):
 
 
 agent.include(chat, publish_manifest=True)
+agent.include(payment_protocol, publish_manifest=True)
 
 if __name__ == "__main__":
     agent.run()

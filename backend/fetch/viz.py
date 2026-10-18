@@ -51,10 +51,16 @@ def _sig(secret: str, path: str) -> str:
 
 
 def _url(project_id: str, file: str) -> str:
-    base = os.getenv("BACKEND_URL", "http://localhost:3000").rstrip("/")
+    base = (os.getenv("PUBLIC_URL") or os.getenv("BACKEND_URL", "http://localhost:3000")).rstrip("/")
     secret = os.getenv("VIZ_SECRET")
     url = f"{base}/api/viz/{quote(project_id, safe='')}/{file}"
     return f"{url}?s={_sig(secret, f'{project_id}/{file}')}" if secret else url
+
+
+def images_enabled() -> bool:
+    """ASI:One fetches images itself, so a localhost backend can't serve them."""
+    base = os.getenv("PUBLIC_URL") or os.getenv("BACKEND_URL", "")
+    return base.startswith("https://")
 
 
 def plan_image_url(project_id: str, rev: int) -> str:

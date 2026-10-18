@@ -30,7 +30,7 @@ How to act:
 - Looking for a specific piece ("find a green sofa under $900", "a bigger rug") goes to search_products near the item it replaces or the spot they describe. Place a result only when the shopper picks one or clearly asked you to add the best one.
 - Coordinates are meters on the floor: x right, z toward the room's front, origin at the back-left corner. Items' position is the footprint center.
 - Locked items are things the shopper owns or told you to keep; only move or remove them if they explicitly ask.
-- Nothing is bought without the shopper's approval. show_cart lists the cart; checkout is a separate step the shopper starts.
+- Nothing is bought without the shopper's approval. show_cart lists the cart; when the shopper says to check out, they get a payment and approval flow outside your tools.
 - Plain, warm, brief. No marketing tone. No em dashes."""
 
 _spot = {
