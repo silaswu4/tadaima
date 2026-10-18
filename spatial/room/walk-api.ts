@@ -41,6 +41,7 @@ export type WalkCallbacks = {
   onAnchor?(anchor: { x: number; y: number } | null): void;
   onModeChange?(mode: WalkMode, pointerLocked: boolean): void;
   onExplodeChange?(exploded: boolean): void;
+  onWindowBlindsChange?(raised: boolean): void;
   onMoveChange?(moving: boolean): void;
   onProductPreviewChange?(preview: WalkProductPreview | null): void;
   onShoppingFloor?(spot: FloorSpot): void;
@@ -97,6 +98,8 @@ export type WalkScene = {
   undo(): void;
   canUndo(): boolean;
   setMode(mode: WalkMode): void;
+  /** View state only; preserves measured openings and the saved room plan. */
+  setWindowBlindsRaised(raised: boolean): void;
   /** Request pointer lock for mouse look (desktop walk mode). */
   lockPointer(): void;
   /** Bounded touch/controller-free locomotion; zero also releases held movement keys. */

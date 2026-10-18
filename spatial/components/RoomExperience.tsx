@@ -162,6 +162,7 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
   const [xr, setXr] = useState(false);
   const [presenting, setPresenting] = useState(false);
   const [exploded, setExploded] = useState(false);
+  const [blindsRaised, setBlindsRaised] = useState<boolean | null>(null);
   const [pending, setPending] = useState<ProductCandidate | null>(null);
   const [floorSpot, setFloorSpot] = useState<FloorSpot | null>(null);
   const saveRef = useRef(onPlanChange);
@@ -270,6 +271,7 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
     setStatus("loading");
     setPending(null);
     setExploded(false);
+    setBlindsRaised(null);
     let walk: WalkScene | null = null;
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const lite = window.innerWidth < 768 || window.matchMedia("(pointer: coarse)").matches;
@@ -304,6 +306,7 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
       onMoveChange(value) { if (!cancelled) setMoving(value); },
       onProductPreviewChange(preview) { if (!cancelled && !preview) setPending(null); },
       onExplodeChange(value) { if (!cancelled) { setExploded(value); setPending(null); } },
+      onWindowBlindsChange(value) { if (!cancelled) setBlindsRaised(value); },
       onShoppingFloor(spot) { if (!cancelled) { setFloorSpot(spot); setNotice("Shopping spot selected. Checking pieces that fit here."); searchRef.current(spot, false); } },
       onPreviewOffer(id) { const product = resultsRef.current.find((result) => result.product.id === id)?.product; if (product) previewRef.current(product); },
       onConfirmOffer() { confirmRef.current(); },
@@ -627,6 +630,11 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
               </button>
             </div>
             <button type="button" className="room-x__pill" aria-pressed={exploded} disabled={!ready || presenting} onClick={() => { api()?.setExploded(!exploded); }}>Explode</button>
+            {blindsRaised !== null ? (
+              <button type="button" className="room-x__pill" aria-label="Raise window blinds" aria-pressed={blindsRaised} title="Neutral daylight preview; exterior not captured" disabled={!ready || blocked} onClick={() => api()?.setWindowBlindsRaised(!blindsRaised)}>
+                {blindsRaised ? "Blinds raised" : "Raise blinds"}
+              </button>
+            ) : null}
             {xr && ready ? (
               <button type="button" className="room-x__pill" onClick={enterXR}>
                 Enter VR

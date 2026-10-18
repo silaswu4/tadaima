@@ -11,6 +11,10 @@
   <key>CFBundleVersion</key><string>1</string>
   <key>LSRequiresIPhoneOS</key><true/>
   <key>NSCameraUsageDescription</key><string>Tadaima uses the camera and LiDAR to scan your room and optionally save room and furniture photos for appearance reconstruction. Photos and scans stay on your device until you choose to share them.</string>
+  <key>NSLocalNetworkUsageDescription</key><string>Tadaima sends your finished scan to your Mac on this network so it can rebuild the room for shopping.</string>
+  <key>NSAppTransportSecurity</key><dict><key>NSAllowsLocalNetworking</key><true/></dict>
+  <key>TadaimaServer</key><string>$(TADAIMA_SERVER)</string>
+  <key>TadaimaUploadKey</key><string>$(TADAIMA_UPLOAD_KEY)</string>
   <key>UIApplicationSceneManifest</key><dict><key>UIApplicationSupportsMultipleScenes</key><false/></dict>
   <key>UILaunchScreen</key><dict/>
   <key>UISupportedInterfaceOrientations</key><array><string>UIInterfaceOrientationPortrait</string></array>

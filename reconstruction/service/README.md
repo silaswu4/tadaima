@@ -4,6 +4,21 @@ FastAPI job service around the existing reconstruction pipelines: raw geometry, 
 
 Jobs run in-process on a bounded worker pool. Job records live in SQLite and artifacts on disk under `TADAIMA_DATA_DIR`. One container, no queue or object store. A restart marks unfinished jobs `failed` with error `Interrupted`; resubmit them.
 
+## Phone scan to room (demo)
+
+```bash
+reconstruction/service/demo.sh     # starts this service + Next on :3000, prints the phone settings
+```
+
+1. Install TadaimaScan on the iPhone (see `reconstruction/ios/TadaimaScan/README.md`). Optionally bake the settings in: add `TADAIMA_SERVER=http://<mac>.local:3000 TADAIMA_UPLOAD_KEY=<key>` to the `xcodebuild` command.
+2. Phone and Mac on the same network. Venue Wi-Fi often isolates clients; use the phone's hotspot if the upload can't connect.
+3. Scan, then tap **Send to Tadaima**. The app uploads the scan (with photos when captured) to `/api/scans` and waits for the rebuild.
+4. On the Mac, open `http://localhost:3000/rooms`. The **From your iPhone** panel lists the scan; **Enter room** saves it to the browser and opens it for shopping.
+
+Layout-only scans (no photos) open with measured furniture stand-ins; the viewer binds only photo-textured models. The `/api/scans` routes accept requests from this machine (by `Host` header) or with `x-tadaima-upload-key`. On untrusted networks someone could spoof the `Host` header to list and download your scans, so use a trusted network or the hotspot.
+
+Keep `TADAIMA_DATA_DIR` outside the repository. Next's file watcher reloads pages whenever files under the repo change.
+
 ## Run locally
 
 From the repository root:
@@ -12,7 +27,7 @@ From the repository root:
 uv venv reconstruction/service/.venv -p 3.12
 VIRTUAL_ENV=reconstruction/service/.venv uv pip install -r reconstruction/service/requirements-dev.txt
 
-export TADAIMA_DATA_DIR="$PWD/reconstruction/output/service"   # gitignored; never under public/
+export TADAIMA_DATA_DIR="$HOME/Library/Application Support/tadaima-reconstruction/data"   # outside the repo
 export TADAIMA_API_KEY="$(openssl rand -hex 24)"
 export BLENDER_BIN="/Applications/Blender.app/Contents/MacOS/Blender"
 reconstruction/service/.venv/bin/python -m reconstruction.service   # http://localhost:8000/docs
@@ -43,9 +58,10 @@ Interactive schema: `GET /docs`. Every `/v1` route needs `Authorization: Bearer 
 | `GET /healthz` | | Unauthenticated liveness |
 | `GET /v1/capabilities` | | Whether Blender and each provider are configured, so the UI can hide unavailable modes |
 | `POST /v1/jobs/geometry?preview=false` | `ReconstructionRequest` JSON, 2 MiB max | Blend, GLB, and manifest |
-| `POST /v1/jobs/roomplan?render=true&preview=false` | `roomplan-scan/1.0` JSON from TadaimaScan | Imports the scan, optionally renders `draft/` |
+| `POST /v1/jobs/roomplan?render=true&preview=false` | TadaimaScan export: `roomplan-scan/1.0` JSON (2 MiB) or the scan + photos ZIP (144 MiB) | Imports the scan and optionally renders `draft/`. A ZIP also photo-textures the room |
 | `POST /v1/jobs/capture` | multipart: `capture` ZIP (32 MiB max), optional `proposal` JSON, form `infer`, `inferAppearance`, `render` (default true), `preview` | `infer` sends photos to OpenAI. `proposal` is the keyless hash-bound handoff |
 | `POST /v1/jobs/address` | JSON: `projectId`, `jobId`, `address`, optional `unit`, `targetRoom`, `listingUrls`, `inputRevision`, `discovery`, `collectOnly`, `renderDraft` (default true), `preview`, `inferAppearance`, `rounds` | Needs Browser Use unless `discovery` is supplied, and OpenAI unless `collectOnly` |
+| `GET /v1/jobs?kind=roomplan&limit=20` | | Most recent jobs first; used by the `/rooms` phone inbox |
 | `GET /v1/jobs/{id}` | | Status `queued` → `running` → `succeeded`/`failed`, plus a result receipt and `artifacts` |
 | `GET /v1/jobs/{id}/artifacts/{name}` | | Downloads one allow-listed file |
 
@@ -53,7 +69,7 @@ Submissions are validated before queueing. Invalid geometry, open RoomPlan loops
 
 `succeeded` means the pipeline finished. It does not mean the room is usable: read `result.status` (for example `needs_review`, `needs_capture`) and `result.warnings`. Capture and address results always carry `reviewRequired: true`, and photo-only scale stays labeled unverified.
 
-Only these files are downloadable: `manifest.json`, `scene.glb`, `scene.blend`, `preview.png`, `scene.json` for geometry jobs, and the dossier, `reconstruction.request.json`, inference/proposal JSON, and `draft/*` for the input jobs. Uploaded photos, raw scans, fetched pages, and the SQLite database are never served. Address strings are not stored in the job table.
+Only these files are downloadable: `manifest.json`, `scene.glb`, `scene.blend`, `preview.png`, `scene.json` for geometry jobs, and the RoomPlan/capture dossier, `reconstruction.request.json`, inference/proposal JSON, and `draft/*` (including `draft/scene.json`, which the web importer pairs with `draft/scene.glb`) for the input jobs. Uploaded photos, raw scans, the address dossier, fetched pages, and the SQLite database are never served. Address strings are not stored in the job table.
 
 ```bash
 curl -s -H "Authorization: Bearer $TADAIMA_API_KEY" -H 'content-type: application/json' \
