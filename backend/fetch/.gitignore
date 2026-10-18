@@ -1,7 +1,10 @@
 .env
+!.env.example
 .venv/
 __pycache__/
 *.db
-scout/*_data.json
-tests/*_data.json
-scout/*.log
+
+# uAgents storage holds per-chat state; never commit it
+agent*_data.json
+*_data.json
+*.log
