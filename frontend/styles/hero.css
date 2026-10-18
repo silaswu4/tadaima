@@ -17,25 +17,27 @@
 }
 
 /* ---------- the three ways in, down the left side ---------- */
-/* one block with the wordmark: the options sit right above it, on its left edge */
+/* the three ways in run along the top as the nav */
 .tadaima-hero {
   --hero-word-size: 15vw;
 }
 .tadaima-hero .hero-side {
   position: absolute;
   z-index: 3;
-  bottom: calc(var(--hero-word-size) * 0.92 + 28px);
+  top: 26px;
   left: var(--hero-left);
+  right: var(--hero-left);
   display: flex;
   flex-direction: column;
-  width: max-content;
   /* keeps the options legible where the window light falls behind them */
   text-shadow: 0 1px 14px rgba(43, 26, 16, 0.55);
 }
 .tadaima-hero .hero-list {
   display: flex;
-  flex-direction: column;
-  gap: 10px;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 32px;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -61,9 +63,9 @@
   align-items: baseline;
   gap: 10px;
   font-family: var(--font-display), system-ui, sans-serif;
-  font-size: 20px;
-  line-height: 24px;
-  letter-spacing: -0.015em;
+  font-size: 17px;
+  line-height: 22px;
+  letter-spacing: -0.01em;
 }
 /* a thin underline draws in under the option on hover */
 .tadaima-hero .hero-row__label { position: relative; }
@@ -119,11 +121,12 @@
 }
 .tadaima-hero .hero-row__go:focus-visible { text-decoration: underline; outline: none; }
 
+/* the QR code and errors drop down under the bar */
 .tadaima-hero .hero-error,
 .tadaima-hero .hero-qr {
   position: absolute;
-  left: calc(100% + 32px);
-  bottom: 0;
+  left: 0;
+  top: calc(100% + 22px);
 }
 .tadaima-hero .hero-error {
   width: 260px;
@@ -246,12 +249,10 @@
 @media (max-width: 809px) {
   .tadaima-hero { --hero-left: 16px; }
   .tadaima-hero { --hero-word-size: 21vw; }
-  .tadaima-hero .hero-list { gap: 8px; }
-  .tadaima-hero .hero-row__label { font-size: 18px; line-height: 22px; }
-  .tadaima-hero .hero-side { bottom: calc(var(--hero-word-size) * 0.92 + 20px); }
-  /* no room beside the options on a phone, so these open above them */
-  .tadaima-hero .hero-error,
-  .tadaima-hero .hero-qr { left: 0; bottom: calc(100% + 16px); }
+  /* three items will not fit across a phone, so they stack in the top corner */
+  .tadaima-hero .hero-side { top: 20px; left: var(--hero-left); }
+  .tadaima-hero .hero-list { flex-direction: column; gap: 8px; }
+  .tadaima-hero .hero-row__label { font-size: 17px; line-height: 22px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
