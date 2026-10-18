@@ -4,7 +4,7 @@ import { use, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import type { RoomPlan } from "@/backend/contracts";
 import { RoomExperience, type ExperienceRoom } from "@/spatial/components/RoomExperience";
-import { getTadaimaRooms } from "@/spatial/fixtures/roomsCatalog";
+import { getTadaimaRooms, hydrateCatalogRoom } from "@/spatial/fixtures/roomsCatalog";
 import { getRoom, getRoomDraft, saveEditedPlan, saveRoomDraft } from "@/spatial/rooms/registry";
 
 export function RoomClient({ params }: { params: Promise<{ roomId: string }> }) {
@@ -16,7 +16,10 @@ export function RoomClient({ params }: { params: Promise<{ roomId: string }> }) 
     (async () => {
       const own = getTadaimaRooms().find((r) => r.id === roomId || r.slug === roomId);
       let room: ExperienceRoom | undefined;
-      if (own) room = { ...own, plan: await getRoomDraft(own.id) ?? own.plan };
+      if (own) {
+        const [hydrated, draft] = await Promise.all([hydrateCatalogRoom(own), getRoomDraft(own.id)]);
+        room = { ...hydrated, plan: draft ?? hydrated.plan };
+      }
       else {
         const local = await getRoom(roomId);
         if (local) room = { id: local.id, label: local.label, plan: local.editedPlan,

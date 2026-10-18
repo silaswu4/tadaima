@@ -1,0 +1,15 @@
+{
+  "schemaVersion": "tadaima-published-scan/1.0",
+  "sourceSha256": "69ced19a3f533de656107d6ac8df366327bb2a4d78a7a641bdcacf822a6c664b",
+  "modelSha256": "c0e95467535ac2bc462e12b7e4e8afc9260836e1ea31c432abd610b43e68673f",
+  "originalSourceSha256": "80d62d56f1f400d48b47031b03e2276a888b3836b7d57038814fe07dc0b19a92",
+  "originalModelSha256": "09c37b6084fd0a3782a74f3a549f39a159f286348e84310b3d238d8f486c7b9e",
+  "sourceBytes": 59375,
+  "modelBytes": 8553012,
+  "geometryPayloadSha256": "6be6e20d41d5842d7b58e8dfd1e281046d297ae08d226e3c94a9381555e0ad87",
+  "imagePixelPayloadSha256": "5ed2f986388142f3b5f3821155bba31799ed353876db59b273e46488762fd63c",
+  "removedExifChunks": 4,
+  "itemCount": 28,
+  "wallCount": 12,
+  "openingCount": 4
+}

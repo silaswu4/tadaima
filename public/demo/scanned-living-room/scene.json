@@ -1,0 +1,1712 @@
+{
+  "evidence": [
+    {
+      "claim": "Native RoomPlan wall surface dimensions/transform; capture confidence high. Sensor-derived estimate, not survey accuracy.",
+      "confirmedByUserAt": null,
+      "dimensionStatus": "source_dimension",
+      "id": "rp-7aad49f0ec0740a0a86fa96c",
+      "observedAt": "2026-10-18T11:24:07Z",
+      "privateAssetId": null,
+      "sourceUrl": null
+    },
+    {
+      "claim": "Native RoomPlan wall surface dimensions/transform; capture confidence high. Sensor-derived estimate, not survey accuracy.",
+      "confirmedByUserAt": null,
+      "dimensionStatus": "source_dimension",
+      "id": "rp-70aa859d0d491edbdfdeec4a",
+      "observedAt": "2026-10-18T11:24:07Z",
+      "privateAssetId": null,
+      "sourceUrl": null
+    },
+    {
+      "claim": "Native RoomPlan wall surface dimensions/transform; capture confidence high. Sensor-derived estimate, not survey accuracy.",
+      "confirmedByUserAt": null,
+      "dimensionStatus": "source_dimension",
+      "id": "rp-40d5322993f0ac5b9348866c",
+      "observedAt": "2026-10-18T11:24:07Z",
+      "privateAssetId": null,
+      "sourceUrl": null
+    },
+    {
+      "claim": "Native RoomPlan wall surface dimensions/transform; capture confidence high. Sensor-derived estimate, not survey accuracy.",
+      "confirmedByUserAt": null,
+      "dimensionStatus": "source_dimension",
+      "id": "rp-e53352e628e7e8d8732ccbd5",
+      "observedAt": "2026-10-18T11:24:07Z",
+      "privateAssetId": null,
+      "sourceUrl": null
+    },
+    {
+      "claim": "Native RoomPlan wall surface dimensions/transform; capture confidence high. Sensor-derived estimate, not survey accuracy.",
+      "confirmedByUserAt": null,
+      "dimensionStatus": "source_dimension",
+      "id": "rp-ed31ee7ce49b9053e3d4baf3",
+      "observedAt": "2026-10-18T11:24:07Z",
+      "privateAssetId": null,
+      "sourceUrl": null
+    },
+    {
+      "claim": "Native RoomPlan wall surface dimensions/transform; capture confidence high. Sensor-derived estimate, not survey accuracy.",
+      "confirmedByUserAt": null,
+      "dimensionStatus": "source_dimension",
+      "id": "rp-e713a37f27ef050715628905",
+      "observedAt": "2026-10-18T11:24:07Z",
+      "privateAssetId": null,
+      "sourceUrl": null
+    },
+    {
+      "claim": "Native RoomPlan wall surface dimensions/transform; capture confidence high. Sensor-derived estimate, not survey accuracy.",
+      "confirmedByUserAt": null,
+      "dimensionStatus": "source_dimension",
+      "id": "rp-bfb3d1ab968c10401c9d8764",
+      "observedAt": "2026-10-18T11:24:07Z",
+      "privateAssetId": null,
+      "sourceUrl": null
+    },
+    {
+      "claim": "Native RoomPlan wall surface dimensions/transform; capture confidence high. Sensor-derived estimate, not survey accuracy.",
+      "confirmedByUserAt": null,
+      "dimensionStatus": "source_dimension",
+      "id": "rp-cbf0e58f29a9fce284e3d76c",
+      "observedAt": "2026-10-18T11:24:07Z",
+      "privateAssetId": null,
+      "sourceUrl": null
+    },
+    {
+      "claim": "Native RoomPlan wall surface dimensions/transform; capture confidence high. Sensor-derived estimate, not survey accuracy.",
+      "confirmedByUserAt": null,
+      "dimensionStatus": "source_dimension",
+      "id": "rp-f621701360d2494bd78aab2a",
+      "observedAt": "2026-10-18T11:24:07Z",
+      "privateAssetId": null,
+      "sourceUrl": null
+    },
+    {
+      "claim": "Native RoomPlan wall surface dimensions/transform; capture confidence high. Sensor-derived estimate, not survey accuracy.",
+      "confirmedByUserAt": null,
+      "dimensionStatus": "source_dimension",
+      "id": "rp-013e8eb08deb7c1300522c3d",
+      "observedAt": "2026-10-18T11:24:07Z",
+      "privateAssetId": null,
+      "sourceUrl": null
+    },
+    {
+      "claim": "Native RoomPlan wall surface dimensions/transform; capture confidence high. Sensor-derived estimate, not survey accuracy.",
+      "confirmedByUserAt": null,
+      "dimensionStatus": "source_dimension",
+      "id": "rp-3c2342f280c13291eee0aab5",
+      "observedAt": "2026-10-18T11:24:07Z",
+      "privateAssetId": null,
+      "sourceUrl": null
+    },
+    {
+      "claim": "Native RoomPlan wall surface dimensions/transform; capture confidence high. Sensor-derived estimate, not survey accuracy.",
+      "confirmedByUserAt": null,
+      "dimensionStatus": "source_dimension",
+      "id": "rp-8369adf37a57dc7a837ce3a9",
+      "observedAt": "2026-10-18T11:24:07Z",
+      "privateAssetId": null,
+      "sourceUrl": null
+    },
+    {
+      "claim": "Native RoomPlan door surface dimensions/transform; capture confidence medium. Sensor-derived estimate, not survey accuracy.",
+      "confirmedByUserAt": null,
+      "dimensionStatus": "source_dimension",
+      "id": "rp-6c08cb1ff9048c9b5883e2bc",
+      "observedAt": "2026-10-18T11:24:07Z",
+      "privateAssetId": null,
+      "sourceUrl": null
+    },
+    {
+      "claim": "Native RoomPlan window surface dimensions/transform; capture confidence high. Sensor-derived estimate, not survey accuracy.",
+      "confirmedByUserAt": null,
+      "dimensionStatus": "source_dimension",
+      "id": "rp-bec55f816fb4bce01a2b1170",
+      "observedAt": "2026-10-18T11:24:07Z",
+      "privateAssetId": null,
+      "sourceUrl": null
+    },
+    {
+      "claim": "Native RoomPlan window surface dimensions/transform; capture confidence medium. Sensor-derived estimate, not survey accuracy.",
+      "confirmedByUserAt": null,
+      "dimensionStatus": "source_dimension",
+      "id": "rp-c7a55140980963f1a23aadb7",
+      "observedAt": "2026-10-18T11:24:07Z",
+      "privateAssetId": null,
+      "sourceUrl": null
+    },
+    {
+      "claim": "Native RoomPlan opening surface dimensions/transform; capture confidence high. Sensor-derived estimate, not survey accuracy.",
+      "confirmedByUserAt": null,
+      "dimensionStatus": "source_dimension",
+      "id": "rp-8e4ac7f6fa4c454edf796525",
+      "observedAt": "2026-10-18T11:24:07Z",
+      "privateAssetId": null,
+      "sourceUrl": null
+    },
+    {
+      "claim": "Wall thickness 0.12 m is an inferred modeling convention; RoomPlan does not provide thickness.",
+      "confirmedByUserAt": null,
+      "dimensionStatus": "inferred",
+      "id": "rp-2c3503cd238fe6179838db44",
+      "observedAt": "2026-10-18T11:24:07Z",
+      "privateAssetId": null,
+      "sourceUrl": null
+    },
+    {
+      "claim": "One closed room loop derived from source wall planes, bounded endpoint corrections, and assumed inside-face outward offsets; floor Y normalized to zero.",
+      "confirmedByUserAt": null,
+      "dimensionStatus": "inferred",
+      "id": "rp-4ba7a6c291deb943108506b2",
+      "observedAt": "2026-10-18T11:24:07Z",
+      "privateAssetId": null,
+      "sourceUrl": null
+    },
+    {
+      "claim": "Native RoomPlan detected chair; confidence low. Category, dimensions and pose are sensor estimates represented as an oriented bounding box, not an exact furniture mesh, ownership verification, or merchant product match.",
+      "confirmedByUserAt": null,
+      "dimensionStatus": "source_dimension",
+      "id": "rp-bd2b0dfbcb1da8651b41ff21",
+      "observedAt": "2026-10-18T11:24:07Z",
+      "privateAssetId": null,
+      "sourceUrl": null
+    },
+    {
+      "claim": "Native RoomPlan detected refrigerator; confidence low. Category, dimensions and pose are sensor estimates represented as an oriented bounding box, not an exact furniture mesh, ownership verification, or merchant product match.",
+      "confirmedByUserAt": null,
+      "dimensionStatus": "source_dimension",
+      "id": "rp-a6f3cb2e124bf557d5d0defa",
+      "observedAt": "2026-10-18T11:24:07Z",
+      "privateAssetId": null,
+      "sourceUrl": null
+    },
+    {
+      "claim": "Native RoomPlan detected chair; confidence low. Category, dimensions and pose are sensor estimates represented as an oriented bounding box, not an exact furniture mesh, ownership verification, or merchant product match.",
+      "confirmedByUserAt": null,
+      "dimensionStatus": "source_dimension",
+      "id": "rp-10d917cf0a17cc0011b32686",
+      "observedAt": "2026-10-18T11:24:07Z",
+      "privateAssetId": null,
+      "sourceUrl": null
+    },
+    {
+      "claim": "Native RoomPlan detected chair; confidence medium. Category, dimensions and pose are sensor estimates represented as an oriented bounding box, not an exact furniture mesh, ownership verification, or merchant product match.",
+      "confirmedByUserAt": null,
+      "dimensionStatus": "source_dimension",
+      "id": "rp-6f62bac73e74a996fcac3e2c",
+      "observedAt": "2026-10-18T11:24:07Z",
+      "privateAssetId": null,
+      "sourceUrl": null
+    },
+    {
+      "claim": "Native RoomPlan detected chair; confidence medium. Category, dimensions and pose are sensor estimates represented as an oriented bounding box, not an exact furniture mesh, ownership verification, or merchant product match.",
+      "confirmedByUserAt": null,
+      "dimensionStatus": "source_dimension",
+      "id": "rp-8b5f66d242540fd018dee6a8",
+      "observedAt": "2026-10-18T11:24:07Z",
+      "privateAssetId": null,
+      "sourceUrl": null
+    },
+    {
+      "claim": "Native RoomPlan detected chair; confidence medium. Category, dimensions and pose are sensor estimates represented as an oriented bounding box, not an exact furniture mesh, ownership verification, or merchant product match.",
+      "confirmedByUserAt": null,
+      "dimensionStatus": "source_dimension",
+      "id": "rp-e1917eb6aa4fab74352c2176",
+      "observedAt": "2026-10-18T11:24:07Z",
+      "privateAssetId": null,
+      "sourceUrl": null
+    },
+    {
+      "claim": "Native RoomPlan detected chair; confidence low. Category, dimensions and pose are sensor estimates represented as an oriented bounding box, not an exact furniture mesh, ownership verification, or merchant product match.",
+      "confirmedByUserAt": null,
+      "dimensionStatus": "source_dimension",
+      "id": "rp-771f013d399a2278771b9cae",
+      "observedAt": "2026-10-18T11:24:07Z",
+      "privateAssetId": null,
+      "sourceUrl": null
+    },
+    {
+      "claim": "Native RoomPlan detected chair; confidence low. Category, dimensions and pose are sensor estimates represented as an oriented bounding box, not an exact furniture mesh, ownership verification, or merchant product match.",
+      "confirmedByUserAt": null,
+      "dimensionStatus": "source_dimension",
+      "id": "rp-4c8c01bb1daea93e36b24037",
+      "observedAt": "2026-10-18T11:24:07Z",
+      "privateAssetId": null,
+      "sourceUrl": null
+    },
+    {
+      "claim": "Native RoomPlan detected storage; confidence low. Category, dimensions and pose are sensor estimates represented as an oriented bounding box, not an exact furniture mesh, ownership verification, or merchant product match.",
+      "confirmedByUserAt": null,
+      "dimensionStatus": "source_dimension",
+      "id": "rp-f2666003c56fbfec9d14914d",
+      "observedAt": "2026-10-18T11:24:07Z",
+      "privateAssetId": null,
+      "sourceUrl": null
+    },
+    {
+      "claim": "Native RoomPlan detected table; confidence high. Category, dimensions and pose are sensor estimates represented as an oriented bounding box, not an exact furniture mesh, ownership verification, or merchant product match.",
+      "confirmedByUserAt": null,
+      "dimensionStatus": "source_dimension",
+      "id": "rp-17091175f8f8e865a8a3adb1",
+      "observedAt": "2026-10-18T11:24:07Z",
+      "privateAssetId": null,
+      "sourceUrl": null
+    },
+    {
+      "claim": "Native RoomPlan detected chair; confidence low. Category, dimensions and pose are sensor estimates represented as an oriented bounding box, not an exact furniture mesh, ownership verification, or merchant product match.",
+      "confirmedByUserAt": null,
+      "dimensionStatus": "source_dimension",
+      "id": "rp-273241b20ddbb5e274ec46c4",
+      "observedAt": "2026-10-18T11:24:07Z",
+      "privateAssetId": null,
+      "sourceUrl": null
+    },
+    {
+      "claim": "Native RoomPlan detected sofa; confidence medium. Category, dimensions and pose are sensor estimates represented as an oriented bounding box, not an exact furniture mesh, ownership verification, or merchant product match.",
+      "confirmedByUserAt": null,
+      "dimensionStatus": "source_dimension",
+      "id": "rp-c990a894694d55383a1e6fae",
+      "observedAt": "2026-10-18T11:24:07Z",
+      "privateAssetId": null,
+      "sourceUrl": null
+    },
+    {
+      "claim": "Native RoomPlan detected sofa; confidence medium. Category, dimensions and pose are sensor estimates represented as an oriented bounding box, not an exact furniture mesh, ownership verification, or merchant product match.",
+      "confirmedByUserAt": null,
+      "dimensionStatus": "source_dimension",
+      "id": "rp-e97d039628cf0032281ca295",
+      "observedAt": "2026-10-18T11:24:07Z",
+      "privateAssetId": null,
+      "sourceUrl": null
+    },
+    {
+      "claim": "Native RoomPlan detected chair; confidence low. Category, dimensions and pose are sensor estimates represented as an oriented bounding box, not an exact furniture mesh, ownership verification, or merchant product match.",
+      "confirmedByUserAt": null,
+      "dimensionStatus": "source_dimension",
+      "id": "rp-cbfead8b01681c9d39b0f593",
+      "observedAt": "2026-10-18T11:24:07Z",
+      "privateAssetId": null,
+      "sourceUrl": null
+    },
+    {
+      "claim": "Native RoomPlan detected table; confidence low. Category, dimensions and pose are sensor estimates represented as an oriented bounding box, not an exact furniture mesh, ownership verification, or merchant product match.",
+      "confirmedByUserAt": null,
+      "dimensionStatus": "source_dimension",
+      "id": "rp-c53cdf8b040a1b13a4d631da",
+      "observedAt": "2026-10-18T11:24:07Z",
+      "privateAssetId": null,
+      "sourceUrl": null
+    },
+    {
+      "claim": "Native RoomPlan detected sofa; confidence medium. Category, dimensions and pose are sensor estimates represented as an oriented bounding box, not an exact furniture mesh, ownership verification, or merchant product match.",
+      "confirmedByUserAt": null,
+      "dimensionStatus": "source_dimension",
+      "id": "rp-d86bb42f122e0d2497587c87",
+      "observedAt": "2026-10-18T11:24:07Z",
+      "privateAssetId": null,
+      "sourceUrl": null
+    },
+    {
+      "claim": "Native RoomPlan detected table; confidence high. Category, dimensions and pose are sensor estimates represented as an oriented bounding box, not an exact furniture mesh, ownership verification, or merchant product match.",
+      "confirmedByUserAt": null,
+      "dimensionStatus": "source_dimension",
+      "id": "rp-596a0df06a197aba4fd7ff50",
+      "observedAt": "2026-10-18T11:24:07Z",
+      "privateAssetId": null,
+      "sourceUrl": null
+    },
+    {
+      "claim": "Native RoomPlan detected sofa; confidence medium. Category, dimensions and pose are sensor estimates represented as an oriented bounding box, not an exact furniture mesh, ownership verification, or merchant product match.",
+      "confirmedByUserAt": null,
+      "dimensionStatus": "source_dimension",
+      "id": "rp-107d13f510004d46bac4313d",
+      "observedAt": "2026-10-18T11:24:07Z",
+      "privateAssetId": null,
+      "sourceUrl": null
+    },
+    {
+      "claim": "Native RoomPlan detected chair; confidence low. Category, dimensions and pose are sensor estimates represented as an oriented bounding box, not an exact furniture mesh, ownership verification, or merchant product match.",
+      "confirmedByUserAt": null,
+      "dimensionStatus": "source_dimension",
+      "id": "rp-a91e05b4796f7de9b6c1d8a5",
+      "observedAt": "2026-10-18T11:24:07Z",
+      "privateAssetId": null,
+      "sourceUrl": null
+    },
+    {
+      "claim": "Native RoomPlan detected chair; confidence medium. Category, dimensions and pose are sensor estimates represented as an oriented bounding box, not an exact furniture mesh, ownership verification, or merchant product match.",
+      "confirmedByUserAt": null,
+      "dimensionStatus": "source_dimension",
+      "id": "rp-97cf497e496b0353ca07db4a",
+      "observedAt": "2026-10-18T11:24:07Z",
+      "privateAssetId": null,
+      "sourceUrl": null
+    },
+    {
+      "claim": "Native RoomPlan detected chair; confidence medium. Category, dimensions and pose are sensor estimates represented as an oriented bounding box, not an exact furniture mesh, ownership verification, or merchant product match.",
+      "confirmedByUserAt": null,
+      "dimensionStatus": "source_dimension",
+      "id": "rp-9eeb437f49766429fe2ee401",
+      "observedAt": "2026-10-18T11:24:07Z",
+      "privateAssetId": null,
+      "sourceUrl": null
+    },
+    {
+      "claim": "Native RoomPlan detected table; confidence high. Category, dimensions and pose are sensor estimates represented as an oriented bounding box, not an exact furniture mesh, ownership verification, or merchant product match.",
+      "confirmedByUserAt": null,
+      "dimensionStatus": "source_dimension",
+      "id": "rp-de574f18774a3d6ff3ce04a3",
+      "observedAt": "2026-10-18T11:24:07Z",
+      "privateAssetId": null,
+      "sourceUrl": null
+    },
+    {
+      "claim": "Native RoomPlan detected sofa; confidence medium. Category, dimensions and pose are sensor estimates represented as an oriented bounding box, not an exact furniture mesh, ownership verification, or merchant product match.",
+      "confirmedByUserAt": null,
+      "dimensionStatus": "source_dimension",
+      "id": "rp-bb416da02bd847c33f104446",
+      "observedAt": "2026-10-18T11:24:07Z",
+      "privateAssetId": null,
+      "sourceUrl": null
+    },
+    {
+      "claim": "Native RoomPlan detected table; confidence high. Category, dimensions and pose are sensor estimates represented as an oriented bounding box, not an exact furniture mesh, ownership verification, or merchant product match.",
+      "confirmedByUserAt": null,
+      "dimensionStatus": "source_dimension",
+      "id": "rp-4686b83e8d44d3ffbf167474",
+      "observedAt": "2026-10-18T11:24:07Z",
+      "privateAssetId": null,
+      "sourceUrl": null
+    },
+    {
+      "claim": "Native RoomPlan detected table; confidence high. Category, dimensions and pose are sensor estimates represented as an oriented bounding box, not an exact furniture mesh, ownership verification, or merchant product match.",
+      "confirmedByUserAt": null,
+      "dimensionStatus": "source_dimension",
+      "id": "rp-a0ebe4b2020d17c994130ac4",
+      "observedAt": "2026-10-18T11:24:07Z",
+      "privateAssetId": null,
+      "sourceUrl": null
+    },
+    {
+      "claim": "Native RoomPlan detected table; confidence high. Category, dimensions and pose are sensor estimates represented as an oriented bounding box, not an exact furniture mesh, ownership verification, or merchant product match.",
+      "confirmedByUserAt": null,
+      "dimensionStatus": "source_dimension",
+      "id": "rp-20f58d61feb77c82cd9b617f",
+      "observedAt": "2026-10-18T11:24:07Z",
+      "privateAssetId": null,
+      "sourceUrl": null
+    },
+    {
+      "claim": "Native RoomPlan detected chair; confidence medium. Category, dimensions and pose are sensor estimates represented as an oriented bounding box, not an exact furniture mesh, ownership verification, or merchant product match.",
+      "confirmedByUserAt": null,
+      "dimensionStatus": "source_dimension",
+      "id": "rp-39964af5028d347aab7fec02",
+      "observedAt": "2026-10-18T11:24:07Z",
+      "privateAssetId": null,
+      "sourceUrl": null
+    },
+    {
+      "claim": "Native RoomPlan detected chair; confidence low. Category, dimensions and pose are sensor estimates represented as an oriented bounding box, not an exact furniture mesh, ownership verification, or merchant product match.",
+      "confirmedByUserAt": null,
+      "dimensionStatus": "source_dimension",
+      "id": "rp-03710152ca1b79c5c13062dd",
+      "observedAt": "2026-10-18T11:24:07Z",
+      "privateAssetId": null,
+      "sourceUrl": null
+    },
+    {
+      "claim": "Captured-room RGB appearance evidence; photo SHA-256 d1e631ef47b9143c3dd4489849e5f5d01461e076c9c2b83747fb9035a53cf49e. Camera pose is source ARKit tracking, not verified texture alignment or furniture identity.",
+      "confirmedByUserAt": null,
+      "dimensionStatus": null,
+      "id": "rp-f86496c652ccb7850fa96fa5",
+      "observedAt": "2026-10-18T11:22:08Z",
+      "privateAssetId": null,
+      "sourceUrl": null
+    },
+    {
+      "claim": "Captured-room RGB appearance evidence; photo SHA-256 750ceb3582a5b043c0f66ce25120d302c3b02ca79150dfa561d40792f780d94b. Camera pose is source ARKit tracking, not verified texture alignment or furniture identity.",
+      "confirmedByUserAt": null,
+      "dimensionStatus": null,
+      "id": "rp-560f9169676ea5ef15dd4539",
+      "observedAt": "2026-10-18T11:22:11Z",
+      "privateAssetId": null,
+      "sourceUrl": null
+    },
+    {
+      "claim": "Captured-room RGB appearance evidence; photo SHA-256 2bb90f5ffee2cee186be4cf4f82cc2c0d34daf34c1010fa03e0f4ad8540641bd. Camera pose is source ARKit tracking, not verified texture alignment or furniture identity.",
+      "confirmedByUserAt": null,
+      "dimensionStatus": null,
+      "id": "rp-863f33971bc6fef28a39b0b7",
+      "observedAt": "2026-10-18T11:22:20Z",
+      "privateAssetId": null,
+      "sourceUrl": null
+    },
+    {
+      "claim": "Captured-room RGB appearance evidence; photo SHA-256 8054756d4fecc79ea764c7db32a4f10fb54b11264791011d5b8d273f00f8366c. Camera pose is source ARKit tracking, not verified texture alignment or furniture identity.",
+      "confirmedByUserAt": null,
+      "dimensionStatus": null,
+      "id": "rp-4eee85076556b1923fb63c08",
+      "observedAt": "2026-10-18T11:22:24Z",
+      "privateAssetId": null,
+      "sourceUrl": null
+    },
+    {
+      "claim": "Captured-room RGB appearance evidence; photo SHA-256 f22db565cdcc6f09c506dc5a634c65ccd611e0ab5c2a111afc596cc4bee3fd8a. Camera pose is source ARKit tracking, not verified texture alignment or furniture identity.",
+      "confirmedByUserAt": null,
+      "dimensionStatus": null,
+      "id": "rp-90e991e07409eb9f63ff18ec",
+      "observedAt": "2026-10-18T11:22:30Z",
+      "privateAssetId": null,
+      "sourceUrl": null
+    },
+    {
+      "claim": "Captured-room RGB appearance evidence; photo SHA-256 13b8d7a3e34952e3471db0b100af15c4de56bf231fe7224ad8fbd4cd4efa5ae0. Camera pose is source ARKit tracking, not verified texture alignment or furniture identity.",
+      "confirmedByUserAt": null,
+      "dimensionStatus": null,
+      "id": "rp-b931a253932329e4e13821bf",
+      "observedAt": "2026-10-18T11:22:33Z",
+      "privateAssetId": null,
+      "sourceUrl": null
+    },
+    {
+      "claim": "Captured-room RGB appearance evidence; photo SHA-256 f49a935e0f303762409f19c2e6c5a794e90066e0e8700d1bb105da4f53a35d98. Camera pose is source ARKit tracking, not verified texture alignment or furniture identity.",
+      "confirmedByUserAt": null,
+      "dimensionStatus": null,
+      "id": "rp-cc2773390fcb768e5692eccc",
+      "observedAt": "2026-10-18T11:22:36Z",
+      "privateAssetId": null,
+      "sourceUrl": null
+    },
+    {
+      "claim": "Captured-room RGB appearance evidence; photo SHA-256 628c75ad05788b94db477f3faa96a62b59a600840262b6741338981213108848. Camera pose is source ARKit tracking, not verified texture alignment or furniture identity.",
+      "confirmedByUserAt": null,
+      "dimensionStatus": null,
+      "id": "rp-4283c7dfe2df1e2cfa7aa9b4",
+      "observedAt": "2026-10-18T11:22:42Z",
+      "privateAssetId": null,
+      "sourceUrl": null
+    },
+    {
+      "claim": "Captured-room RGB appearance evidence; photo SHA-256 516a8bdcaa4bb949f611052e256c4593adb6b5e455b3efed5cb4e6c2de6613bb. Camera pose is source ARKit tracking, not verified texture alignment or furniture identity.",
+      "confirmedByUserAt": null,
+      "dimensionStatus": null,
+      "id": "rp-cffd879dba27880ced099bd3",
+      "observedAt": "2026-10-18T11:22:50Z",
+      "privateAssetId": null,
+      "sourceUrl": null
+    },
+    {
+      "claim": "Captured-room RGB appearance evidence; photo SHA-256 a480e79bc4718c556564e3c64629086de2aa7378b796aba22a84ed3b88f5571e. Camera pose is source ARKit tracking, not verified texture alignment or furniture identity.",
+      "confirmedByUserAt": null,
+      "dimensionStatus": null,
+      "id": "rp-7948bcadd71ba058737846b5",
+      "observedAt": "2026-10-18T11:22:51Z",
+      "privateAssetId": null,
+      "sourceUrl": null
+    },
+    {
+      "claim": "Captured-room RGB appearance evidence; photo SHA-256 083d6aa0692538d56a36fbe45f6db99bfeb31d43ed8dc94e97a58c1b29d05033. Camera pose is source ARKit tracking, not verified texture alignment or furniture identity.",
+      "confirmedByUserAt": null,
+      "dimensionStatus": null,
+      "id": "rp-d61a8abff157ddc50f2b2185",
+      "observedAt": "2026-10-18T11:22:51Z",
+      "privateAssetId": null,
+      "sourceUrl": null
+    },
+    {
+      "claim": "Captured-room RGB appearance evidence; photo SHA-256 49ec8d75b0fa6d294595d6d7e96c741ee337624850a487be96429f9e1abeb540. Camera pose is source ARKit tracking, not verified texture alignment or furniture identity.",
+      "confirmedByUserAt": null,
+      "dimensionStatus": null,
+      "id": "rp-2b1cf3e73dc90c4290aea9a6",
+      "observedAt": "2026-10-18T11:22:59Z",
+      "privateAssetId": null,
+      "sourceUrl": null
+    },
+    {
+      "claim": "Captured-room RGB appearance evidence; photo SHA-256 e92f778e4e671e2506275bda47c405f2d49aab4baae8eb2b509110f510b2e23a. Camera pose is source ARKit tracking, not verified texture alignment or furniture identity.",
+      "confirmedByUserAt": null,
+      "dimensionStatus": null,
+      "id": "rp-6a597984ffc98b713a910f31",
+      "observedAt": "2026-10-18T11:23:03Z",
+      "privateAssetId": null,
+      "sourceUrl": null
+    },
+    {
+      "claim": "Captured-room RGB appearance evidence; photo SHA-256 8929e56f7dfced7020c33f6564d62dfdacda5df48d0aaf0be2c4e93e9d5a8b19. Camera pose is source ARKit tracking, not verified texture alignment or furniture identity.",
+      "confirmedByUserAt": null,
+      "dimensionStatus": null,
+      "id": "rp-83c2131e334c3ac790dda80f",
+      "observedAt": "2026-10-18T11:23:03Z",
+      "privateAssetId": null,
+      "sourceUrl": null
+    },
+    {
+      "claim": "Captured-room RGB appearance evidence; photo SHA-256 23308d09f1c3b0ea859fc18b197e0923e73b81fd232898f52cbd781cffb856a2. Camera pose is source ARKit tracking, not verified texture alignment or furniture identity.",
+      "confirmedByUserAt": null,
+      "dimensionStatus": null,
+      "id": "rp-05b77255a51fd77f9367ae2f",
+      "observedAt": "2026-10-18T11:23:10Z",
+      "privateAssetId": null,
+      "sourceUrl": null
+    },
+    {
+      "claim": "Captured-room RGB appearance evidence; photo SHA-256 d572254c49cd7507e741129ff972914c4b817f27a8a41ab995e7b7513ace9408. Camera pose is source ARKit tracking, not verified texture alignment or furniture identity.",
+      "confirmedByUserAt": null,
+      "dimensionStatus": null,
+      "id": "rp-52347e81f033b2b45717c527",
+      "observedAt": "2026-10-18T11:23:13Z",
+      "privateAssetId": null,
+      "sourceUrl": null
+    },
+    {
+      "claim": "Captured-room RGB appearance evidence; photo SHA-256 e679195ade4d7cee18b0ed778363a6f6081a8be7e1b715b6a2e77cb10aecbdd8. Camera pose is source ARKit tracking, not verified texture alignment or furniture identity.",
+      "confirmedByUserAt": null,
+      "dimensionStatus": null,
+      "id": "rp-d655f13469dada15c419773e",
+      "observedAt": "2026-10-18T11:23:13Z",
+      "privateAssetId": null,
+      "sourceUrl": null
+    },
+    {
+      "claim": "Captured-room RGB appearance evidence; photo SHA-256 3e6f6106033419a3caf1a4d3ea940259518c6c577e1c35f3db9af3d2c4a8d80f. Camera pose is source ARKit tracking, not verified texture alignment or furniture identity.",
+      "confirmedByUserAt": null,
+      "dimensionStatus": null,
+      "id": "rp-a05c6d9ae19217538332027b",
+      "observedAt": "2026-10-18T11:23:21Z",
+      "privateAssetId": null,
+      "sourceUrl": null
+    },
+    {
+      "claim": "Captured-room RGB appearance evidence; photo SHA-256 d124b09165f03b163becb5e7d4a970996a3d10bc09b97934d5c053f1b04876f7. Camera pose is source ARKit tracking, not verified texture alignment or furniture identity.",
+      "confirmedByUserAt": null,
+      "dimensionStatus": null,
+      "id": "rp-72dad39f5885b0744fccbc96",
+      "observedAt": "2026-10-18T11:23:24Z",
+      "privateAssetId": null,
+      "sourceUrl": null
+    },
+    {
+      "claim": "Captured-room RGB appearance evidence; photo SHA-256 2899c0921cca4747116c0f70cbea33b3bbc4962c228f7b9d7b3d7f1410295fd9. Camera pose is source ARKit tracking, not verified texture alignment or furniture identity.",
+      "confirmedByUserAt": null,
+      "dimensionStatus": null,
+      "id": "rp-34513243298be5a21792550e",
+      "observedAt": "2026-10-18T11:23:24Z",
+      "privateAssetId": null,
+      "sourceUrl": null
+    },
+    {
+      "claim": "Captured-room RGB appearance evidence; photo SHA-256 75c649767029543c312cd667c2cb359b09d55430d5668103a7d8dd3ab4e2c41f. Camera pose is source ARKit tracking, not verified texture alignment or furniture identity.",
+      "confirmedByUserAt": null,
+      "dimensionStatus": null,
+      "id": "rp-ff9f72b6e8a1ae55c7abfaa0",
+      "observedAt": "2026-10-18T11:23:29Z",
+      "privateAssetId": null,
+      "sourceUrl": null
+    },
+    {
+      "claim": "Captured-room RGB appearance evidence; photo SHA-256 0ad0a0005d99d4186c12665a564d02e7b4fb7d31af90d25846d4780c7670446d. Camera pose is source ARKit tracking, not verified texture alignment or furniture identity.",
+      "confirmedByUserAt": null,
+      "dimensionStatus": null,
+      "id": "rp-151315dae682445299b5e255",
+      "observedAt": "2026-10-18T11:23:30Z",
+      "privateAssetId": null,
+      "sourceUrl": null
+    },
+    {
+      "claim": "Captured-room RGB appearance evidence; photo SHA-256 4d7efdfa79b1b7843c8ce33bf186c46e8f7d12e6c767b4789ff2aa4b59447990. Camera pose is source ARKit tracking, not verified texture alignment or furniture identity.",
+      "confirmedByUserAt": null,
+      "dimensionStatus": null,
+      "id": "rp-29a72cc162d363308df98f3c",
+      "observedAt": "2026-10-18T11:23:31Z",
+      "privateAssetId": null,
+      "sourceUrl": null
+    },
+    {
+      "claim": "Captured-room RGB appearance evidence; photo SHA-256 e0df68719cc7f31a48fa09e63bab411d9950c47cd91278d01afc01c6dff02780. Camera pose is source ARKit tracking, not verified texture alignment or furniture identity.",
+      "confirmedByUserAt": null,
+      "dimensionStatus": null,
+      "id": "rp-075622b9d9ef88c747692948",
+      "observedAt": "2026-10-18T11:23:35Z",
+      "privateAssetId": null,
+      "sourceUrl": null
+    },
+    {
+      "claim": "Captured-room RGB appearance evidence; photo SHA-256 1196912125c40036d70ab6b670a216842918a8be478be37536593ac9f6e9c6ab. Camera pose is source ARKit tracking, not verified texture alignment or furniture identity.",
+      "confirmedByUserAt": null,
+      "dimensionStatus": null,
+      "id": "rp-46a8bc6fcb5f6771ed0fe4e2",
+      "observedAt": "2026-10-18T11:23:43Z",
+      "privateAssetId": null,
+      "sourceUrl": null
+    },
+    {
+      "claim": "Captured-room RGB appearance evidence; photo SHA-256 8063fa87a7a8680c2141d7399860cc4fa3463bcfe34a34e56d5db09c0e013645. Camera pose is source ARKit tracking, not verified texture alignment or furniture identity.",
+      "confirmedByUserAt": null,
+      "dimensionStatus": null,
+      "id": "rp-55463ac1ed3d0e2faff11b59",
+      "observedAt": "2026-10-18T11:23:43Z",
+      "privateAssetId": null,
+      "sourceUrl": null
+    },
+    {
+      "claim": "Captured-room RGB appearance evidence; photo SHA-256 d976bedf08756c848686830078786c2f8a7305fc73d1e7ebdb1020b0c1a8335f. Camera pose is source ARKit tracking, not verified texture alignment or furniture identity.",
+      "confirmedByUserAt": null,
+      "dimensionStatus": null,
+      "id": "rp-d4980d3885e89dce73112465",
+      "observedAt": "2026-10-18T11:23:47Z",
+      "privateAssetId": null,
+      "sourceUrl": null
+    },
+    {
+      "claim": "Captured-room RGB appearance evidence; photo SHA-256 b82935ba5b91edfd8be8e438f84cce1f3f3204a4e5f0ac724394b6ea42ad7a4f. Camera pose is source ARKit tracking, not verified texture alignment or furniture identity.",
+      "confirmedByUserAt": null,
+      "dimensionStatus": null,
+      "id": "rp-7d723a98addd842f5c7a0b13",
+      "observedAt": "2026-10-18T11:23:52Z",
+      "privateAssetId": null,
+      "sourceUrl": null
+    },
+    {
+      "claim": "Captured-room RGB appearance evidence; photo SHA-256 eb4072c3b1e6cd4186941f4502c3a2b09fa2ab8b98b84db4f46176a495e29c9a. Camera pose is source ARKit tracking, not verified texture alignment or furniture identity.",
+      "confirmedByUserAt": null,
+      "dimensionStatus": null,
+      "id": "rp-d8adc2de1fc4edad4a10218d",
+      "observedAt": "2026-10-18T11:23:55Z",
+      "privateAssetId": null,
+      "sourceUrl": null
+    },
+    {
+      "claim": "Captured-room RGB appearance evidence; photo SHA-256 5d2a9d14f35182a548d9ad1877e3bca0fc83f1f762f31cb64afd04abceef2ea1. Camera pose is source ARKit tracking, not verified texture alignment or furniture identity.",
+      "confirmedByUserAt": null,
+      "dimensionStatus": null,
+      "id": "rp-906c75e2a663da6fd02a250d",
+      "observedAt": "2026-10-18T11:23:58Z",
+      "privateAssetId": null,
+      "sourceUrl": null
+    },
+    {
+      "claim": "Captured-room RGB appearance evidence; photo SHA-256 dd837f29d69173038e9d497db4869b4ff516e5657deee285da1ab9e6bef9bccb. Camera pose is source ARKit tracking, not verified texture alignment or furniture identity.",
+      "confirmedByUserAt": null,
+      "dimensionStatus": null,
+      "id": "rp-af0f97a5091935b8edad5f25",
+      "observedAt": "2026-10-18T11:23:58Z",
+      "privateAssetId": null,
+      "sourceUrl": null
+    },
+    {
+      "claim": "Captured-room RGB appearance evidence; photo SHA-256 e60b2fd2e1b2cd79c7e1d727e6504c2606cb1b400e3c230af16cae2cb376c184. Camera pose is source ARKit tracking, not verified texture alignment or furniture identity.",
+      "confirmedByUserAt": null,
+      "dimensionStatus": null,
+      "id": "rp-0824360e7c65d7981e1972a8",
+      "observedAt": "2026-10-18T11:24:03Z",
+      "privateAssetId": null,
+      "sourceUrl": null
+    }
+  ],
+  "geometry": {
+    "coordinateSystem": "right-handed-y-up",
+    "openings": [
+      {
+        "evidenceIds": [
+          "rp-6c08cb1ff9048c9b5883e2bc",
+          "rp-7aad49f0ec0740a0a86fa96c",
+          "rp-2c3503cd238fe6179838db44",
+          "rp-4ba7a6c291deb943108506b2"
+        ],
+        "height": 1.9257243,
+        "id": "9ee94930-e926-44cf-9264-3501bbc59263",
+        "kind": "door",
+        "offset": 4.585216775429205,
+        "sillHeight": 0.0,
+        "wallId": "ab0bd2a5-45fa-4e75-9a85-77051b747a32",
+        "width": 0.7863943794726396
+      },
+      {
+        "evidenceIds": [
+          "rp-bec55f816fb4bce01a2b1170",
+          "rp-70aa859d0d491edbdfdeec4a",
+          "rp-2c3503cd238fe6179838db44",
+          "rp-4ba7a6c291deb943108506b2"
+        ],
+        "height": 1.64372690137638,
+        "id": "a21bc8f5-5de0-4e16-84f9-48d1f0f4e487",
+        "kind": "window",
+        "offset": 0.0600000185089219,
+        "sillHeight": 0.46810076031181,
+        "wallId": "3756c89d-f307-4678-97ef-ef9fb00e9bd8",
+        "width": 4.192090901485103
+      },
+      {
+        "evidenceIds": [
+          "rp-c7a55140980963f1a23aadb7",
+          "rp-40d5322993f0ac5b9348866c",
+          "rp-2c3503cd238fe6179838db44",
+          "rp-4ba7a6c291deb943108506b2"
+        ],
+        "height": 1.90246688585198,
+        "id": "3d0086f6-2644-4a05-b099-28479e226a10",
+        "kind": "window",
+        "offset": 0.15229131196735163,
+        "sillHeight": 0.50571499107401,
+        "wallId": "70269c77-1287-40f4-9be1-d48b0aef71e7",
+        "width": 3.8116582151159526
+      },
+      {
+        "evidenceIds": [
+          "rp-8e4ac7f6fa4c454edf796525",
+          "rp-8369adf37a57dc7a837ce3a9",
+          "rp-2c3503cd238fe6179838db44",
+          "rp-4ba7a6c291deb943108506b2"
+        ],
+        "height": 2.379999757200006,
+        "id": "eaa40fe9-2825-434b-8741-89dbecfb6d3e",
+        "kind": "door",
+        "offset": 1.167819681256983,
+        "sillHeight": 0.0,
+        "wallId": "84de4b29-8a07-4a11-b5d2-465c3be6cee9",
+        "width": 1.8053847211974183
+      }
+    ],
+    "rooms": [
+      {
+        "evidenceIds": [
+          "rp-4ba7a6c291deb943108506b2",
+          "rp-2c3503cd238fe6179838db44",
+          "rp-70aa859d0d491edbdfdeec4a",
+          "rp-7aad49f0ec0740a0a86fa96c",
+          "rp-40d5322993f0ac5b9348866c",
+          "rp-013e8eb08deb7c1300522c3d",
+          "rp-e713a37f27ef050715628905",
+          "rp-f621701360d2494bd78aab2a",
+          "rp-ed31ee7ce49b9053e3d4baf3",
+          "rp-8369adf37a57dc7a837ce3a9",
+          "rp-e53352e628e7e8d8732ccbd5",
+          "rp-cbf0e58f29a9fce284e3d76c",
+          "rp-bfb3d1ab968c10401c9d8764",
+          "rp-3c2342f280c13291eee0aab5"
+        ],
+        "floorPolygon": [
+          [
+            2.8074243829429424,
+            2.680640631805989
+          ],
+          [
+            0.9045292818861987,
+            6.550152333296492
+          ],
+          [
+            -4.749561901691914,
+            3.769662101337861
+          ],
+          [
+            -2.878685351330491,
+            -0.03474030615555712
+          ],
+          [
+            -2.5209261156205205,
+            0.026731338532714907
+          ],
+          [
+            -2.065721501207261,
+            -0.8989210122484762
+          ],
+          [
+            -2.455693564812684,
+            -1.0906961407714226
+          ],
+          [
+            -0.637515760419415,
+            -4.787937108199798
+          ],
+          [
+            5.244408015527279,
+            -1.8954064107209487
+          ],
+          [
+            3.4109547193607135,
+            1.8328979933595568
+          ],
+          [
+            2.991916656117025,
+            1.6268292105065898
+          ],
+          [
+            2.538679616123277,
+            2.5484811395253004
+          ]
+        ],
+        "height": 2.4381819,
+        "id": "ee473709-df73-4e5f-94bc-8366bc0af2b6",
+        "label": "Living room · 2026-10-18 04:24:07 PDT"
+      }
+    ],
+    "units": "m",
+    "walls": [
+      {
+        "end": [
+          0.9045292818861987,
+          6.550152333296492
+        ],
+        "evidenceIds": [
+          "rp-70aa859d0d491edbdfdeec4a",
+          "rp-2c3503cd238fe6179838db44",
+          "rp-4ba7a6c291deb943108506b2"
+        ],
+        "height": 2.4381819,
+        "id": "3756c89d-f307-4678-97ef-ef9fb00e9bd8",
+        "start": [
+          2.8074243829429424,
+          2.680640631805989
+        ],
+        "thickness": 0.12
+      },
+      {
+        "end": [
+          -4.749561901691914,
+          3.769662101337861
+        ],
+        "evidenceIds": [
+          "rp-7aad49f0ec0740a0a86fa96c",
+          "rp-2c3503cd238fe6179838db44",
+          "rp-4ba7a6c291deb943108506b2"
+        ],
+        "height": 2.4381819,
+        "id": "ab0bd2a5-45fa-4e75-9a85-77051b747a32",
+        "start": [
+          0.9045292818861987,
+          6.550152333296492
+        ],
+        "thickness": 0.12
+      },
+      {
+        "end": [
+          -2.878685351330491,
+          -0.03474030615555712
+        ],
+        "evidenceIds": [
+          "rp-40d5322993f0ac5b9348866c",
+          "rp-2c3503cd238fe6179838db44",
+          "rp-4ba7a6c291deb943108506b2"
+        ],
+        "height": 2.4381819,
+        "id": "70269c77-1287-40f4-9be1-d48b0aef71e7",
+        "start": [
+          -4.749561901691914,
+          3.769662101337861
+        ],
+        "thickness": 0.12
+      },
+      {
+        "end": [
+          -2.5209261156205205,
+          0.026731338532714907
+        ],
+        "evidenceIds": [
+          "rp-013e8eb08deb7c1300522c3d",
+          "rp-2c3503cd238fe6179838db44",
+          "rp-4ba7a6c291deb943108506b2"
+        ],
+        "height": 2.4381819,
+        "id": "71f8dac3-d5de-4fda-86bd-6fa713fdfbe1",
+        "start": [
+          -2.878685351330491,
+          -0.03474030615555712
+        ],
+        "thickness": 0.12
+      },
+      {
+        "end": [
+          -2.065721501207261,
+          -0.8989210122484762
+        ],
+        "evidenceIds": [
+          "rp-e713a37f27ef050715628905",
+          "rp-2c3503cd238fe6179838db44",
+          "rp-4ba7a6c291deb943108506b2"
+        ],
+        "height": 2.4381819,
+        "id": "d5d3d892-130d-487e-9728-2a79863c94ab",
+        "start": [
+          -2.5209261156205205,
+          0.026731338532714907
+        ],
+        "thickness": 0.12
+      },
+      {
+        "end": [
+          -2.455693564812684,
+          -1.0906961407714226
+        ],
+        "evidenceIds": [
+          "rp-f621701360d2494bd78aab2a",
+          "rp-2c3503cd238fe6179838db44",
+          "rp-4ba7a6c291deb943108506b2"
+        ],
+        "height": 2.4381819,
+        "id": "a480a492-80cd-43c7-8a57-c867d1b1e844",
+        "start": [
+          -2.065721501207261,
+          -0.8989210122484762
+        ],
+        "thickness": 0.12
+      },
+      {
+        "end": [
+          -0.637515760419415,
+          -4.787937108199798
+        ],
+        "evidenceIds": [
+          "rp-ed31ee7ce49b9053e3d4baf3",
+          "rp-2c3503cd238fe6179838db44",
+          "rp-4ba7a6c291deb943108506b2"
+        ],
+        "height": 2.4381819,
+        "id": "7fd0608a-63fd-45c8-98dd-888270b456c7",
+        "start": [
+          -2.455693564812684,
+          -1.0906961407714226
+        ],
+        "thickness": 0.12
+      },
+      {
+        "end": [
+          5.244408015527279,
+          -1.8954064107209487
+        ],
+        "evidenceIds": [
+          "rp-8369adf37a57dc7a837ce3a9",
+          "rp-2c3503cd238fe6179838db44",
+          "rp-4ba7a6c291deb943108506b2"
+        ],
+        "height": 2.4381819,
+        "id": "84de4b29-8a07-4a11-b5d2-465c3be6cee9",
+        "start": [
+          -0.637515760419415,
+          -4.787937108199798
+        ],
+        "thickness": 0.12
+      },
+      {
+        "end": [
+          3.4109547193607135,
+          1.8328979933595568
+        ],
+        "evidenceIds": [
+          "rp-e53352e628e7e8d8732ccbd5",
+          "rp-2c3503cd238fe6179838db44",
+          "rp-4ba7a6c291deb943108506b2"
+        ],
+        "height": 2.4381819,
+        "id": "bf7cf013-2c20-42e7-92f5-fe3ae86aa171",
+        "start": [
+          5.244408015527279,
+          -1.8954064107209487
+        ],
+        "thickness": 0.12
+      },
+      {
+        "end": [
+          2.991916656117025,
+          1.6268292105065898
+        ],
+        "evidenceIds": [
+          "rp-cbf0e58f29a9fce284e3d76c",
+          "rp-2c3503cd238fe6179838db44",
+          "rp-4ba7a6c291deb943108506b2"
+        ],
+        "height": 2.4381819,
+        "id": "4531a1db-105f-47a0-a82f-e61f76e8cf04",
+        "start": [
+          3.4109547193607135,
+          1.8328979933595568
+        ],
+        "thickness": 0.12
+      },
+      {
+        "end": [
+          2.538679616123277,
+          2.5484811395253004
+        ],
+        "evidenceIds": [
+          "rp-bfb3d1ab968c10401c9d8764",
+          "rp-2c3503cd238fe6179838db44",
+          "rp-4ba7a6c291deb943108506b2"
+        ],
+        "height": 2.4381819,
+        "id": "786a9eda-eda3-45db-bc54-2da34fc0c425",
+        "start": [
+          2.991916656117025,
+          1.6268292105065898
+        ],
+        "thickness": 0.12
+      },
+      {
+        "end": [
+          2.8074243829429424,
+          2.680640631805989
+        ],
+        "evidenceIds": [
+          "rp-3c2342f280c13291eee0aab5",
+          "rp-2c3503cd238fe6179838db44",
+          "rp-4ba7a6c291deb943108506b2"
+        ],
+        "height": 2.4381819,
+        "id": "a4386857-1e56-4a74-8227-4ee83741c81b",
+        "start": [
+          2.538679616123277,
+          2.5484811395253004
+        ],
+        "thickness": 0.12
+      }
+    ]
+  },
+  "inputRevision": 0,
+  "items": [
+    {
+      "assetUrl": null,
+      "dimensions": [
+        0.4872435,
+        0.7936412,
+        0.5068969
+      ],
+      "evidenceIds": [
+        "rp-bd2b0dfbcb1da8651b41ff21"
+      ],
+      "id": "a20cf621-6f7b-45eb-a2fa-c4eeed52d995",
+      "label": "Detected chair",
+      "locked": true,
+      "origin": "existing_owned",
+      "position": [
+        -2.5132039,
+        -6.600000007628282e-08,
+        0.5408994
+      ],
+      "productId": null,
+      "roomId": "ee473709-df73-4e5f-94bc-8366bc0af2b6",
+      "rotationY": -2.027833792893862
+    },
+    {
+      "assetUrl": null,
+      "dimensions": [
+        0.6315923,
+        0.9698533,
+        0.6034642
+      ],
+      "evidenceIds": [
+        "rp-a6f3cb2e124bf557d5d0defa"
+      ],
+      "id": "8bf71e5f-e8ae-47d0-accf-24229d74273b",
+      "label": "Detected refrigerator",
+      "locked": true,
+      "origin": "existing_owned",
+      "position": [
+        -0.744722,
+        8.399999995578611e-08,
+        -3.750224
+      ],
+      "productId": null,
+      "roomId": "ee473709-df73-4e5f-94bc-8366bc0af2b6",
+      "rotationY": 1.1137576260290363
+    },
+    {
+      "assetUrl": null,
+      "dimensions": [
+        0.49560544,
+        0.78072643,
+        0.57055646
+      ],
+      "evidenceIds": [
+        "rp-10d917cf0a17cc0011b32686"
+      ],
+      "id": "99b25b03-6d21-41bb-ae06-b583238cecc5",
+      "label": "Detected chair",
+      "locked": true,
+      "origin": "existing_owned",
+      "position": [
+        0.6368656,
+        1.8999999962243663e-08,
+        1.9718411
+      ],
+      "productId": null,
+      "roomId": "ee473709-df73-4e5f-94bc-8366bc0af2b6",
+      "rotationY": -0.5352898770125284
+    },
+    {
+      "assetUrl": null,
+      "dimensions": [
+        0.4939576,
+        0.8205403,
+        0.582428
+      ],
+      "evidenceIds": [
+        "rp-6f62bac73e74a996fcac3e2c"
+      ],
+      "id": "f2dfa184-0622-496e-ba26-2628e0d9a2be",
+      "label": "Detected chair",
+      "locked": true,
+      "origin": "existing_owned",
+      "position": [
+        -1.4653279,
+        8.399999995578611e-08,
+        -1.759045
+      ],
+      "productId": null,
+      "roomId": "ee473709-df73-4e5f-94bc-8366bc0af2b6",
+      "rotationY": -2.02783574249586
+    },
+    {
+      "assetUrl": null,
+      "dimensions": [
+        0.526294,
+        0.87310994,
+        0.59448224
+      ],
+      "evidenceIds": [
+        "rp-8b5f66d242540fd018dee6a8"
+      ],
+      "id": "554033a8-45b5-488a-8af7-b1eb653bc8f7",
+      "label": "Detected chair",
+      "locked": true,
+      "origin": "existing_owned",
+      "position": [
+        0.3005149,
+        -3.599999998105119e-08,
+        5.002045
+      ],
+      "productId": null,
+      "roomId": "ee473709-df73-4e5f-94bc-8366bc0af2b6",
+      "rotationY": -2.027835635551116
+    },
+    {
+      "assetUrl": null,
+      "dimensions": [
+        0.54711914,
+        0.8290758,
+        0.62573266
+      ],
+      "evidenceIds": [
+        "rp-e1917eb6aa4fab74352c2176"
+      ],
+      "id": "96660528-9ce6-42b7-977f-9856e8865e03",
+      "label": "Detected chair",
+      "locked": true,
+      "origin": "existing_owned",
+      "position": [
+        -0.3471341,
+        3.399999992659275e-08,
+        3.7820172
+      ],
+      "productId": null,
+      "roomId": "ee473709-df73-4e5f-94bc-8366bc0af2b6",
+      "rotationY": -0.4906661216142692
+    },
+    {
+      "assetUrl": null,
+      "dimensions": [
+        0.44708276,
+        0.82354736,
+        0.51025367
+      ],
+      "evidenceIds": [
+        "rp-771f013d399a2278771b9cae"
+      ],
+      "id": "2ca54892-6c79-4746-a25d-135ce06ba964",
+      "label": "Detected chair",
+      "locked": true,
+      "origin": "existing_owned",
+      "position": [
+        -3.3608625,
+        4.000000053405728e-09,
+        2.2035117
+      ],
+      "productId": null,
+      "roomId": "ee473709-df73-4e5f-94bc-8366bc0af2b6",
+      "rotationY": -2.0278361904385123
+    },
+    {
+      "assetUrl": null,
+      "dimensions": [
+        0.4470827,
+        0.82354724,
+        0.5102537
+      ],
+      "evidenceIds": [
+        "rp-4c8c01bb1daea93e36b24037"
+      ],
+      "id": "1b353364-efcb-4bca-b920-dbe81f161582",
+      "label": "Detected chair",
+      "locked": true,
+      "origin": "existing_owned",
+      "position": [
+        -3.6555245,
+        6.400000002182438e-08,
+        2.8027027
+      ],
+      "productId": null,
+      "roomId": "ee473709-df73-4e5f-94bc-8366bc0af2b6",
+      "rotationY": -2.0278327022486353
+    },
+    {
+      "assetUrl": null,
+      "dimensions": [
+        0.61792004,
+        0.53440064,
+        0.6145022
+      ],
+      "evidenceIds": [
+        "rp-f2666003c56fbfec9d14914d"
+      ],
+      "id": "46889e9e-f007-4719-b1e5-b3f5d1ee4be6",
+      "label": "Detected storage",
+      "locked": true,
+      "origin": "existing_owned",
+      "position": [
+        4.5803275,
+        1.3999999992631018e-08,
+        -1.4991192
+      ],
+      "productId": null,
+      "roomId": "ee473709-df73-4e5f-94bc-8366bc0af2b6",
+      "rotationY": -2.0278352601363108
+    },
+    {
+      "assetUrl": null,
+      "dimensions": [
+        1.4423617,
+        0.7498039,
+        0.8151248
+      ],
+      "evidenceIds": [
+        "rp-17091175f8f8e865a8a3adb1"
+      ],
+      "id": "5e4ebdac-eec9-4cba-a55b-d6c0ded49dc5",
+      "label": "Detected table",
+      "locked": true,
+      "origin": "existing_owned",
+      "position": [
+        0.5492554,
+        8.400000001129726e-08,
+        2.7489114
+      ],
+      "productId": null,
+      "roomId": "ee473709-df73-4e5f-94bc-8366bc0af2b6",
+      "rotationY": 2.684554055651261
+    },
+    {
+      "assetUrl": null,
+      "dimensions": [
+        0.5262941,
+        0.87311006,
+        0.5944821
+      ],
+      "evidenceIds": [
+        "rp-273241b20ddbb5e274ec46c4"
+      ],
+      "id": "d9f85c6e-61df-4c3a-bcbb-7dba6096d19f",
+      "label": "Detected chair",
+      "locked": true,
+      "origin": "existing_owned",
+      "position": [
+        -0.8992056,
+        -9.600000000498099e-08,
+        4.8343296
+      ],
+      "productId": null,
+      "roomId": "ee473709-df73-4e5f-94bc-8366bc0af2b6",
+      "rotationY": 2.6842081066182883
+    },
+    {
+      "assetUrl": null,
+      "dimensions": [
+        0.7995606,
+        0.74514216,
+        0.774658
+      ],
+      "evidenceIds": [
+        "rp-c990a894694d55383a1e6fae"
+      ],
+      "id": "d1c67333-a260-45bc-88ac-a82613118127",
+      "label": "Detected sofa",
+      "locked": true,
+      "origin": "existing_owned",
+      "position": [
+        -1.7875905,
+        -8.60000000657557e-08,
+        2.9020581
+      ],
+      "productId": null,
+      "roomId": "ee473709-df73-4e5f-94bc-8366bc0af2b6",
+      "rotationY": 0.6899581029929808
+    },
+    {
+      "assetUrl": null,
+      "dimensions": [
+        1.8476565,
+        0.7466923,
+        0.89492595
+      ],
+      "evidenceIds": [
+        "rp-e97d039628cf0032281ca295"
+      ],
+      "id": "8273ecc9-9b5b-4faf-b8f8-6fff62c6cc29",
+      "label": "Detected sofa",
+      "locked": true,
+      "origin": "existing_owned",
+      "position": [
+        3.8519926,
+        -5.6000000026035224e-08,
+        -0.21389425
+      ],
+      "productId": null,
+      "roomId": "ee473709-df73-4e5f-94bc-8366bc0af2b6",
+      "rotationY": -2.0278350544816544
+    },
+    {
+      "assetUrl": null,
+      "dimensions": [
+        0.44677758,
+        0.79561234,
+        0.4663084
+      ],
+      "evidenceIds": [
+        "rp-cbfead8b01681c9d39b0f593"
+      ],
+      "id": "4cc22ed1-0308-4d2d-b9b3-988943973637",
+      "label": "Detected chair",
+      "locked": true,
+      "origin": "existing_owned",
+      "position": [
+        0.69824284,
+        3.999999942383425e-09,
+        2.445947
+      ],
+      "productId": null,
+      "roomId": "ee473709-df73-4e5f-94bc-8366bc0af2b6",
+      "rotationY": -0.45703886978711716
+    },
+    {
+      "assetUrl": null,
+      "dimensions": [
+        1.3354491,
+        0.7460276,
+        0.5715752
+      ],
+      "evidenceIds": [
+        "rp-c53cdf8b040a1b13a4d631da"
+      ],
+      "id": "967f4714-be7f-49db-9ed1-5a6002337c3a",
+      "label": "Detected table",
+      "locked": true,
+      "origin": "existing_owned",
+      "position": [
+        -3.6959655,
+        -6.600000007628282e-08,
+        2.410767
+      ],
+      "productId": null,
+      "roomId": "ee473709-df73-4e5f-94bc-8366bc0af2b6",
+      "rotationY": 1.1137572954823964
+    },
+    {
+      "assetUrl": null,
+      "dimensions": [
+        1.6606445,
+        0.7188047,
+        0.7950146
+      ],
+      "evidenceIds": [
+        "rp-d86bb42f122e0d2497587c87"
+      ],
+      "id": "69846218-bdc8-496f-9de8-14219b2e6ab0",
+      "label": "Detected sofa",
+      "locked": true,
+      "origin": "existing_owned",
+      "position": [
+        3.5676649,
+        8.399999995578611e-08,
+        -2.210136
+      ],
+      "productId": null,
+      "roomId": "ee473709-df73-4e5f-94bc-8366bc0af2b6",
+      "rotationY": -0.45703890568164895
+    },
+    {
+      "assetUrl": null,
+      "dimensions": [
+        1.6530261,
+        0.75614786,
+        0.9361957
+      ],
+      "evidenceIds": [
+        "rp-596a0df06a197aba4fd7ff50"
+      ],
+      "id": "c67451ce-fb4a-4438-8108-275f415d22fb",
+      "label": "Detected table",
+      "locked": true,
+      "origin": "existing_owned",
+      "position": [
+        -0.36114725,
+        3.999999997894577e-09,
+        4.676662
+      ],
+      "productId": null,
+      "roomId": "ee473709-df73-4e5f-94bc-8366bc0af2b6",
+      "rotationY": 2.6845538989821387
+    },
+    {
+      "assetUrl": null,
+      "dimensions": [
+        1.3691409,
+        0.8670124,
+        0.84179693
+      ],
+      "evidenceIds": [
+        "rp-107d13f510004d46bac4313d"
+      ],
+      "id": "13f45aa3-b069-4017-bce6-3acd37605f96",
+      "label": "Detected sofa",
+      "locked": true,
+      "origin": "existing_owned",
+      "position": [
+        1.7705839,
+        3.39999999821039e-08,
+        0.97609055
+      ],
+      "productId": null,
+      "roomId": "ee473709-df73-4e5f-94bc-8366bc0af2b6",
+      "rotationY": 2.684553989457361
+    },
+    {
+      "assetUrl": null,
+      "dimensions": [
+        0.48724362,
+        0.79364127,
+        0.5068968
+      ],
+      "evidenceIds": [
+        "rp-a91e05b4796f7de9b6c1d8a5"
+      ],
+      "id": "0c21e5a5-a5c8-4a03-9332-a41b8b3f81f2",
+      "label": "Detected chair",
+      "locked": true,
+      "origin": "existing_owned",
+      "position": [
+        -2.823203,
+        -1.0100000003010479e-07,
+        1.1712793
+      ],
+      "productId": null,
+      "roomId": "ee473709-df73-4e5f-94bc-8366bc0af2b6",
+      "rotationY": -2.0278358095764433
+    },
+    {
+      "assetUrl": null,
+      "dimensions": [
+        0.5262942,
+        0.87310994,
+        0.5944822
+      ],
+      "evidenceIds": [
+        "rp-97cf497e496b0353ca07db4a"
+      ],
+      "id": "0ec12e51-8021-4c53-8df5-a0c3d5f776e4",
+      "label": "Detected chair",
+      "locked": true,
+      "origin": "existing_owned",
+      "position": [
+        -0.1939303,
+        -3.599999998105119e-08,
+        4.3366284
+      ],
+      "productId": null,
+      "roomId": "ee473709-df73-4e5f-94bc-8366bc0af2b6",
+      "rotationY": -0.4570386820796998
+    },
+    {
+      "assetUrl": null,
+      "dimensions": [
+        0.52629405,
+        0.87310994,
+        0.5944826
+      ],
+      "evidenceIds": [
+        "rp-9eeb437f49766429fe2ee401"
+      ],
+      "id": "de5adb46-2976-47a2-ad2b-85561e30b232",
+      "label": "Detected chair",
+      "locked": true,
+      "origin": "existing_owned",
+      "position": [
+        -0.15752292,
+        -3.599999998105119e-08,
+        5.1990623
+      ],
+      "productId": null,
+      "roomId": "ee473709-df73-4e5f-94bc-8366bc0af2b6",
+      "rotationY": 2.684503957777841
+    },
+    {
+      "assetUrl": null,
+      "dimensions": [
+        1.4049609,
+        0.7329459,
+        0.5980295
+      ],
+      "evidenceIds": [
+        "rp-de574f18774a3d6ff3ce04a3"
+      ],
+      "id": "56118ee1-287b-4696-9475-186bf3fc1b10",
+      "label": "Detected table",
+      "locked": true,
+      "origin": "existing_owned",
+      "position": [
+        -2.8682978,
+        -1.5999999991578306e-08,
+        0.75768965
+      ],
+      "productId": null,
+      "roomId": "ee473709-df73-4e5f-94bc-8366bc0af2b6",
+      "rotationY": 1.11375727253112
+    },
+    {
+      "assetUrl": null,
+      "dimensions": [
+        0.8066251,
+        0.7103412,
+        0.76757264
+      ],
+      "evidenceIds": [
+        "rp-bb416da02bd847c33f104446"
+      ],
+      "id": "51692688-549c-4f42-8647-32bdac8bedbb",
+      "label": "Detected sofa",
+      "locked": true,
+      "origin": "existing_owned",
+      "position": [
+        2.4951565,
+        1.3399999998497947e-07,
+        -2.5744004
+      ],
+      "productId": null,
+      "roomId": "ee473709-df73-4e5f-94bc-8366bc0af2b6",
+      "rotationY": -1.0522766811312392
+    },
+    {
+      "assetUrl": null,
+      "dimensions": [
+        1.5074148,
+        0.73074055,
+        0.6211441
+      ],
+      "evidenceIds": [
+        "rp-4686b83e8d44d3ffbf167474"
+      ],
+      "id": "f639bafc-a24c-405a-a1ce-624b4a859bc3",
+      "label": "Detected table",
+      "locked": true,
+      "origin": "existing_owned",
+      "position": [
+        -1.4993238,
+        -1.0000000272292198e-09,
+        -2.1957197
+      ],
+      "productId": null,
+      "roomId": "ee473709-df73-4e5f-94bc-8366bc0af2b6",
+      "rotationY": 1.1137575011370668
+    },
+    {
+      "assetUrl": null,
+      "dimensions": [
+        0.6520322,
+        0.5290448,
+        0.6597873
+      ],
+      "evidenceIds": [
+        "rp-a0ebe4b2020d17c994130ac4"
+      ],
+      "id": "e7ac241c-304c-4b5f-9edd-1951f10dce4c",
+      "label": "Detected table",
+      "locked": true,
+      "origin": "existing_owned",
+      "position": [
+        3.3121185,
+        3.4000000093126204e-08,
+        1.1503544
+      ],
+      "productId": null,
+      "roomId": "ee473709-df73-4e5f-94bc-8366bc0af2b6",
+      "rotationY": -2.0278348391144547
+    },
+    {
+      "assetUrl": null,
+      "dimensions": [
+        1.0964662,
+        0.41466194,
+        0.6441555
+      ],
+      "evidenceIds": [
+        "rp-20f58d61feb77c82cd9b617f"
+      ],
+      "id": "ebcdb2f6-776a-43f0-9380-bcf3529f01ce",
+      "label": "Detected table",
+      "locked": true,
+      "origin": "existing_owned",
+      "position": [
+        3.144328,
+        6.400000007733553e-08,
+        -1.0864115
+      ],
+      "productId": null,
+      "roomId": "ee473709-df73-4e5f-94bc-8366bc0af2b6",
+      "rotationY": -0.45703863721153
+    },
+    {
+      "assetUrl": null,
+      "dimensions": [
+        0.49395752,
+        0.82054025,
+        0.58242804
+      ],
+      "evidenceIds": [
+        "rp-39964af5028d347aab7fec02"
+      ],
+      "id": "882642e5-6103-41c0-856b-5c315bf436ac",
+      "label": "Detected chair",
+      "locked": true,
+      "origin": "existing_owned",
+      "position": [
+        -1.1327224,
+        1.0899999997038279e-07,
+        -2.4353943
+      ],
+      "productId": null,
+      "roomId": "ee473709-df73-4e5f-94bc-8366bc0af2b6",
+      "rotationY": -2.0278347680643005
+    },
+    {
+      "assetUrl": null,
+      "dimensions": [
+        0.55444366,
+        0.80067843,
+        0.57751447
+      ],
+      "evidenceIds": [
+        "rp-03710152ca1b79c5c13062dd"
+      ],
+      "id": "8b841611-89a7-4d01-a74e-b760ce23aab5",
+      "label": "Detected chair",
+      "locked": true,
+      "origin": "existing_owned",
+      "position": [
+        -1.9664619,
+        -8.10000000406319e-08,
+        4.605511
+      ],
+      "productId": null,
+      "roomId": "ee473709-df73-4e5f-94bc-8366bc0af2b6",
+      "rotationY": 1.9316147529672447
+    }
+  ],
+  "jobId": "scan-3728518e-2a3d-42fe-bc68-8bb747b37d2d",
+  "projectId": "local-roomplan"
+}
