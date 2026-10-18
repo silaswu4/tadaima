@@ -21,6 +21,23 @@ Owner: **Matthew**. This is the application and agent integration area. Work alo
 
 Item `position` is the center of the footprint on the floor, `dimensions` are `[width, height, depth]` before rotation, `rotationY` is radians about +Y (three.js convention).
 
+## API (live)
+
+Deployed at `https://tadaima-matthew-kims-projects-b1fc1628.vercel.app` behind Vercel deployment protection. Server-to-server callers (the Fetch agent) send header `x-vercel-protection-bypass: <secret>`; ask Matthew for the secret, never commit it. Locally: `npm run dev`. The demo project is `proj_demo`.
+
+| Method | Path | Body | Returns |
+| --- | --- | --- | --- |
+| GET | `/api/projects/{id}` | | `{ plan, cost, validations }` |
+| POST | `/api/projects/{id}/proposals` | `{ intent, selectedItemId? }` | `PlanProposal` (~10 s, calls Claude) |
+| POST | `/api/projects/{id}/proposals/{proposalId}/apply` | `{ expectedRevision }` | `ApplyResult` |
+| POST | `/api/projects/{id}/changes` | `{ expectedRevision, changes: PlanChange[] }` | `ApplyResult` (direct UI edits) |
+| POST | `/api/projects/{id}/reset` | | fixture plan (demo only) |
+| GET | `/api/voice/token` | | `{ token }` for ElevenLabs `startSession({ conversationToken })` |
+
+`ApplyResult` is `{ ok: true, plan }` or `{ ok: false, reason: "stale_revision" | "validation_failed", ... }`. Proposals expire after an hour. Plans live in Upstash Redis (shared by dev and prod).
+
+Voice: [`voice/clientTools.ts`](voice/clientTools.ts) gives the frontend the three client tools the ElevenLabs agent calls. Re-sync the agent after editing [`voice/agent-config.ts`](voice/agent-config.ts) with `npx tsx --env-file=.env.local backend/voice/setup-agent.ts`.
+
 ## First tasks
 
 1. Agree on `contracts.ts` with the other three owners. The scaffold is a starting contract, not runtime validation or a complete implementation of the proposed data model.
