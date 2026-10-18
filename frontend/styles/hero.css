@@ -196,8 +196,9 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  width: 180px;
-  height: 72px;
+  /* hugs the line until the timeline takes over the size */
+  width: max-content;
+  height: 64px;
 }
 .tadaima-hero .hero-loader__stack { display: inline-flex; flex-direction: column; gap: 4px; }
 .tadaima-hero .hero-loader__corner {
@@ -213,10 +214,11 @@
 .tadaima-hero .hero-loader__word {
   margin: 0;
   font-family: var(--font-display), system-ui, sans-serif;
-  font-weight: 600;
-  font-size: 60px;
-  line-height: 64px;
-  letter-spacing: -0.05em;
+  font-weight: 500;
+  font-size: clamp(22px, 5.4vw, 36px);
+  line-height: 1.25;
+  letter-spacing: -0.03em;
+  white-space: nowrap;
   color: var(--hero-fg);
 }
 .tadaima-hero .hero-loader__meta {
@@ -239,5 +241,4 @@
 
 @media (prefers-reduced-motion: reduce) {
   .tadaima-hero .hero-row__label::after { transition: none; }
-  .tadaima-hero .hero-loader__frame { width: 236px; height: 152px; }
 }
