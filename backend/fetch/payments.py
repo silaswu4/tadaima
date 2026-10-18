@@ -132,7 +132,6 @@ async def create_session(sender: str, project_id: str) -> dict:
     base = {
         "redirect_on_completion": "if_required",
         "mode": "payment",
-        "payment_method_types": ["card"],
         "return_url": os.getenv("STRIPE_RETURN_URL", "https://asi1.ai/") + "?session_id={CHECKOUT_SESSION_ID}",
         "line_items": [{"price_data": {"currency": CURRENCY, "product_data": {"name": PRODUCT}, "unit_amount": FEE_CENTS}, "quantity": 1}],
         # Stripe wants 30 min to 24 h; a minute past our deadline
