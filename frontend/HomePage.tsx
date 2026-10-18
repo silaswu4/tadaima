@@ -99,6 +99,7 @@ export default function Home() {
   const [captureUrl, setCaptureUrl] = useState("/capture");
   const [address, setAddress] = useState("");
   const [addressError, setAddressError] = useState("");
+  const [signInNote, setSignInNote] = useState(false);
   const addressRef = useRef<HTMLInputElement>(null);
   const reveal = useCallback(() => setRevealed(true), []);
   const finishLoading = useCallback(() => setLoaderGone(true), []);
@@ -182,6 +183,14 @@ export default function Home() {
       >
         <div className="hero-side">
           <ul className="hero-list">
+            {/* accounts are not built yet, so this says so rather than going nowhere */}
+            <li className="hero-row">
+              <button type="button" className="hero-row__inner" onClick={() => setSignInNote((v) => !v)} aria-expanded={signInNote}>
+                <span className="hero-row__text">
+                  <span className="hero-row__label">Sign in</span>
+                </span>
+              </button>
+            </li>
             {ROWS.map((row) => (
               <li key={row.key} className="hero-row">
                 {row.key === "type" && open === "type" ? (
@@ -228,6 +237,12 @@ export default function Home() {
               </li>
             ))}
           </ul>
+
+          {signInNote ? (
+            <small className="hero-error hero-note" role="status">
+              Accounts are coming soon.
+            </small>
+          ) : null}
 
           {addressError ? (
             <small className="hero-error" id="hero-address-error" role="alert">

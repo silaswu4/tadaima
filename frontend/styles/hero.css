@@ -32,6 +32,23 @@
   /* keeps the options legible where the window light falls behind them */
   text-shadow: 0 1px 14px rgba(43, 26, 16, 0.55);
 }
+/* a soft band behind the bar: darkens and blurs the light a little, fading out downward,
+   so the nav reads over the bright window without a hard edge */
+.tadaima-hero .hero-side::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  top: -26px;
+  left: calc(-1 * var(--hero-left));
+  right: calc(-1 * var(--hero-left));
+  height: 120px;
+  background: linear-gradient(to bottom, rgba(31, 19, 11, 0.72), rgba(31, 19, 11, 0));
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  -webkit-mask-image: linear-gradient(to bottom, #000 35%, transparent);
+  mask-image: linear-gradient(to bottom, #000 35%, transparent);
+  pointer-events: none;
+}
 .tadaima-hero .hero-list {
   display: flex;
   flex-direction: row;
@@ -134,6 +151,7 @@
   line-height: 18px;
   color: var(--hero-sun);
 }
+.tadaima-hero .hero-error.hero-note { color: var(--hero-muted); }
 .tadaima-hero .hero-qr {
   width: 240px;
   display: flex;
@@ -251,6 +269,7 @@
   .tadaima-hero { --hero-word-size: 21vw; }
   /* three items will not fit across a phone, so they stack in the top corner */
   .tadaima-hero .hero-side { top: 20px; left: var(--hero-left); }
+  .tadaima-hero .hero-side::before { top: -20px; height: 220px; }
   .tadaima-hero .hero-list { flex-direction: column; gap: 8px; }
   .tadaima-hero .hero-row__label { font-size: 17px; line-height: 22px; }
 }
