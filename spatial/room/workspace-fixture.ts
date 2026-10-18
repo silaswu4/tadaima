@@ -6,14 +6,14 @@ const item = (
   id: string, label: string, asset: string | null,
   position: [number, number, number], rotationY = 0,
 ): PlacedItem => ({
-  id, label, roomId: "living-room", origin: "existing_owned",
+  id, label, roomId: "living-room", category: "other", origin: "existing_owned",
   productId: null, assetUrl: asset ? `/models/${asset}.glb` : null,
-  position, rotationY, dimensions: null, locked: false,
+  position, rotationY, dimensions: null, seats: null, locked: false,
 });
 
 export function makeWorkspaceDemo(): RoomPlan {
   return {
-    schemaVersion: "0.1-scaffold", projectId: "furniture-workspace-demo", revision: 1,
+    schemaVersion: "0.2", projectId: "furniture-workspace-demo", revision: 1,
     geometry: {
       units: "m", coordinateSystem: "right-handed-y-up",
       rooms: [{ id: "living-room", label: "Demo living room", height: 2.7,
@@ -40,6 +40,6 @@ export function makeWorkspaceDemo(): RoomPlan {
       item("vase", "Ceramic vase", "ceramic_vase_01", [4.38, .5506622816901654, .32]),
       item("demo-lamp", "Floor lamp", null, [1.8, 0, .32]),
     ],
-    evidence: [], products: [], constraints: { budget: null, minimumSeats: null },
+    evidence: [], products: [], constraints: { budget: null, minimumSeats: null, clearance: 0.3 },
   };
 }

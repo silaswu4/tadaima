@@ -123,6 +123,10 @@ const products: RoomPlan["products"] = [
     sourceUrl: "https://example.com/fixture/oak-coffee-table",
     variantId: "fixture-oak-natural",
     label: "Oak coffee table",
+    category: "table",
+    seats: null,
+    imageUrl: null,
+    fixture: true,
     // in the model's own frame: this asset runs its long side along local z
     dimensions: [0.6, 0.39, 1.2],
     price: { amountMinor: 42900, currency: "USD" },
@@ -136,6 +140,10 @@ const products: RoomPlan["products"] = [
     sourceUrl: "https://example.com/fixture/round-coffee-table",
     variantId: "fixture-round-ash",
     label: "Round coffee table",
+    category: "table",
+    seats: null,
+    imageUrl: null,
+    fixture: true,
     dimensions: [0.8, 0.4, 0.8],
     price: { amountMinor: 18900, currency: "USD" },
     availability: "available",
@@ -148,6 +156,10 @@ const products: RoomPlan["products"] = [
     sourceUrl: "https://example.com/fixture/display-shelves",
     variantId: null,
     label: "Display shelves",
+    category: "storage",
+    seats: null,
+    imageUrl: null,
+    fixture: true,
     dimensions: [0.37, 1.56, 1.08],
     price: { amountMinor: 31900, currency: "USD" },
     availability: "unknown",
@@ -160,6 +172,10 @@ const products: RoomPlan["products"] = [
     sourceUrl: "https://example.com/fixture/side-table",
     variantId: null,
     label: "Side table",
+    category: "table",
+    seats: null,
+    imageUrl: null,
+    fixture: true,
     dimensions: null,
     price: null,
     availability: "unknown",
@@ -169,7 +185,7 @@ const products: RoomPlan["products"] = [
 ];
 
 export const DEMO_PLAN_R1: RoomPlan = {
-  schemaVersion: "0.1-scaffold",
+  schemaVersion: "0.2",
   projectId: "project_fixture_living",
   revision: 1,
   geometry,
@@ -180,6 +196,10 @@ export const DEMO_PLAN_R1: RoomPlan = {
       id: "item_sofa",
       roomId: "room_living",
       label: "Sofa",
+
+      category: "sofa",
+
+      seats: 3,
       origin: "existing_owned",
       productId: null,
       assetUrl: "/models/sofa_02.glb",
@@ -192,6 +212,10 @@ export const DEMO_PLAN_R1: RoomPlan = {
       id: "item_coffee_table",
       roomId: "room_living",
       label: "Coffee table",
+
+      category: "table",
+
+      seats: null,
       origin: "proposed_purchase",
       productId: "prod_fixture_oak_coffee_table",
       assetUrl: "/models/modern_coffee_table_01.glb",
@@ -204,6 +228,10 @@ export const DEMO_PLAN_R1: RoomPlan = {
       id: "item_lounge_chair",
       roomId: "room_living",
       label: "Lounge chair",
+
+      category: "chair",
+
+      seats: 1,
       origin: "existing_owned",
       productId: null,
       assetUrl: "/models/mid_century_lounge_chair.glb",
@@ -216,6 +244,10 @@ export const DEMO_PLAN_R1: RoomPlan = {
       id: "item_cabinet",
       roomId: "room_living",
       label: "Cabinet",
+
+      category: "storage",
+
+      seats: null,
       origin: "existing_owned",
       productId: null,
       assetUrl: "/models/modern_wooden_cabinet.glb",
@@ -228,6 +260,10 @@ export const DEMO_PLAN_R1: RoomPlan = {
       id: "item_shelves",
       roomId: "room_living",
       label: "Display shelves",
+
+      category: "storage",
+
+      seats: null,
       origin: "proposed_purchase",
       productId: "prod_fixture_display_shelves",
       assetUrl: "/models/wooden_display_shelves_01.glb",
@@ -240,6 +276,10 @@ export const DEMO_PLAN_R1: RoomPlan = {
       id: "item_side_table",
       roomId: "room_living",
       label: "Side table",
+
+      category: "table",
+
+      seats: null,
       origin: "proposed_purchase",
       productId: "prod_fixture_side_table",
       assetUrl: "/models/side_table_01.glb",
@@ -252,6 +292,10 @@ export const DEMO_PLAN_R1: RoomPlan = {
       id: "item_desk",
       roomId: "room_living",
       label: "Desk",
+
+      category: "desk",
+
+      seats: null,
       origin: "existing_owned",
       productId: null,
       assetUrl: null,
@@ -264,6 +308,10 @@ export const DEMO_PLAN_R1: RoomPlan = {
       id: "item_floor_lamp",
       roomId: "room_living",
       label: "Floor lamp",
+
+      category: "lamp",
+
+      seats: null,
       origin: "existing_owned",
       productId: null,
       assetUrl: null,
@@ -276,6 +324,7 @@ export const DEMO_PLAN_R1: RoomPlan = {
   constraints: {
     budget: { amountMinor: 120000, currency: "USD" },
     minimumSeats: 4,
+    clearance: 0.3,
   },
 };
 
@@ -303,5 +352,6 @@ export const DEMO_PLAN_R2: RoomPlan = {
   constraints: {
     budget: { amountMinor: 80000, currency: "USD" },
     minimumSeats: 4,
+    clearance: 0.3,
   },
 };

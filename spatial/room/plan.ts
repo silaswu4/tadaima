@@ -177,7 +177,7 @@ export function validatePlan(plan: RoomPlan): PlanIssue[] {
   const add = (severity: IssueSeverity, code: string, message: string, entityId: string | null = null) =>
     issues.push({ severity, code, message, entityId });
 
-  if (plan.schemaVersion !== "0.1-scaffold") {
+  if (plan.schemaVersion !== "0.2") {
     add("error", "schema_version", `Unsupported schema version "${String(plan.schemaVersion)}".`);
   }
   const geometry = plan.geometry;

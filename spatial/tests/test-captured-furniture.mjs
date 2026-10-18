@@ -17,7 +17,7 @@ const near = (actual, expected) => assert.ok(Math.abs(actual - expected) < 1e-6,
 
 test("local import preserves existing furniture, evidence and elevated rotated placement without products", () => {
   const raw = request(), before = structuredClone(raw), plan = parseRoomImport(JSON.stringify(raw));
-  assert.deepEqual(plan.items, raw.items); assert.deepEqual(plan.products, []); assert.deepEqual(raw, before);
+  assert.deepEqual(plan.items.map(({ category, seats, ...captured }) => captured), raw.items); assert.deepEqual(plan.products, []); assert.deepEqual(raw, before);
 });
 
 test("legacy empty shells and explicitly empty furniture remain valid", () => {
@@ -74,5 +74,6 @@ test("locked captured item still explodes as presentation and returns to exact o
   const controller = makeExplodeController([{ id: item.id, object: root }], new THREE.Box3(new THREE.Vector3(0, 0, 0), new THREE.Vector3(5, 3, 4)), { reducedMotion: true });
   controller.setExploded(true, 0); assert.notDeepEqual(root.position.toArray(), position);
   controller.setExploded(false, 100); assert.deepEqual(root.position.toArray(), position); assert.deepEqual(root.quaternion.toArray(), quaternion);
-  assert.deepEqual(plan.items, raw.items); controller.dispose(); model.geometry.dispose(); model.material.dispose();
+  // contract v0.2 adds category and seats defaults on import; the captured fields must be untouched
+  assert.deepEqual(plan.items.map(({ category, seats, ...captured }) => captured), raw.items); controller.dispose(); model.geometry.dispose(); model.material.dispose();
 });
