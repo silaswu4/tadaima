@@ -1271,3 +1271,55 @@
 .room-x__results-n { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 999px; background: var(--ink); color: var(--paper); font-size: 11px; }
 .room-x__results-stage { margin: 6px 0 0; color: var(--muted); font-size: 11px; }
 @keyframes room-x-results-in { from { opacity: 0; transform: translateX(12px); } to { opacity: 1; transform: none; } }
+
+/* ---------- bottom: tools raised a little, inventory dock under them ---------- */
+.room-x__bottom { position: absolute; left: 50%; bottom: max(18px, env(safe-area-inset-bottom)); z-index: 2; display: grid; justify-items: center; gap: 10px; width: min(640px, calc(100vw - 32px)); transform: translateX(-50%); animation: room-x-rise 1s var(--ease) 0.5s both; }
+.room-x__bottom .room-x__tools { position: static; transform: none; animation: none; }
+.room-x__dock { display: flex; align-items: stretch; gap: 8px; max-width: 100%; min-height: 52px; padding: 6px; overflow-x: auto; border: 1px solid rgba(255, 255, 255, 0.5); border-radius: 18px; background: rgba(245, 242, 235, 0.45); -webkit-backdrop-filter: blur(18px) saturate(1.3); backdrop-filter: blur(18px) saturate(1.3); scrollbar-width: none; }
+.room-x__dock::-webkit-scrollbar { display: none; }
+.room-x__dock-empty { align-self: center; padding: 0 12px; color: var(--muted); font-size: 12px; white-space: nowrap; }
+.room-x__dock-item { display: grid; align-content: center; gap: 1px; min-width: 120px; padding: 6px 12px; border: 1px solid var(--line); border-radius: 12px; background: rgba(255, 255, 255, 0.55); color: var(--ink); font: inherit; text-align: left; cursor: grab; animation: room-x-stash 0.5s var(--ease) both; transition: background-color 0.25s ease, transform 0.25s ease; }
+.room-x__dock-item:hover:not(:disabled) { background: rgba(255, 255, 255, 0.85); transform: translateY(-2px); }
+.room-x__dock-item span { font-size: 12px; white-space: nowrap; }
+.room-x__dock-item small { color: var(--muted); font-size: 10px; white-space: nowrap; }
+@keyframes room-x-stash { 0% { opacity: 0; transform: translateY(-28px) scale(0.6); } 60% { opacity: 1; transform: translateY(3px) scale(1.04); } 100% { transform: none; } }
+.room-x__carry, .room-x__toolbar[data-docked] { bottom: calc(max(18px, env(safe-area-inset-bottom)) + 124px); }
+
+/* ---------- basket: an icon and a total ---------- */
+.room-x__basket-btn svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.room-x__basket-btn .room-x__basket-total { font-variant-numeric: tabular-nums; }
+
+/* ---------- how to get the cursor back ---------- */
+.room-x__cursor-chip { position: absolute; left: 16px; bottom: max(18px, env(safe-area-inset-bottom)); z-index: 2; margin: 0; padding: 7px 12px; border: 1px solid rgba(255, 255, 255, 0.5); border-radius: 999px; background: rgba(245, 242, 235, 0.5); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); color: var(--muted); font-size: 11px; pointer-events: none; }
+.room-x__cap-key { display: inline-block; margin: 0 2px; padding: 0 6px; border: 1px solid var(--line); border-radius: 6px; background: rgba(255, 255, 255, 0.6); color: var(--ink); font-size: 10px; line-height: 16px; }
+@media (max-width: 760px) { .room-x__cursor-chip { display: none; } }
+
+/* ---------- hotbar inventory: nine numbered slots ---------- */
+.room-x__hotbar { display: flex; gap: 4px; padding: 4px; border: 1px solid rgba(255, 255, 255, 0.5); border-radius: 14px; background: rgba(43, 26, 16, 0.18); -webkit-backdrop-filter: blur(18px) saturate(1.3); backdrop-filter: blur(18px) saturate(1.3); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35); }
+.room-x__slot { position: relative; display: grid; place-items: center; width: 48px; height: 48px; padding: 0; border: 1px solid rgba(255, 255, 255, 0.35); border-radius: 10px; background: rgba(255, 255, 255, 0.14); color: var(--paper); font: inherit; }
+.room-x__slot[data-filled] { background: rgba(255, 255, 255, 0.62); border-color: rgba(255, 255, 255, 0.85); color: var(--ink); cursor: grab; animation: room-x-stash 0.5s var(--ease) both; transition: transform 0.2s ease, background-color 0.2s ease; }
+.room-x__slot[data-filled]:hover:not(:disabled), .room-x__slot[data-filled]:focus-visible { background: rgba(255, 255, 255, 0.9); transform: translateY(-3px); outline: none; }
+.room-x__slot-glyph { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
+.room-x__slot-n { position: absolute; top: 3px; left: 5px; font-size: 9px; opacity: 0.7; }
+.room-x__slot-tip { position: absolute; bottom: calc(100% + 8px); left: 50%; display: grid; gap: 1px; padding: 6px 10px; border-radius: 8px; background: rgba(43, 26, 16, 0.88); color: var(--paper); font-size: 12px; white-space: nowrap; transform: translateX(-50%) translateY(4px); opacity: 0; pointer-events: none; transition: opacity 0.15s ease, transform 0.15s ease; }
+.room-x__slot-tip small { color: rgba(245, 242, 235, 0.7); font-size: 10px; }
+.room-x__slot[data-filled]:hover .room-x__slot-tip, .room-x__slot[data-filled]:focus-visible .room-x__slot-tip { opacity: 1; transform: translateX(-50%); }
+@media (max-width: 520px) { .room-x__slot { width: 36px; height: 36px; } .room-x__slot-glyph { width: 18px; height: 18px; } }
+
+/* toasts sit under the title, clear of the bottom tools and hotbar */
+.room-x__toast { top: 72px; bottom: auto; background: rgba(43, 26, 16, 0.82); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); text-overflow: ellipsis; overflow: hidden; }
+.room-x:has(.room-x__card[data-docked]) .room-x__toast { bottom: auto; }
+
+/* ---------- selected piece: separate game-style action buttons ---------- */
+.room-x__toolbar { display: grid; grid-template-columns: repeat(3, auto); justify-content: center; gap: 6px 12px; padding: 0; border: 0; background: none; -webkit-backdrop-filter: none; backdrop-filter: none; box-shadow: none; }
+.room-x__toolbar-name { grid-column: 1 / -1; justify-self: center; max-width: 220px; padding: 4px 12px; border: 1px solid rgba(255, 255, 255, 0.55); border-radius: 999px; background: rgba(43, 26, 16, 0.72); color: var(--paper); font-size: 12px; -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); }
+.room-x__tool { width: 48px; height: 48px; margin-bottom: 14px; border: 1px solid rgba(255, 255, 255, 0.7); background: linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.38)); -webkit-backdrop-filter: blur(16px) saturate(1.3); backdrop-filter: blur(16px) saturate(1.3); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8), 0 10px 24px -14px rgba(43, 26, 16, 0.55); transition: transform 0.18s ease, background-color 0.18s ease; }
+.room-x__tool:hover { background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.6)); transform: translateY(-2px); }
+.room-x__tool:active { transform: translateY(1px) scale(0.96); }
+.room-x__tool svg { width: 18px; height: 18px; }
+.room-x__key { right: auto; bottom: -18px; left: 50%; padding: 0 6px; border: 1px solid rgba(255, 255, 255, 0.6); background: rgba(43, 26, 16, 0.7); color: var(--paper); line-height: 15px; transform: translateX(-50%); }
+.room-x__info { padding: 10px 18px; }
+.room-x__toolbar { grid-template-columns: repeat(3, auto); }
+.room-x__carry .room-x__carry-fit { margin-top: 2px; color: #2f6b3f; font-size: 12px; }
+.room-x__carry .room-x__carry-fit[data-level="snap"] { color: #8a6416; }
+.room-x__carry .room-x__carry-fit[data-level="blocked"] { color: #9b3a24; }

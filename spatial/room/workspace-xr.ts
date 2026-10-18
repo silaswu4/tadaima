@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import type { RoomPlan } from "../../backend/contracts";
-import { createPanel } from "./labels";
+import { createXRMenu } from "./workspace-xr-menu";
 import { insideFloor } from "./window-daylight";
 
 export type WorkspaceXRSupport = { supported: boolean; reason: string };
@@ -15,6 +15,9 @@ export type WorkspaceXRShopping = {
   status?: string;
   pendingOfferId?: string | null;
   canConfirm?: boolean;
+  basketLabel?: string;
+  selectedItemLocked?: boolean;
+  busy?: boolean;
 };
 export type WorkspaceXROptions = {
   renderer: THREE.WebGLRenderer;
@@ -128,7 +131,6 @@ export function createWorkspaceXR(options: WorkspaceXROptions) {
   hud.name = "workspace-xr-shopping";
   hud.visible = false;
   scene.add(hud);
-  const cards: Array<{ panel: ReturnType<typeof createPanel>; action?: () => void }> = [];
   const ray = new THREE.Raycaster();
   ray.far = 20;
   const reticle = new THREE.Mesh(new THREE.RingGeometry(.11, .14, 32).rotateX(-Math.PI / 2),
@@ -151,53 +153,29 @@ export function createWorkspaceXR(options: WorkspaceXROptions) {
   let shoppingKey = "";
   let locomotion: WorkspaceXRLocomotion = options.locomotion ?? "walk";
   let resumeNeutral = false;
+  const menu = createXRMenu({
+    onPreviewOffer: (id) => options.onPreviewOffer?.(id), onConfirmOffer: () => options.onConfirmOffer?.(),
+    onAction: (id) => options.onAction?.(id),
+    onLocomotionToggle: () => {
+      locomotion = locomotion === "walk" ? "teleport" : "walk";
+      teleportHeld = false; teleportTarget = null; reticle.visible = false;
+      menu.setState(shopping, locomotion);
+    },
+    onExit: () => { void activeSession?.end().catch(() => options.onError?.("Use the Quest browser controls to exit VR.")); },
+    onClose: () => { hudVisible = false; hud.visible = false; },
+  });
+  // This is the wearer's menu, rendered as an overlay so nearby room geometry
+  // cannot cut holes through the controls. World selection remains occluded.
+  menu.mesh.material.depthTest = false;
+  hud.add(menu.mesh);
+  const menuPointers = controllers.map(() => {
+    const dot = new THREE.Mesh(new THREE.CircleGeometry(.006, 16), new THREE.MeshBasicMaterial({ color: "#315c48", depthTest: false, depthWrite: false }));
+    dot.visible = false; dot.renderOrder = 22; dot.raycast = () => {};
+    hud.add(dot); return dot;
+  });
 
   function inputAvailable() {
     return presenting && (!activeSession?.visibilityState || activeSession.visibilityState === "visible");
-  }
-
-  function clearCards() {
-    for (const { panel } of cards) {
-      panel.mesh.removeFromParent();
-      panel.mesh.geometry.dispose();
-      panel.mesh.material.map?.dispose();
-      panel.mesh.material.dispose();
-    }
-    cards.length = 0;
-  }
-
-  function drawShopping() {
-    clearCards();
-    const add = (y: number, height: number, lines: string[], action?: () => void, x = 0, width = .72) => {
-      const panel = createPanel(width, height, 1400);
-      panel.mesh.position.set(x, y, 0);
-      panel.mesh.material.depthTest = true;
-      panel.mesh.material.side = THREE.DoubleSide;
-      panel.mesh.raycast = THREE.Mesh.prototype.raycast;
-      panel.draw(lines.map((text, i) => ({ text, size: i ? 28 : 34, muted: i > 0 })));
-      hud.add(panel.mesh);
-      cards.push({ panel, action });
-    };
-    add(.47, .23, [shopping.selectedItemLabel ?? "Tadaima / room shop", shopping.status ?? "Trigger: select furniture or a floor spot", `Left stick: ${locomotion === "walk" ? "walk" : "aim + release teleport"} / right: turn / left grip: menu`]);
-    const offers = shopping.offers.slice(0, 3);
-    offers.forEach((offer, index) => add(.23 - index * .16, .145,
-      [`${shopping.pendingOfferId === offer.id ? "Selected: " : "Try: "}${offer.label}`, offer.detail ?? "Preview only; no purchase"],
-      () => options.onPreviewOffer?.(offer.id)));
-    if (shopping.canConfirm && shopping.pendingOfferId) {
-      add(.23 - offers.length * .16, .135, ["Confirm placement", "Adds to the room and basket; no purchase"], () => options.onConfirmOffer?.());
-    }
-    if (!offers.length) add(.19, .16, ["Choose a clear floor spot", "Then use a search button below."]);
-    const actions = shopping.actions ?? [];
-    const start = offers.length ? .23 - offers.length * .16 - (shopping.canConfirm ? .15 : 0) : -.01;
-    actions.forEach((action, index) => add(start - Math.floor(index / 2) * .14, .125,
-      [action.label, action.disabled ? "Unavailable for this selection" : action.detail ?? ""], action.disabled ? undefined : () => options.onAction?.(action.id), index % 2 ? .185 : -.185, .35));
-    const bottom = start - Math.ceil(actions.length / 2) * .14;
-    add(bottom, .125, [locomotion === "walk" ? "Use teleport" : "Use walking", locomotion === "walk" ? "Aim at floor, stick forward + release" : "Left stick moves where you look"], () => {
-      locomotion = locomotion === "walk" ? "teleport" : "walk";
-      teleportHeld = false; teleportTarget = null; reticle.visible = false;
-      drawShopping();
-    }, -.185, .35);
-    add(bottom, .125, ["Exit VR", "Return to the website"], () => { void activeSession?.end().catch(() => options.onError?.("Use the Quest browser controls to exit VR.")); }, .185, .35);
   }
 
   function headPosition() { return renderer.xr.getCamera().getWorldPosition(new THREE.Vector3()); }
@@ -208,9 +186,30 @@ export function createWorkspaceXR(options: WorkspaceXROptions) {
     direction.y = 0;
     if (direction.lengthSq() < 1e-6) direction.set(0, 0, -1);
     direction.normalize();
-    hud.position.copy(headPosition()).addScaledVector(direction, 1.35);
+    hud.position.copy(headPosition()).addScaledVector(direction, 1.25);
     hud.position.y -= .12;
-    hud.lookAt(headPosition());
+    // Keep the panel level instead of tilting it up with the head's pitch.
+    hud.lookAt(new THREE.Vector3(headPosition().x, hud.position.y, headPosition().z));
+  }
+
+  function menuHit(controller: THREE.XRTargetRaySpace) {
+    if (!hud.visible) return null;
+    controller.updateWorldMatrix(true, false); hud.updateWorldMatrix(true, true);
+    ray.setFromXRController(controller);
+    return ray.intersectObject(menu.mesh, false)[0] ?? null;
+  }
+
+  function updateMenuPointers() {
+    const hovered: THREE.Vector2[] = [];
+    controllers.forEach((controller, index) => {
+      const hit = controller.visible && inputAvailable() ? menuHit(controller) : null;
+      const pointer = menuPointers[index]; pointer.visible = !!hit?.uv;
+      if (hit?.uv) {
+        pointer.position.copy(hud.worldToLocal(hit.point.clone())); pointer.position.z = .004;
+        hovered.push(hit.uv);
+      }
+    });
+    menu.setHovered(hovered);
   }
 
   function validFloor(point: THREE.Vector3) {
@@ -235,6 +234,10 @@ export function createWorkspaceXR(options: WorkspaceXROptions) {
   }
 
   function pick(controller: THREE.XRTargetRaySpace) {
+    // The overlay owns its full rectangle, including disabled controls and
+    // whitespace. A menu click must never hit furniture or floor behind it.
+    const overlay = menuHit(controller);
+    if (overlay?.uv) return { kind: "menu" as const, uv: overlay.uv };
     // Three.js updates tracked local matrices before the animation callback;
     // world matrices otherwise wait until render, leaving a stale picking ray.
     controller.updateWorldMatrix(true, false);
@@ -243,14 +246,12 @@ export function createWorkspaceXR(options: WorkspaceXROptions) {
     const items = options.getItemRoots();
     const floors = options.getFloorMeshes();
     const targets = [...items.map((i) => i.object), ...floors, ...(options.getOccluders?.() ?? [])];
-    if (hud.visible) targets.push(...cards.map((c) => c.panel.mesh));
     const hits = ray.intersectObjects(targets, true).filter((hit) => {
       let node: THREE.Object3D | null = hit.object;
       while (node) { if (!node.visible) return false; node = node.parent; }
       return true;
     });
     for (const hit of hits) {
-      for (const card of cards) if (hit.object === card.panel.mesh) return { kind: "card" as const, card };
       let node: THREE.Object3D | null = hit.object;
       while (node) {
         const item = items.find((candidate) => candidate.object === node);
@@ -267,7 +268,7 @@ export function createWorkspaceXR(options: WorkspaceXROptions) {
   function select(controller: THREE.XRTargetRaySpace) {
     if (!inputAvailable() || !controller.visible) return;
     const hit = pick(controller);
-    if (hit?.kind === "card") hit.card.action?.();
+    if (hit?.kind === "menu") menu.activate(hit.uv);
     else if (hit?.kind === "item") options.onSelectItem(hit.id);
     else if (hit?.kind === "floor") {
       options.onFloorSelect?.(hit.point.clone());
@@ -320,6 +321,7 @@ export function createWorkspaceXR(options: WorkspaceXROptions) {
       saved = null;
     }
     hud.visible = reticle.visible = false;
+    menu.setHovered([]); menuPointers.forEach((pointer) => { pointer.visible = false; });
     rig.position.set(0, 0, 0); rig.rotation.set(0, 0, 0);
     initialHeadPlaced = teleportHeld = snapLatched = false;
     resumeNeutral = false;
@@ -329,12 +331,15 @@ export function createWorkspaceXR(options: WorkspaceXROptions) {
   }
 
   renderer.xr.addEventListener("sessionend", restore);
-  drawShopping();
+  menu.setState(shopping, locomotion);
 
   return {
     checkSupport: checkWorkspaceXRSupport,
     get presenting() { return presenting; },
     get active() { return presenting; },
+    /** Read-only semantic hit regions for interaction/QA adapters, in menu pixels. */
+    get menuTargets() { return menu.targets; },
+    get menuTab() { return menu.activeTab; },
     setShoppingState(state: WorkspaceXRShopping) {
       if (disposed) return;
       // The HUD displays a bounded subset, rather than cloning a full search
@@ -350,13 +355,14 @@ export function createWorkspaceXR(options: WorkspaceXROptions) {
       const pendingOfferId = offers.some((offer) => offer.id === state.pendingOfferId) ? state.pendingOfferId : null;
       const next = { offers, selectedItemLabel: state.selectedItemLabel?.slice(0, 200), status: state.status?.slice(0, 300),
         pendingOfferId, canConfirm: !!pendingOfferId && state.canConfirm === true,
+        basketLabel: state.basketLabel?.slice(0, 80), selectedItemLocked: state.selectedItemLocked === true, busy: state.busy === true,
         actions: (state.actions ?? []).slice(0, 6).filter((action, i, list) => action.id && action.id.length <= 80 && list.findIndex((other) => other.id === action.id) === i)
           .map((action) => ({ id: action.id, label: action.label.slice(0, 80), detail: action.detail?.slice(0, 140), disabled: action.disabled === true })) };
       const key = JSON.stringify(next);
       if (key === shoppingKey) return;
       shoppingKey = key;
       shopping = next;
-      drawShopping();
+      menu.setState(shopping, locomotion);
     },
     async enter() {
       if (disposed) throw new Error("The room viewer was closed.");
@@ -393,6 +399,7 @@ export function createWorkspaceXR(options: WorkspaceXROptions) {
       if (!inputAvailable()) {
         teleportHeld = false; teleportTarget = null; reticle.visible = false;
         resumeNeutral = true;
+        updateMenuPointers();
         return;
       }
       // WebXRManager's tracked pose is current before the animation callback;
@@ -426,7 +433,7 @@ export function createWorkspaceXR(options: WorkspaceXROptions) {
         if (source.handedness === "right") turn = x;
       }
       if (resumeNeutral) {
-        if (Math.hypot(walk.forward, walk.right) > 0 || Math.abs(turn) > .3) return;
+        if (Math.hypot(walk.forward, walk.right) > 0 || Math.abs(turn) > .3) { updateMenuPointers(); return; }
         resumeNeutral = false;
       }
       if (locomotion === "walk") walkXR(rig, headPosition(), renderer.xr.getCamera().getWorldQuaternion(new THREE.Quaternion()), walk, deltaSeconds, validFloor, options.moveFloor);
@@ -445,6 +452,7 @@ export function createWorkspaceXR(options: WorkspaceXROptions) {
         snapLatched = true;
       }
       renderer.xr.updateCamera(camera);
+      updateMenuPointers();
     },
     dispose() {
       if (disposed) return;
@@ -453,7 +461,8 @@ export function createWorkspaceXR(options: WorkspaceXROptions) {
       restore();
       renderer.xr.removeEventListener("sessionend", restore);
       for (const cleanup of cleanups) cleanup();
-      sourceByController.clear(); clearCards();
+      sourceByController.clear(); menu.dispose();
+      menuPointers.forEach((pointer) => { pointer.geometry.dispose(); pointer.material.dispose(); pointer.removeFromParent(); });
       reticle.geometry.dispose(); reticle.material.dispose();
       rig.removeFromParent(); hud.removeFromParent(); reticle.removeFromParent();
     },

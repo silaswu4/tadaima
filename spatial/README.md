@@ -219,3 +219,10 @@ Semantic `WindowGlass` panes use inexpensive alpha PBR with no transmission rend
 `RoomAssistant.tsx` opens from **Ask Tadaima** in the canonical selected-room experience. It connects search, reviewed planner proposals and the primary `RoomVoice.tsx` Talk pill and its lazy `RoomAgentVoice.tsx` session engine to the same room session, mutation queue and source-preserving persistence as manual edits. Browser helpers in `rooms/agent-operations.ts` reject foreign or stale proposals and reuse the backend's non-worsening validation policy for existing scan issues. `rooms/agent-tools.ts` binds voice to current context and screen review; voice cannot unlock furniture, approve proposals, confirm purchase placements or execute payments.
 
 Use the existing namespaced plain `.css` pattern for spatial components. The current custom Turbopack/Tailwind loader emits empty CSS-module mappings for these lazy components: a successful build can still produce DOM with missing classes. Verify actual browser styles, dialog scrolling and mobile layout, rather than treating type/build success as visual acceptance. See [shopping integration](../docs/shopping-integration.md) for provider setup and limits.
+
+
+### Compact headset menu in the canonical room
+
+`/rooms/[roomId]` uses `workspace-xr-menu.ts` for a single CanvasTexture panel with Shop, Room and Controls tabs, controller hover/cursors, a basket header and a placement-confirmation footer shared across tabs. It consumes the same `RoomExperience` state and mutation callbacks as desktop. Locked/busy actions stay guarded, and the panel captures its full rectangle before world picking. The original scanned room, lighting and navigation solver remain shared.
+
+`/dev/vr-ui` is a synthetic, non-mutating visual QA view of that exact canvas. The spatial suite includes menu layout bounds, stable resources, hover deduplication, preview/confirm separation, tab navigation, locked/busy states and invalid-offer guards. See [Quest setup](../docs/quest-setup.md) for controls and physical verification limits.

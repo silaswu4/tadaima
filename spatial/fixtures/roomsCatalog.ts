@@ -209,11 +209,13 @@ export function getTadaimaRooms(): CarouselRoom[] {
 
 /**
  * A demo room is someone's room: everything already in it is theirs, so the
- * basket starts empty and only holds what the shopper adds. (The fixtures came
- * from planner tests where those pieces were suggested purchases.)
+ * basket starts empty and only holds what the shopper adds, and they can move
+ * any of it. (The fixtures came from planner tests where those pieces were
+ * suggested purchases or locked.)
  */
 function asYours(plan: RoomPlan): RoomPlan {
-  return { ...plan, items: plan.items.map((item) => (item.origin === "proposed_purchase" ? { ...item, origin: "existing_owned" as const } : item)) };
+  // and nothing starts locked: locks were for keeping the AI planner off pieces in tests
+  return { ...plan, items: plan.items.map((item) => ({ ...item, origin: "existing_owned" as const, locked: false })) };
 }
 
 // ---------- validation ----------

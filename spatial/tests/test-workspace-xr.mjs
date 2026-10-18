@@ -2,9 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import * as THREE from "three";
 import { checkWorkspaceXRSupport, createWorkspaceXR, readXRThumbstick, snapTurnXR, teleportXR, walkXR } from "../room/workspace-xr.ts";
+import { XR_MENU_WIDTH, XR_MENU_HEIGHT } from "../room/workspace-xr-menu.ts";
 
 const drawnText = [];
-const canvasContext = { clearRect() {}, fillRect() {}, fillText(text) { drawnText.push(text); }, measureText(text) { return { width: text.length * 15 }; } };
+const canvasContext = new Proxy({ clearRect() {}, fillRect() {}, fillText(text) { drawnText.push(text); }, measureText(text) { return { width: text.length * 15 }; } }, { get: (target, key) => key in target ? target[key] : () => {} });
 globalThis.document = { body: {}, createElement: () => ({ width: 0, height: 0, getContext: () => canvasContext }) };
 globalThis.getComputedStyle = () => ({ fontFamily: "monospace" });
 
@@ -76,6 +77,17 @@ function pointControllerAt(controller, object, scene) {
   controller.dispatchEvent({ type: "select" });
 }
 
+function pointMenuPixel(controller, xr, scene, x, y) {
+  const mesh = scene.getObjectByName("workspace-xr-menu"), anchor = new THREE.Object3D();
+  anchor.position.set((x / XR_MENU_WIDTH - .5) * 1.04, (.5 - y / XR_MENU_HEIGHT) * 1.04 * XR_MENU_HEIGHT / XR_MENU_WIDTH, 0);
+  mesh.add(anchor); pointControllerAt(controller, anchor, scene); anchor.removeFromParent();
+}
+function pointMenu(controller, xr, scene, id) {
+  const target = xr.menuTargets.find((item) => item.id === id);
+  assert.ok(target, `missing visible menu target ${id}`);
+  pointMenuPixel(controller, xr, scene, target.x + target.width / 2, target.y + target.height / 2);
+}
+
 test("metric teleport compensates tracked physical head offset without changing height or scale", () => {
   const rig = new THREE.Group(); rig.position.set(2, 0, 4);
   teleportXR(rig, new THREE.Vector3(2.4, 1.7, 3.8), new THREE.Vector3(8, -.1, -3));
@@ -114,7 +126,7 @@ test("session entry spawns at floor scale, and exit restores the exact desktop c
   assert.ok(Math.abs(env.head.position.z - 2) < 1e-10);
   assert.ok(Math.abs(env.head.position.y - 1.72) < 1e-10);
   const hud = env.options.scene.getObjectByName("workspace-xr-shopping");
-  assert.ok(Math.abs(Math.hypot(hud.position.x - env.head.position.x, hud.position.z - env.head.position.z) - 1.35) < 1e-10);
+  assert.ok(Math.abs(Math.hypot(hud.position.x - env.head.position.x, hud.position.z - env.head.position.z) - 1.25) < 1e-10);
   assert.ok(Math.abs(hud.position.y - (env.head.position.y - .12)) < 1e-10);
   await xr.exit();
   assert.equal(xr.active, false);
@@ -166,21 +178,11 @@ test("in-headset shopping buttons call preview and explicit placement confirmati
   const xr = createWorkspaceXR(env.options);
   xr.setShoppingState({ offers: [{ id: "sku-1", label: "Measured chair", detail: "$80 / 0.5m wide" }], pendingOfferId: "sku-1", canConfirm: true });
   await xr.enter(); xr.update();
-  const hud = env.options.scene.getObjectByName("workspace-xr-shopping");
   const controller = env.controllers[1];
-  const aimAt = (object) => {
-    env.options.scene.updateMatrixWorld(true);
-    const target = object.getWorldPosition(new THREE.Vector3());
-    const origin = target.clone().add(new THREE.Vector3(0, 0, .4));
-    controller.quaternion.setFromRotationMatrix(new THREE.Matrix4().lookAt(origin, target, new THREE.Vector3(0, 1, 0)));
-    controller.parent.worldToLocal(origin); controller.position.copy(origin);
-    env.options.scene.updateMatrixWorld(true);
-    controller.dispatchEvent({ type: "select" });
-  };
-  aimAt(hud.children[1]);
+  pointMenu(controller, xr, env.options.scene, "preview:sku-1");
   assert.deepEqual(previews, ["sku-1"]);
   assert.deepEqual(confirmations, []);
-  aimAt(hud.children[2]);
+  pointMenu(controller, xr, env.options.scene, "confirm");
   assert.deepEqual(confirmations, [true]);
   xr.dispose();
 });
@@ -387,17 +389,19 @@ test("HUD bounds large result sets and text, suppresses unbound confirmation, an
     selectedItemLabel: "selected".repeat(1000), status: "status".repeat(1000), pendingOfferId: "missing-sku", canConfirm: true };
   drawnText.length = 0; xr.setShoppingState(state);
   const hud = env.options.scene.getObjectByName("workspace-xr-shopping");
-  assert.equal(hud.children.length, 6); // header, three offers, movement + exit; no confirm
+  const panel = hud.getObjectByName("workspace-xr-menu"), texture = panel.material.map;
+  assert.equal(hud.children.length, 3); // one menu texture + two pointer dots
+  assert.equal(xr.menuTargets.filter((target) => target.id.startsWith("preview:")).length, 3);
+  assert.ok(!xr.menuTargets.some((target) => target.id === "confirm"));
   assert.ok(drawnText.every((text) => text.length <= 300));
-  const firstCard = hud.children[1]; xr.setShoppingState(state);
-  assert.equal(hud.children[1], firstCard); // no new textures for identical state
-  await xr.enter(); xr.update(); pointControllerAt(env.controllers[1], hud.children[3], env.options.scene);
+  const version = texture.version; xr.setShoppingState(state);
+  assert.equal(texture.version, version); // no redraws for identical state
+  await xr.enter(); xr.update(); pointMenu(env.controllers[1], xr, env.options.scene, "preview:sku-2");
   assert.deepEqual(confirms, []);
-  const geometries = hud.children.map((child) => child.geometry);
-  let disposedGeometries = 0; geometries.forEach((geometry) => geometry.addEventListener("dispose", () => disposedGeometries++));
+  let disposedGeometry = 0; panel.geometry.addEventListener("dispose", () => disposedGeometry++);
   xr.setShoppingState({ offers: [], canConfirm: true });
-  assert.equal(disposedGeometries, 6); assert.equal(hud.children.length, 4);
-  xr.dispose();
+  assert.equal(disposedGeometry, 0); assert.equal(hud.children.length, 3);
+  xr.dispose(); assert.equal(disposedGeometry, 1);
 });
 
 test("a valid desktop-selected offer beyond the first three remains visible and confirmable in VR", async () => {
@@ -406,11 +410,10 @@ test("a valid desktop-selected offer beyond the first three remains visible and 
   const xr = createWorkspaceXR(env.options);
   xr.setShoppingState({ offers: Array.from({ length: 6 }, (_, i) => ({ id: `sku-${i}`, label: `Chair ${i}` })), pendingOfferId: "sku-5", canConfirm: true });
   await xr.enter(); xr.update();
-  const hud = env.options.scene.getObjectByName("workspace-xr-shopping");
-  assert.equal(hud.children.length, 7);
-  pointControllerAt(env.controllers[1], hud.children[3], env.options.scene);
+  assert.ok(xr.menuTargets.some((target) => target.id === "preview:sku-5"));
+  pointMenu(env.controllers[1], xr, env.options.scene, "preview:sku-5");
   assert.deepEqual(previews, ["sku-5"]); assert.deepEqual(confirms, []);
-  pointControllerAt(env.controllers[1], hud.children[4], env.options.scene);
+  pointMenu(env.controllers[1], xr, env.options.scene, "confirm");
   assert.deepEqual(confirms, [true]); xr.dispose();
 });
 
@@ -510,16 +513,17 @@ test("walking and snap-turning in the same frame rotate around the moved head wi
 test("headset actions are bounded, disabled buttons block click-through, and movement/exit remain available", async () => {
   const env = environment(); const actions = []; env.options.onAction = (id) => actions.push(id);
   const xr = createWorkspaceXR(env.options);
-  xr.setShoppingState({ offers: [], actions: Array.from({ length: 1000 }, (_, i) => ({ id: `action-${i}`, label: "Search chairs", disabled: i === 1 })) });
+  xr.setShoppingState({ offers: [], actions: [{ id: "search-chair", label: "Find chairs" }, { id: "search-rug", label: "Find rugs", disabled: true }, ...Array.from({ length: 1000 }, (_, i) => ({ id: `action-${i}`, label: "Unknown action" }))] });
   await xr.enter(); xr.update();
-  const hud = env.options.scene.getObjectByName("workspace-xr-shopping");
-  assert.equal(hud.children.length, 10); // header + placeholder + six actions + two built-ins
-  pointControllerAt(env.controllers[1], hud.children[2], env.options.scene);
-  assert.deepEqual(actions, ["action-0"]);
-  pointControllerAt(env.controllers[1], hud.children[3], env.options.scene);
-  assert.deepEqual(actions, ["action-0"]); assert.equal(env.floorSelections.length, 0);
-  pointControllerAt(env.controllers[1], hud.children[8], env.options.scene);
+  assert.ok(xr.menuTargets.length <= 10);
+  pointMenu(env.controllers[1], xr, env.options.scene, "action:search-chair");
+  assert.deepEqual(actions, ["search-chair"]);
+  pointMenu(env.controllers[1], xr, env.options.scene, "action:search-rug");
+  pointMenuPixel(env.controllers[1], xr, env.options.scene, 700, 700);
+  assert.deepEqual(actions, ["search-chair"]); assert.equal(env.floorSelections.length, 0);
+  pointMenu(env.controllers[1], xr, env.options.scene, "tab-controls");
+  pointMenu(env.controllers[1], xr, env.options.scene, "locomotion");
   assert.ok(drawnText.some((text) => text === "Use teleport"));
-  pointControllerAt(env.controllers[1], hud.children[9], env.options.scene);
+  pointMenu(env.controllers[1], xr, env.options.scene, "exit");
   await Promise.resolve(); assert.equal(xr.active, false); xr.dispose();
 });

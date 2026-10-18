@@ -1,6 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { roomXRActions, roomXRSearch } from "../rooms/xr-actions.ts";
+import { roomXRActions, roomXRProducts, roomXRSearch } from "../rooms/xr-actions.ts";
+
+test("the active preview stays in the three VR products, including Fetch and later results", () => {
+  const results = Array.from({ length: 5 }, (_, i) => ({ product: { id: `piece-${i}` }, fits: i > 0, source: "catalog" }));
+  assert.deepEqual(roomXRProducts(results, null).map((entry) => entry.product.id), ["piece-1", "piece-2", "piece-3"]);
+  assert.deepEqual(roomXRProducts(results, results[4].product).map((entry) => entry.product.id), ["piece-1", "piece-2", "piece-4"]);
+  assert.equal(roomXRProducts(results, results[1].product).length, 3);
+  const fetchPreview = { id: "fetch-preview" };
+  assert.deepEqual(roomXRProducts([], fetchPreview), [{ product: fetchPreview, source: undefined }]);
+});
 
 const ready = { connected: true, busy: false, pending: false, moving: false, selected: { label: "Captured chair", locked: false, stored: false } };
 const enabled = (state) => roomXRActions(state).filter((action) => !action.disabled).map((action) => action.id);
