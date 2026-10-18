@@ -6,7 +6,6 @@
   display: grid;
   place-items: center;
   background: #1f130b;
-  transform: translateY(100%);
   pointer-events: all;
 }
 

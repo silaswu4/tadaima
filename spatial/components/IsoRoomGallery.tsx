@@ -4,7 +4,7 @@ import type { WalkOptions } from "../room/walk-api";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { RoomPlan } from "../../backend/contracts";
 import type { BakedRoom, IsoGallery } from "../room/iso-gallery";
-import { WipeLink } from "./PageWipe";
+import { WipeLink, useWipeHold } from "./PageWipe";
 
 export type GalleryRoom = { id: string; label: string; plan?: RoomPlan; baked?: BakedRoom; description?: string; reconstruction?: WalkOptions["reconstruction"] };
 import "./IsoRoomGallery.css";
@@ -62,6 +62,8 @@ export function IsoRoomGallery({ rooms, initial = 0, hrefFor = (room) => `/rooms
   const [dir, setDir] = useState<Dir>(1);
   const [ready, setReady] = useState(false);
   const [failed, setFailed] = useState(false);
+  // arriving by a page wipe, keep the panel down until the rooms are built
+  useWipeHold(ready || failed);
   const count = rooms.length;
   const at = (i: number) => rooms[((i % count) + count) % count];
 

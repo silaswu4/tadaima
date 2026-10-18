@@ -6,7 +6,7 @@ import type { FloorSpot, FurnitureCategory, ProductCandidate, RoomPlan, Vector3M
 import catalogJson from "../../backend/fixtures/real-catalog.json";
 import type { WalkCallbacks, WalkEnvironment, WalkItem, WalkMode, WalkOptions, WalkScene } from "../room/walk-api";
 import mark from "../assets/tadaima-mark.png";
-import { WipeLink } from "./PageWipe";
+import { WipeLink, useWipeHold } from "./PageWipe";
 import "./RoomExperience.css";
 
 export type ExperienceRoom = { id: string; label: string; plan: RoomPlan; environment?: WalkEnvironment; reconstruction?: WalkOptions["reconstruction"]; sourceDescription?: string };
@@ -146,6 +146,8 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
   const inventoryCloseRef = useRef<HTMLButtonElement>(null);
 
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
+  // arriving by a page wipe, keep the panel down until the room is built
+  useWipeHold(status !== "loading");
   const [errorMessage, setErrorMessage] = useState("");
   const [step, setStep] = useState(0);
   const [items, setItems] = useState<WalkItem[]>([]);
