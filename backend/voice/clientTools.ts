@@ -1,4 +1,4 @@
-import type { ApplyResult, Cart, Mandate, Order, PaymentMethod, PlanProposal, Recheck, RoomPlan } from "@/backend/contracts";
+import type { ApplyResult, Cart, FloorSpot, FurnitureCategory, Job, Mandate, Order, PaymentMethod, PlaceResult, PlanProposal, Recheck, RoomPlan, ShopJobOutput, ShopResult } from "@/backend/contracts";
 
 type CheckoutView = { cart: Cart; recheck: Recheck | null; paymentMethods: PaymentMethod[]; mandate: Mandate | null; orders: Order[]; blockers: string[] };
 
@@ -11,9 +11,51 @@ type CheckoutView = { cart: Cart; recheck: Recheck | null; paymentMethods: Payme
  *   <ConversationProvider clientTools={tools}> ... startSession({ conversationToken })
  *
  * Get the token from GET /api/voice/token.
+ *
+ * Shopping is async: shop_here answers at once with catalog matches, then
+ * keeps polling the live search and calls `onShopUpdate` with an
+ * "[app update] ..." sentence when it lands. Pass that to the conversation's
+ * sendUserMessage so the agent tells the shopper without being asked.
  */
 
 const dollars = (minor: number) => `$${Math.round(minor / 100).toLocaleString("en-US")}`;
+const cm = (m: number) => `${Math.round(m * 100)} cm`;
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const POLL_MS = 3000;
+const POLL_LIMIT_MS = 8 * 60 * 1000;
+const SAY = 4;
+
+/** One result as a sentence, numbered so the shopper can say "the first one". */
+function describeResult(r: ShopResult, n: number) {
+  const p = r.product;
+  const [w, , d] = p.dimensions ?? [0, 0, 0];
+  const where = r.placement
+    ? r.placement.againstWallId
+      ? `fits against the ${r.placement.againstWallId.replace("wall_", "")} wall`
+      : r.placement.distanceM > 0.3
+        ? `fits ${r.placement.distanceM} m from the spot`
+        : "fits right there"
+    : r.problems[0] ?? "doesn't fit";
+  const money = r.withinBudget === false && r.overBudgetUsd !== null ? `, but it'd put you $${Math.ceil(r.overBudgetUsd)} over budget` : "";
+  return `${n}) ${p.label}, ${p.price ? dollars(p.price.amountMinor) : "price unknown"}, ${p.dimensions ? `${cm(w)} wide x ${cm(d)} deep, ` : ""}${r.fits ? where : `doesn't fit: ${where}`}${r.fits ? money : ""}${r.source === "live" ? " (just found live)" : ""}`;
+}
+
+export function describeShop(job: Job<ShopJobOutput>) {
+  const out = job.output!;
+  const fitting = out.results.filter((r) => r.fits);
+  const shown = (fitting.length ? fitting : out.results).slice(0, SAY);
+  const list = shown.map((r) => describeResult(r, out.results.indexOf(r) + 1)).join(". ");
+  const status =
+    out.live === "running"
+      ? "Still searching the store live; I'll get an update in a minute or two."
+      : out.live === "failed"
+        ? "The live store search didn't finish, so these are from our catalog."
+        : out.live === "done"
+          ? "The live search is done."
+          : "";
+  if (!out.results.length) return `Search ${job.id}: nothing under that price in our catalog yet. ${status}`;
+  return `Search ${job.id}: ${fitting.length} of ${out.results.length} fit. ${list}. ${status}`.trim();
+}
 
 async function post<T>(url: string, body: unknown): Promise<T> {
   const res = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
@@ -25,6 +67,14 @@ async function post<T>(url: string, body: unknown): Promise<T> {
 export function voiceClientTools(opts: {
   projectId: string;
   getSelectedItemId: () => string | null;
+  /** The floor point the shopper is looking at or last tapped, from the viewer. */
+  getSpot?: () => FloorSpot | null;
+  /** Called with each shopping job as it updates, so the UI can show the options. */
+  onShop?: (job: Job<ShopJobOutput>) => void;
+  /** Called once when a live search finishes, with a sentence for the agent ("[app update] ..."). */
+  onShopUpdate?: (message: string) => void;
+  /** Return false once the conversation ends, to stop polling. */
+  isActive?: () => boolean;
   /** Called with the new plan after an applied change, so the viewer updates. */
   onPlan?: (plan: RoomPlan) => void;
   /** Called with each proposal so the UI can show the diff while it's read aloud. */
@@ -34,6 +84,36 @@ export function voiceClientTools(opts: {
 }) {
   const base = `/api/projects/${opts.projectId}`;
   const proposals = new Map<string, PlanProposal>();
+  const searches = new Map<string, Job<ShopJobOutput>>();
+  let latestSearch: string | null = null;
+
+  async function follow(jobId: string) {
+    const started = Date.now();
+    while (Date.now() - started < POLL_LIMIT_MS && (opts.isActive?.() ?? true)) {
+      await sleep(POLL_MS);
+      const res = await fetch(`${base}/shop/${jobId}`).catch(() => null);
+      if (!res?.ok) continue;
+      const job = (await res.json()) as Job<ShopJobOutput>;
+      searches.set(jobId, job);
+      opts.onShop?.(job);
+      if (job.output?.live !== "running") {
+        const fresh = job.output!.results.filter((r) => r.source === "live" && r.fits).length;
+        opts.onShopUpdate?.(
+          `[app update] Live search ${jobId} finished: ${fresh ? `${fresh} new that fit.` : "nothing new that fits."} ${describeShop(job)}`,
+        );
+        return;
+      }
+    }
+  }
+
+  /** The shopping job a choice refers to: the one named, else the latest. */
+  async function searchFor(jobId?: string | null) {
+    const id = jobId || latestSearch;
+    if (!id) return null;
+    const res = await fetch(`${base}/shop/${id}`).catch(() => null);
+    if (res?.ok) searches.set(id, (await res.json()) as Job<ShopJobOutput>);
+    return searches.get(id) ?? null;
+  }
 
   return {
     get_room: async () => {
@@ -44,7 +124,7 @@ export function voiceClientTools(opts: {
       const lines = plan.items.map((i) => {
         const price = plan.products.find((p) => p.id === i.productId)?.price;
         const tag = i.origin === "existing_owned" ? "owned" : price ? dollars(price.amountMinor) : "price unknown";
-        return `${i.label} (${tag}${i.locked ? ", locked" : ""}${i.seats ? `, seats ${i.seats}` : ""}${i.id === selected ? ", selected" : ""})`;
+        return `${i.label} [id ${i.id}] (${tag}${i.locked ? ", locked" : ""}${i.seats ? `, seats ${i.seats}` : ""}${i.id === selected ? ", selected" : ""})`;
       });
       const budget = plan.constraints.budget;
       return `Items: ${lines.join("; ")}. New purchases total ${dollars(cost.knownSubtotal.amountMinor)}${
@@ -67,6 +147,75 @@ export function voiceClientTools(opts: {
         }.`;
       } catch (e) {
         return `Planning failed: ${(e as Error).message}`;
+      }
+    },
+
+    shop_here: async ({ category, max_price_usd, style }: { category: FurnitureCategory; max_price_usd?: number | null; style?: string | null }) => {
+      const spot = opts.getSpot?.() ?? null;
+      if (!spot) return "I don't know which spot you mean. Ask the shopper to look at or tap the spot on the floor, then try again.";
+      try {
+        const job = await post<Job<ShopJobOutput>>(`${base}/shop`, {
+          category,
+          spot,
+          maxPriceUsd: max_price_usd || null,
+          request: style || null,
+        });
+        searches.set(job.id, job);
+        latestSearch = job.id;
+        opts.onShop?.(job);
+        if (job.output?.live === "running") void follow(job.id);
+        return describeShop(job);
+      } catch (e) {
+        return `Search failed: ${(e as Error).message}`;
+      }
+    },
+
+    check_search: async ({ job_id }: { job_id?: string | null }) => {
+      const job = await searchFor(job_id);
+      if (!job) return "There's no search yet. Use shop_here first.";
+      return describeShop(job);
+    },
+
+    place_product: async ({ choice, job_id }: { choice: number; job_id?: string | null }) => {
+      const job = await searchFor(job_id);
+      if (!job?.output) return "There's no search to pick from. Use shop_here first.";
+      const r = job.output.results[Math.round(choice) - 1];
+      if (!r) return `There's no option ${choice}; this search has ${job.output.results.length}.`;
+      try {
+        const res = await post<PlaceResult>(`${base}/place`, { productId: r.product.id, spot: job.output.request.spot });
+        if (res.ok) {
+          opts.onPlan?.(res.plan);
+          opts.onCheckout?.();
+          const item = res.plan.items.find((i) => i.id === res.itemId)!;
+          const total = res.plan.items.reduce((n, i) => n + (i.origin === "proposed_purchase" ? (res.plan.products.find((p) => p.id === i.productId)?.price?.amountMinor ?? 0) : 0), 0);
+          const budget = res.plan.constraints.budget;
+          return `ok: placed ${item.label} [id ${item.id}]${res.placement.againstWallId ? ` against the ${res.placement.againstWallId.replace("wall_", "")} wall` : ""}. It's in the cart. New purchases now ${dollars(total)}${budget ? ` of ${dollars(budget.amountMinor)}` : ""}.`;
+        }
+        if (res.reason === "no_fit") return `Not placed: ${res.message}`;
+        if (res.reason === "stale_revision") return "Not placed: the room just changed. Try again.";
+        if (res.reason === "validation_failed")
+          return `Not placed: ${res.validations.filter((v) => v.status === "fail").map((v) => v.message).join(" ")} Offer to raise the budget or drop something to make room.`;
+        return `Not placed: ${res.message}`;
+      } catch (e) {
+        return `Not placed: ${(e as Error).message}`;
+      }
+    },
+
+    move_here: async ({ item_id, unlock }: { item_id: string; unlock?: boolean }) => {
+      const spot = opts.getSpot?.() ?? null;
+      if (!spot) return "I don't know where to move it. Ask the shopper to look at or tap the spot on the floor.";
+      try {
+        const res = await post<PlaceResult>(`${base}/items/${encodeURIComponent(item_id)}/move-to`, { spot, unlock: !!unlock });
+        if (res.ok) {
+          opts.onPlan?.(res.plan);
+          return `ok: moved it${res.placement.againstWallId ? ` against the ${res.placement.againstWallId.replace("wall_", "")} wall` : ""}${res.placement.distanceM > 0.3 ? `, ${res.placement.distanceM} m from the exact spot so it clears everything` : ""}.`;
+        }
+        if (res.reason === "locked") return `Not moved: ${res.message} Ask the shopper if it's okay to move it, then call again with unlock true.`;
+        if (res.reason === "no_fit") return `Not moved: ${res.message}`;
+        if (res.reason === "stale_revision") return "Not moved: the room just changed. Try again.";
+        return `Not moved: ${res.validations.filter((v) => v.status === "fail").map((v) => v.message).join(" ")}`;
+      } catch (e) {
+        return `Not moved: ${(e as Error).message}`;
       }
     },
 
