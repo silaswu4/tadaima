@@ -6,6 +6,8 @@ import { useCallback, useLayoutEffect, useRef, useState, useSyncExternalStore, t
 import mark from "@/spatial/assets/tadaima-mark.png";
 import { WipeLink, useWipe, wipeInProgress, whenWipeLifts } from "@/spatial/components/PageWipe";
 import { DappledLight } from "./DappledLight";
+import AddressLobby from "./lobby/AddressLobby";
+import { DEMO_ROOM_HREF } from "./lobby/stages";
 import "./styles/hero.css";
 
 const subscribeToMotion = (notify: () => void) => {
@@ -219,6 +221,30 @@ export default function Home() {
     }
   }, [open, typeShown, reduced]);
 
+  // Find your floorplan, submitted: the landing swipes up and out (the light behind it stays put), then the lobby takes over
+  const [lobby, setLobby] = useState<string | null>(null);
+  const enterRoom = useCallback(() => wipe(DEMO_ROOM_HREF), [wipe]);
+  useLayoutEffect(() => {
+    if (!lobby || !root.current) return;
+    const ctx = gsap.context(() => {
+      const away = ".hero-side, .hero-credit, .hero-word";
+      if (reduced) {
+        gsap.set(away, { autoAlpha: 0 });
+        return;
+      }
+      gsap
+        .timeline({ defaults: { ease: "power3.in" }, onComplete: () => gsap.set(away, { autoAlpha: 0 }) })
+        // each option and the open field leave up out of their own line, like the intro in reverse
+        .to(".hero-row__label", { yPercent: -110, duration: 0.5, stagger: 0.05 }, 0)
+        .to(".hero-type", { y: -24, autoAlpha: 0, duration: 0.5 }, 0.05)
+        .to(".hero-side", { y: -18, duration: 0.6 }, 0.05)
+        .to(".hero-credit", { y: -16, autoAlpha: 0, duration: 0.5 }, 0.1)
+        .to(".hero-word__fill .hero-word__char", { yPercent: -105, duration: 0.65, stagger: 0.035, force3D: true }, 0.12)
+        .to(".hero-word__edge .hero-word__char", { yPercent: -105, duration: 0.65, stagger: 0.035, force3D: false }, 0.12);
+    }, root);
+    return () => ctx.revert();
+  }, [lobby, reduced]);
+
   const submitAddress = (e: FormEvent) => {
     e.preventDefault();
     const v = address.trim();
@@ -230,7 +256,9 @@ export default function Home() {
     try {
       window.sessionStorage.setItem("tadaima:pending-address", v);
       setAddressError("");
-      wipe("/rooms?onboarding=address");
+      // the landing swipes away and the lobby builds the room in place of a page change
+      addressRef.current?.blur();
+      setLobby(v);
     } catch {
       setAddressError("Your browser could not save this address privately. Enable session storage, or explore the demo rooms.");
     }
@@ -401,6 +429,7 @@ export default function Home() {
       </h1>
 
       {!loaderGone && <Loader onLift={reveal} onDone={finishLoading} reduced={reduced} />}
+      {lobby ? <AddressLobby address={lobby} reduced={reduced} onExit={enterRoom} /> : null}
     </main>
   );
 }
