@@ -33,7 +33,7 @@
 .tadaima-hero .hero-list {
   display: flex;
   flex-direction: column;
-  gap: 40px;
+  gap: 18px;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -59,9 +59,9 @@
   align-items: baseline;
   gap: 10px;
   font-family: var(--font-display), system-ui, sans-serif;
-  font-size: 26px;
-  line-height: 30px;
-  letter-spacing: -0.02em;
+  font-size: 20px;
+  line-height: 24px;
+  letter-spacing: -0.015em;
 }
 /* a thin underline draws in under the option on hover */
 .tadaima-hero .hero-row__label { position: relative; }
@@ -100,9 +100,9 @@
   border: 0;
   background: none;
   font-family: var(--font-display), system-ui, sans-serif;
-  font-size: 22px;
-  line-height: 30px;
-  letter-spacing: -0.02em;
+  font-size: 18px;
+  line-height: 24px;
+  letter-spacing: -0.015em;
   color: var(--hero-fg);
   outline: none;
 }
@@ -215,7 +215,7 @@
   margin: 0;
   font-family: var(--font-display), system-ui, sans-serif;
   font-weight: 500;
-  font-size: clamp(24px, 7vw, 32px);
+  font-size: clamp(18px, 5vw, 22px);
   line-height: 1.05;
   letter-spacing: -0.03em;
   white-space: nowrap;
@@ -235,8 +235,8 @@
 /* ---------- phone ---------- */
 @media (max-width: 809px) {
   .tadaima-hero { --hero-left: 16px; }
-  .tadaima-hero .hero-list { gap: 30px; }
-  .tadaima-hero .hero-row__label { font-size: 22px; line-height: 26px; }
+  .tadaima-hero .hero-list { gap: 16px; }
+  .tadaima-hero .hero-row__label { font-size: 18px; line-height: 22px; }
   .tadaima-hero .hero-word { font-size: 21vw; }
 }
 
