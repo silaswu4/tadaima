@@ -102,7 +102,8 @@ export default function Home() {
       for (const [layer, force3D] of [[".hero-word__fill", true], [".hero-word__edge", false]] as const) {
         gsap.fromTo(`${layer} .hero-word__char`, { yPercent: 105 }, { yPercent: 0, duration: 1.15, ease: "power4.out", stagger: 0.05, delay: 0.1, force3D });
       }
-      gsap.fromTo(".hero-row", { y: 14, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: 0.8, ease: "power3.out", stagger: 0.1, delay: 0.45 });
+      // each option rises out of its own line, like the wordmark
+      gsap.fromTo(".hero-row__label", { yPercent: 110 }, { yPercent: 0, duration: 0.9, ease: "power4.out", stagger: 0.1, delay: 0.45 });
     }, root);
     return () => ctx.revert();
   }, [revealed, reduced]);
@@ -164,6 +165,7 @@ export default function Home() {
         wind={0.6}
         clouds={0.25}
         grain={0.25}
+        breeze={false}
         className="h-full"
       >
         <div className="hero-side">
