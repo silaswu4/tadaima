@@ -37,7 +37,7 @@ describe("realistic collisions", () => {
     assert.equal(collides({ ...lamp, position: [3.45, 0, 2.5] }, sofa), true, "the base itself still can't go into the sofa");
   });
   test("two sofas still can't overlap", () => {
-    assert.equal(collides(sofa, { ...sofa, id: "sofa2", position: [3.0, 0, 2.6] }), true);
+    assert.equal(collides(sofa, { ...sofa, position: [3.0, 0, 2.6] }), true);
   });
   test("the validator agrees: a chair under a dining table passes", () => {
     const plan = { ...demoPlan, items: [diningTable, chair], constraints: { ...demoPlan.constraints, clearance: 0.03, minimumSeats: null, budget: null } };
