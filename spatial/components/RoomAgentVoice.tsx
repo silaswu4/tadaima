@@ -1,220 +1,262 @@
 "use client";
 
 import { ConversationProvider, useConversation } from "@elevenlabs/react";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { VoiceBeam } from "voice-glow";
-import "./RoomAgentVoice.css";
 import "./RoomVoice.css";
 
 export type RoomAgentVoiceProps = {
   projectId: string;
   getTools(): Record<string, (params: Record<string, unknown>) => Promise<string>>;
   disabled?: boolean;
+  /** Something the agent should know and say (a finished live search). Sent once per id. */
   update?: { id: string; text: string };
-  /** Set only after an explicit click on the room's primary Talk control. */
-  autoStart?: boolean;
 };
 
-type Line = { role: "user" | "agent"; text: string };
-type Attempt = {
-  controller: AbortController;
-  connected: boolean;
-  connectedAt: number;
-  complete: (error?: string) => void;
-};
-
-/** Mount this behind a dynamic import; the SDK and microphone stay off the room's startup path. */
+/** Mount this behind a dynamic import; the SDK stays off the room's startup path. */
 export function RoomAgentVoice(props: RoomAgentVoiceProps) {
   return <ConversationProvider key={props.projectId}><VoiceSession {...props} /></ConversationProvider>;
 }
 
-function VoiceSession({ getTools, disabled = false, update, autoStart }: RoomAgentVoiceProps) {
-  const [lines, setLines] = useState<Line[]>([]);
+const PTT_KEY = "Space";
+/** A press shorter than this is a tap: it latches the mic open (phones, headsets) until the next tap. */
+const TAP_MS = 250;
+/** Connected but untouched this long: hang up to save credits. The next press reconnects. */
+const IDLE_MS = 4 * 60 * 1000;
+
+const editable = (target: EventTarget | null) =>
+  target instanceof HTMLElement && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName));
+
+/**
+ * Push to talk. Hold Space (or hold the Talk pill) to speak, let go and the
+ * agent answers. Works in first person, where the pointer is captured and
+ * nothing can be clicked. The session connects on the first press and stays
+ * up, so later presses are instant.
+ */
+function VoiceSession({ getTools, disabled = false, update }: RoomAgentVoiceProps) {
+  const [open, setOpen] = useState(false); // mic open: held or latched
+  const [latched, setLatched] = useState(false);
   const [error, setError] = useState("");
-  const [starting, setStarting] = useState(false);
-  const [working, setWorking] = useState(0);
   const [caption, setCaption] = useState("");
+  const [working, setWorking] = useState(0);
+  const conversation = useConversation({ micMuted: !open });
+  const convo = useRef(conversation);
+  const latest = useRef({ getTools, disabled });
+  const pressedAt = useRef(0);
+  const lastUse = useRef(0);
+  const connecting = useRef(false);
   const captionTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const mounted = useRef(false);
-  const attempt = useRef<Attempt | null>(null);
-  const latest = useRef({ getTools, disabled, update });
-  const lastUpdate = useRef(update?.id);
-  useLayoutEffect(() => { latest.current = { getTools, disabled, update }; }, [getTools, disabled, update]);
-  const conversation = useConversation();
-  const { endSession, startSession, sendUserMessage, status } = conversation;
+  const sent = useRef<string | undefined>(undefined);
+  useLayoutEffect(() => {
+    convo.current = conversation;
+    latest.current = { getTools, disabled };
+  });
 
-  const stop = useCallback(() => {
-    const current = attempt.current;
-    attempt.current = null;
-    current?.controller.abort();
-    current?.complete();
-    clearTimeout(captionTimer.current);
-    // The provider also tears down a connection that resolves after this call.
-    endSession();
-    if (mounted.current) { setStarting(false); setWorking(0); setCaption(""); }
-  }, [endSession]);
+  const live = conversation.status === "connected";
+  const pending = conversation.status === "connecting";
 
-  useEffect(() => {
-    mounted.current = true;
-    return () => { mounted.current = false; stop(); };
-  }, [stop]);
-
-  useEffect(() => { if (disabled) stop(); }, [disabled, stop]);
-
-  useEffect(() => {
-    // The lazy owner mounts this only in response to the shopper's Talk click.
-    if (autoStart) void start();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
-    if (!update || lastUpdate.current === update.id) return;
-    lastUpdate.current = update.id;
-    if (status === "connected" && attempt.current?.connected && !attempt.current.controller.signal.aborted) {
-      try { sendUserMessage(update.text.slice(0, 4000)); }
-      catch {
-        const session = attempt.current;
-        queueMicrotask(() => {
-          if (mounted.current && attempt.current === session) {
-            setError("The voice connection was interrupted. Please try again."); stop();
-          }
-        });
-      }
-    }
-  }, [update, status, sendUserMessage, stop]);
-
-  async function start() {
-    if (latest.current.disabled || attempt.current || status === "connecting") return;
-    const current: Attempt = { controller: new AbortController(), connected: false, connectedAt: 0, complete: () => {} };
-    attempt.current = current;
-    const active = () => mounted.current && attempt.current === current && !current.controller.signal.aborted;
-    setStarting(true);
+  async function connect() {
+    if (connecting.current || convo.current.status === "connected" || convo.current.status === "connecting") return;
+    connecting.current = true;
     setError("");
     try {
-      if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
-        throw new Error("Voice needs HTTPS or localhost and a browser with microphone support.");
-      }
-      const response = await fetch("/api/voice/token", {
-        credentials: "same-origin", cache: "no-store", signal: current.controller.signal,
-      });
-      if (!active()) return;
-      const body: unknown = await response.json().catch(() => null);
-      if (!active()) return;
-      if (!response.ok) {
-        throw new Error(response.status === 402 ? "Voice is out of ElevenLabs credits. Add credits to talk to the room."
-          : response.status === 503 ? "Voice is not configured on this server yet." : "Could not authorize voice. Please try again.");
-      }
-      const token = body && typeof body === "object" && "token" in body ? body.token : null;
-      if (typeof token !== "string" || !token) throw new Error("The voice service returned an unreadable response.");
-
-      // This installed React SDK returns void from startSession. Await the
-      // actual callback outcome instead of treating that return as connected.
-      let timeout: ReturnType<typeof setTimeout>;
-      const connected = new Promise<string | undefined>((resolve) => {
-        let settled = false;
-        current.complete = (message) => {
-          if (settled) return;
-          settled = true;
-          clearTimeout(timeout);
-          resolve(message);
-        };
-        timeout = setTimeout(() => current.complete("Voice took too long to connect. Please try again."), 30_000);
-      });
+      if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) throw new Error("Voice needs HTTPS or localhost and a microphone.");
+      const res = await fetch("/api/voice/token", { credentials: "same-origin", cache: "no-store" });
+      const body = (await res.json().catch(() => null)) as { token?: string; error?: string } | null;
+      if (!res.ok || !body?.token) throw new Error(body?.error ?? "Voice isn't available right now.");
       const tools = latest.current.getTools();
-      const clientTools = Object.fromEntries(Object.keys(tools).map((name) => [name,
-        async (params: Record<string, unknown>) => {
-          if (!active() || !current.connected || latest.current.disabled) return "Not performed: this voice session is no longer active.";
-          const tool = tools[name];
-          if (!tool) return "Not performed: this action is no longer available.";
-          setWorking((value) => value + 1);
-          try { return await tool(params); }
-          finally { if (active()) setWorking((value) => Math.max(0, value - 1)); }
+      const clientTools = Object.fromEntries(
+        Object.entries(tools).map(([name, tool]) => [
+          name,
+          async (params: Record<string, unknown>) => {
+            setWorking((n) => n + 1);
+            lastUse.current = Date.now();
+            try {
+              return await tool(params);
+            } finally {
+              setWorking((n) => Math.max(0, n - 1));
+            }
+          },
+        ]),
+      );
+      convo.current.startSession({
+        conversationToken: body.token,
+        connectionType: "webrtc",
+        clientTools,
+        onMessage: (m) => {
+          if (m.source !== "ai") return;
+          const text = m.message.replace(/\[[a-z][a-z ]{0,24}\]\s*/gi, "").trim();
+          if (!text) return;
+          lastUse.current = Date.now();
+          clearTimeout(captionTimer.current);
+          setCaption(text);
+          captionTimer.current = setTimeout(() => setCaption(""), 9000);
         },
-      ]));
-      startSession({
-        conversationToken: token, connectionType: "webrtc", clientTools,
-        onConnect: () => {
-          if (!active()) return;
-          current.connected = true;
-          current.connectedAt = Date.now();
-          lastUpdate.current = latest.current.update?.id;
-          current.complete();
-        },
-        onMessage: (message) => {
-          if (!active() || (message.source !== "user" && message.source !== "ai")) return;
-          const text = (message.source === "ai" ? message.message.replace(/\[[a-z][a-z ]{0,24}\]\s*/gi, "") : message.message).trim().slice(0, 4000);
-          if (message.source === "user" && text.startsWith("[app update]")) return;
-          if (text) setLines((previous) => [...previous.slice(-39), { role: message.source === "user" ? "user" : "agent", text }]);
-          if (text && message.source === "ai") {
-            clearTimeout(captionTimer.current);
-            setCaption(text);
-            captionTimer.current = setTimeout(() => { if (active()) setCaption(""); }, 9000);
-          }
-        },
-        onError: (message) => {
-          if (!active()) return;
-          const detail = /permission|notallowed|denied/i.test(message)
-            ? "Microphone permission was denied. Allow microphone access and try again."
-            : /notfound|no.*microphone|device.*not/i.test(message)
-              ? "No microphone was found. Connect one and try again."
-              : "Voice could not connect or was interrupted. Please try again.";
-          setError(detail);
-          current.complete(detail);
-          stop();
-        },
+        onError: (message) => setError(/permission|notallowed|denied/i.test(message) ? "Microphone blocked. Allow it in the browser to talk." : "Voice was interrupted. Press again to reconnect."),
         onDisconnect: (details) => {
-          if (!active()) return;
-          const detail = details.reason === "user" ? undefined
-            : !current.connected || Date.now() - current.connectedAt < 3000 ? "Voice ended immediately. Check ElevenLabs credits and agent settings, then try again."
-              : details.reason === "error" ? "The voice connection was interrupted. Please try again." : undefined;
-          if (detail) setError(detail);
-          current.complete(detail);
-          stop();
+          setOpen(false);
+          setLatched(false);
+          setWorking(0);
+          if (details.reason === "error") setError("Voice disconnected. Press again to reconnect.");
         },
       });
-      const failure = await connected;
-      if (active() && failure) throw new Error(failure);
-    } catch (cause) {
-      if (active()) {
-        setError(cause instanceof Error && cause.name !== "TypeError" ? cause.message : "Could not reach the voice service. Please try again.");
-        stop();
-      }
+      lastUse.current = Date.now();
+    } catch (e) {
+      setError((e as Error).message);
+      setOpen(false);
+      setLatched(false);
     } finally {
-      if (mounted.current && (attempt.current === current || !attempt.current)) setStarting(false);
+      connecting.current = false;
     }
   }
 
-  const live = status === "connected";
-  const pending = starting || status === "connecting";
-  const conversationRef = useRef(conversation);
-  const workingRef = useRef(false);
-  useLayoutEffect(() => { conversationRef.current = conversation; workingRef.current = working > 0; });
-  const gather = useRef({ value: 0, at: 0 });
+  function press() {
+    if (latest.current.disabled) return;
+    pressedAt.current = Date.now();
+    lastUse.current = Date.now();
+    setError("");
+    setOpen(true);
+    void connect();
+  }
+
+  function release() {
+    if (!pressedAt.current) return;
+    const tap = Date.now() - pressedAt.current < TAP_MS;
+    pressedAt.current = 0;
+    lastUse.current = Date.now();
+    if (tap) {
+      // a tap toggles hands-free; a hold is push to talk
+      const next = !latched;
+      setLatched(next);
+      setOpen(next);
+    } else {
+      setLatched(false);
+      setOpen(false);
+    }
+  }
+
+  // hold Space anywhere in the room (not while typing)
+  const pressRef = useRef(press);
+  const releaseRef = useRef(release);
+  useLayoutEffect(() => {
+    pressRef.current = press;
+    releaseRef.current = release;
+  });
+  useEffect(() => {
+    const down = (e: KeyboardEvent) => {
+      if (e.code !== PTT_KEY || editable(e.target)) return;
+      e.preventDefault();
+      if (!e.repeat) pressRef.current();
+    };
+    const up = (e: KeyboardEvent) => {
+      if (e.code !== PTT_KEY || editable(e.target)) return;
+      e.preventDefault();
+      releaseRef.current();
+    };
+    window.addEventListener("keydown", down, { capture: true });
+    window.addEventListener("keyup", up, { capture: true });
+    return () => {
+      window.removeEventListener("keydown", down, { capture: true });
+      window.removeEventListener("keyup", up, { capture: true });
+    };
+  }, []);
+
+  // dev only: lets browser tests say what the shopper would
+  useEffect(() => {
+    if (process.env.NODE_ENV === "production") return;
+    const w = window as unknown as { __tadaimaVoice?: { say(text: string): void; status(): string } };
+    w.__tadaimaVoice = { say: (text) => convo.current.sendUserMessage(text), status: () => convo.current.status };
+    return () => {
+      delete w.__tadaimaVoice;
+    };
+  }, []);
+
+  // hang up when untouched for a while; the next press reconnects
+  useEffect(() => {
+    const t = setInterval(() => {
+      const c = convo.current;
+      if (c.status === "connected" && !c.isSpeaking && Date.now() - lastUse.current > IDLE_MS && !pressedAt.current) c.endSession();
+    }, 15000);
+    return () => clearInterval(t);
+  }, []);
+
+  useEffect(() => {
+    if (disabled && convo.current.status === "connected") convo.current.endSession();
+  }, [disabled]);
+  useEffect(() => () => convo.current.endSession(), []);
+
+  // tell the agent about a finished live search, once
+  useEffect(() => {
+    if (!update || sent.current === update.id || !live) return;
+    sent.current = update.id;
+    lastUse.current = Date.now();
+    conversation.sendUserMessage(update.text.slice(0, 4000));
+  }, [update, live, conversation]);
+
   const level = () => {
-    const value = conversationRef.current;
-    return value.status === "connected" ? Math.max(value.getInputVolume(), value.getOutputVolume()) : 0;
+    const c = convo.current;
+    return c.status === "connected" ? Math.max(c.getInputVolume(), c.getOutputVolume()) : 0;
   };
+  const workingRef = useRef(false);
+  useLayoutEffect(() => {
+    workingRef.current = working > 0;
+  });
+  const gather = useRef({ value: 0, at: 0 });
   const motion = () => {
-    const now = performance.now(), value = gather.current;
-    const dt = value.at ? Math.min(0.1, (now - value.at) / 1000) : 0;
-    value.at = now;
-    value.value += ((workingRef.current ? 1 : 0) - value.value) * Math.min(1, dt * 5);
-    if (value.value < 0.01) return null;
-    return { gather: value.value, offset: Math.sin(now / 520) * 0.75 * value.value, stretch: Math.abs(Math.cos(now / 520)) * 0.3, heldLevel: 0.55 };
+    const now = performance.now();
+    const g = gather.current;
+    const dt = g.at ? Math.min(0.1, (now - g.at) / 1000) : 0;
+    g.at = now;
+    g.value += ((workingRef.current ? 1 : 0) - g.value) * Math.min(1, dt * 5);
+    if (g.value < 0.01) return null;
+    return { gather: g.value, offset: Math.sin(now / 520) * 0.75 * g.value, stretch: Math.abs(Math.cos(now / 520)) * 0.3, heldLevel: 0.55 };
   };
-  const label = pending ? "Connecting" : !live ? "Talk" : working ? "Working" : conversation.isSpeaking ? "Speaking" : conversation.isMuted ? "Muted" : "Listening";
-  return <div className="room-voice" aria-label="Voice assistant">
-    {caption || error ? <p className="room-voice__caption" data-error={error ? true : undefined} role="status" aria-live="polite">{error || caption}</p> : null}
-    <VoiceBeam type="pill" theme="light" colorVariant="sunset" level={level} motion={motion} active={live || pending} className="room-voice__beam">
-      <button type="button" className="room-x__pill room-voice__btn" data-live={live || undefined} onClick={live || pending ? stop : () => { void start(); }} disabled={disabled && !live && !pending} aria-pressed={live} aria-label={live || pending ? "Stop talking to the room" : "Talk to the room"}>
-        <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><rect x="7" y="2.5" width="6" height="10" rx="3" /><path d="M4.5 9.5a5.5 5.5 0 0 0 11 0M10 15v2.5" /></svg><span>{label}</span>
-      </button>
-    </VoiceBeam>
-    {live ? <button type="button" className="room-x__pill room-voice__mute" onClick={() => conversation.setMuted(!conversation.isMuted)}>{conversation.isMuted ? "Unmute" : "Mute"}</button> : null}
-    {lines.length ? <details className="room-voice__transcript-menu"><summary>Transcript</summary><div className="room-agent-voice__transcript" role="log" aria-label="Voice transcript" aria-live="polite" aria-relevant="additions">
-      {lines.map((line, index) => <p key={index}><strong>{line.role === "user" ? "You" : "Assistant"}:</strong> {line.text}</p>)}
-    </div></details> : null}
-  </div>;
+
+  const label = pending || (open && !live) ? "Connecting" : open ? "Listening" : working ? "Working" : conversation.isSpeaking ? "Speaking" : "Hold Space to talk";
+
+  return (
+    <div className="room-voice">
+      {(caption || error) && (
+        <p className="room-voice__caption" data-error={error ? true : undefined} role="status" aria-live="polite">
+          {error || caption}
+        </p>
+      )}
+      <VoiceBeam type="pill" theme="light" colorVariant="sunset" level={level} motion={motion} active={live || open} className="room-voice__beam">
+        <button
+          type="button"
+          className="room-x__pill room-voice__btn"
+          data-live={open || undefined}
+          disabled={disabled}
+          aria-pressed={open}
+          aria-label={latched ? "Stop listening" : "Hold to talk to the room"}
+          onPointerDown={(e) => {
+            e.currentTarget.setPointerCapture(e.pointerId);
+            press();
+          }}
+          onPointerUp={release}
+          onPointerCancel={release}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.repeat) {
+              e.preventDefault();
+              press();
+            }
+          }}
+          onKeyUp={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              release();
+            }
+          }}
+        >
+          <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+            <rect x="7" y="2.5" width="6" height="10" rx="3" />
+            <path d="M4.5 9.5a5.5 5.5 0 0 0 11 0M10 15v2.5" />
+          </svg>
+          <span>{label}</span>
+        </button>
+      </VoiceBeam>
+    </div>
+  );
 }
 
 export default RoomAgentVoice;

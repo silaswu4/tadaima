@@ -204,7 +204,16 @@ export function getTadaimaRooms(): CarouselRoom[] {
     { id: "tadaima-dining", slug: "dining-room", label: "Dining room", source: "tadaima-demo", plan: diningRoom() },
     { id: "tadaima-kids", slug: "kids-room", label: "Kids' room", source: "tadaima-demo", plan: kidsRoom() },
   ];
-  return rooms.map((room) => ({ ...room, plan: withLabel(room.plan, room.label) }));
+  return rooms.map((room) => ({ ...room, plan: asYours(withLabel(room.plan, room.label)) }));
+}
+
+/**
+ * A demo room is someone's room: everything already in it is theirs, so the
+ * basket starts empty and only holds what the shopper adds. (The fixtures came
+ * from planner tests where those pieces were suggested purchases.)
+ */
+function asYours(plan: RoomPlan): RoomPlan {
+  return { ...plan, items: plan.items.map((item) => (item.origin === "proposed_purchase" ? { ...item, origin: "existing_owned" as const } : item)) };
 }
 
 // ---------- validation ----------

@@ -155,17 +155,26 @@ export function useRoomShopping(options: Options) {
     }
   }), [mutate, apply]);
 
-  const moveAgentItem = useCallback((itemId: string, spot: FloorSpot) => mutate(async (active) => {
-    const result = await roomClient(active.session.plan.projectId).moveTo(itemId, spot);
+  const moveAgentItem = useCallback((itemId: string, spot: FloorSpot, unlock = false) => mutate(async (active) => {
+    const result = await roomClient(active.session.plan.projectId).moveTo(itemId, spot, unlock);
     if (!result.ok) throw new Error("message" in result ? result.message : mutationMessage(result));
     await apply(result.plan, active.epoch);
   }), [mutate, apply]);
 
-  const storeAgentItem = useCallback((itemId: string) => mutate(async (active) => {
-    const result = await roomClient(active.session.plan.projectId).store(itemId);
+  const storeAgentItem = useCallback((itemId: string, unlock = false) => mutate(async (active) => {
+    const result = await roomClient(active.session.plan.projectId).store(itemId, unlock);
     if (!result.ok) throw new Error("message" in result ? result.message : mutationMessage(result));
     await apply(result.plan, active.epoch);
   }), [mutate, apply]);
 
-  return { session, busy, connecting, error, job, connect, disconnect, sync, refresh, search, stopSearch, showJob, place, propose, applyProposal, moveAgentItem, storeAgentItem };
+  /** Raise (or set) the room budget, e.g. so a piece the shopper chose over budget can go in. */
+  const setBudget = useCallback((amountMinor: number) => mutate(async (active) => {
+    const plan = active.session.plan;
+    const result = await roomClient(plan.projectId).change(plan.revision, [{ kind: "set_constraints", constraints: { budget: { amountMinor, currency: plan.constraints.budget?.currency ?? "USD" } } }]);
+    if (!result.ok) throw new Error(mutationMessage(result));
+    await apply(result.plan, active.epoch);
+    return result.plan;
+  }), [mutate, apply]);
+
+  return { session, busy, connecting, error, job, connect, disconnect, sync, refresh, search, stopSearch, showJob, place, propose, applyProposal, moveAgentItem, storeAgentItem, setBudget };
 }
