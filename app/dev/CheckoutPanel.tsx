@@ -19,14 +19,35 @@ interface CheckoutView {
 
 type Msg = { kind: "ok" | "err" | "warn"; text: string } | null;
 
-const cardName = (m: PaymentMethod) => `${m.brand.charAt(0).toUpperCase()}${m.brand.slice(1)} ending ${m.last4}`;
+const cap = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
+const cardName = (m: PaymentMethod) => `${cap(m.brand)} ending ${m.last4}`;
 const when = (iso: string) => new Date(iso).toLocaleTimeString();
 
 /** 409 is a rule saying no, 503 is Stripe not configured. */
 function errMsg(status: number, error: string | null): Msg {
-  if (status === 503) return { kind: "warn", text: `Payments not connected yet. ${error ?? ""}`.trim() };
+  if (status === 503) return { kind: "warn", text: `Payments not connected yet${error ? ` (${error})` : ""}.` };
   if (status === 409) return { kind: "err", text: `Refused: ${error}` };
   return { kind: "err", text: error ?? "Request failed" };
+}
+
+/** Every approval requirement, ticked unless the server lists a matching blocker. Unknown blockers are appended. */
+const REQUIREMENTS: Array<{ label: string; blockers: string[] }> = [
+  { label: "Cart has items", blockers: ["the cart is empty"] },
+  { label: "Every price is known", blockers: ["some items have no known price"] },
+  {
+    label: "Price and stock rechecked in the last 15 minutes",
+    blockers: ["prices and stock need a recheck", "the recheck found problems", "the last recheck is older than 15 minutes"],
+  },
+  { label: "Card connected", blockers: ["no card connected"] },
+];
+function checklist(blockers: string[]) {
+  const rows = REQUIREMENTS.map((r) => {
+    const blocker = blockers.find((b) => r.blockers.includes(b)) ?? null;
+    // say which reason only when there are several
+    return { label: r.label, blocker, reason: r.blockers.length > 1 ? blocker : null };
+  });
+  const known = new Set(REQUIREMENTS.flatMap((r) => r.blockers));
+  return [...rows, ...blockers.filter((b) => !known.has(b)).map((b) => ({ label: cap(b), blocker: b, reason: null }))];
 }
 
 const stripeCache = new Map<string, Promise<Stripe | null>>();
@@ -210,11 +231,12 @@ export function CheckoutPanel({ base, plan, onPlanChanged }: { base: string; pla
 
             <div className="mt-3 text-xs font-medium text-zinc-500">Before approval</div>
             <ul className="mt-1 space-y-1 text-[13px]">
-              {view.blockers.length === 0 ? (
-                <Check ok>Ready to approve</Check>
-              ) : (
-                view.blockers.map((b) => <Check key={b}>{b.charAt(0).toUpperCase() + b.slice(1)}</Check>)
-              )}
+              {checklist(view.blockers).map((c) => (
+                <Check key={c.label} ok={!c.blocker}>
+                  {c.label}
+                  {c.reason && <span className="text-zinc-400"> ({c.reason})</span>}
+                </Check>
+              ))}
             </ul>
           </Step>
 
@@ -303,7 +325,7 @@ export function CheckoutPanel({ base, plan, onPlanChanged }: { base: string; pla
           </Step>
 
           <Step n={5} title="Agent pays">
-            <button className="btn btn-primary h-9" disabled={!!busy} onClick={() => void execute()}>
+            <button className={`btn h-9 ${mandate ? "btn-primary" : ""}`} disabled={!!busy} onClick={() => void execute()}>
               {busy === "execute" ? "Paying..." : "Agent pays"}
             </button>
             <p className="mt-2 text-xs text-zinc-500">Charges the approved card only if the cart still matches the approval. The server refuses anything else.</p>
@@ -321,7 +343,7 @@ export function CheckoutPanel({ base, plan, onPlanChanged }: { base: string; pla
               <li key={o.id} className="flex flex-wrap gap-x-3 rounded bg-zinc-50 px-2 py-1">
                 <span className="font-medium">{o.id}</span>
                 <span className="tabular-nums">{money(o.amount)}</span>
-                <span className="text-zinc-500">{o.payment.card}</span>
+                <span className="text-zinc-500">{cap(o.payment.card)}</span>
                 <span className="text-zinc-500">{o.merchantOrders.map((m) => m.merchant).join(", ")}</span>
                 <span className="ml-auto text-zinc-400">{new Date(o.createdAt).toLocaleString()}</span>
               </li>
@@ -453,7 +475,7 @@ function Receipt({ order: o }: { order: Order }) {
         <dt className="text-zinc-500">Amount</dt>
         <dd className="font-semibold tabular-nums">{money(o.amount)}</dd>
         <dt className="text-zinc-500">Card</dt>
-        <dd>{o.payment.card}</dd>
+        <dd>{cap(o.payment.card)}</dd>
         <dt className="text-zinc-500">Stripe</dt>
         <dd className="break-all">{o.payment.paymentIntentId}</dd>
       </dl>
