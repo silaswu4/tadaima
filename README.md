@@ -13,6 +13,8 @@ Project context, product decisions, architecture, capture research, sponsor requ
 
 See [team ownership and first tasks](docs/team-ownership.md) and [copy-paste agent prompts](docs/agent-prompts.md). These are four working areas inside one application; run the commands below from the repository root. `app/` holds thin Next.js entry points and `public/` holds shared static assets.
 
+The [reconstruction worker](reconstruction/README.md) now converts validated room geometry to an editable `.blend`, a GLB, and a revision-bound manifest. Its [research notes](reconstruction/RESEARCH.md) explain modeling/export decisions. This local worker is separate from the still-unimplemented address/photo ingestion and hosted application backend.
+
 ## Application setup
 
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).

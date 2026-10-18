@@ -1,6 +1,6 @@
 # Proposed system architecture
 
-**Status:** Recommended architecture, not the current implementation. The repository currently has a WebGL ASCII landing hero, an earlier Three.js room renderer, and type-only backend/reconstruction scaffolding, with no running application backend. Work is divided into [four owned folders](team-ownership.md) within one Next.js application. The choice of database, storage, queue, authentication, deployment platform, and reconstruction/model providers remains open.
+**Status:** Most of this architecture remains proposed. The repository has a WebGL ASCII landing hero, an earlier Three.js room renderer, browser-safe types, and a working [local geometry-to-Blender/GLB worker](../reconstruction/README.md) with a Node adapter. There is no hosted application backend or address/photo ingestion yet. Work is divided into [four owned folders](team-ownership.md) within one Next.js application. Database, storage, queue, authentication, deployment, and photo-reconstruction providers remain open.
 
 ## One shared plan, several interfaces
 

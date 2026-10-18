@@ -2,6 +2,8 @@
 
 These prompts reflect both ownership swaps: **Matthew owns backend, the project lead owns reconstruction, Silas owns spatial, and Angelina owns product frontend**. Earlier chat prompts assigning Matthew to reconstruction are superseded. Each prompt is standalone. Read the current repository before assuming the first milestone is still unfinished.
 
+The initial geometry-to-Blender/GLB milestone is now implemented; Matthew can consume the local processor and Silas can consume its artifacts. See [reconstruction status and interfaces](../reconstruction/README.md). The reconstruction prompt below remains the initial acceptance target; inspect completed work before repeating it.
+
 ## Matthew: backend and agents
 
 ```text

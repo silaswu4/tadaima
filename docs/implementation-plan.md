@@ -16,7 +16,11 @@ Repository originally inspected October 17, 2026 at base commit `cbbe48fe69b1b12
 | `spatial/room/scene.ts` | Hardcoded room shell and furniture, GLB loading, pencil contours/edges, fixed camera, raycast hover/touch selection, render loop/disposal |
 | `spatial/room/parts.ts` | Procedural meter-based objects and materials; local parts use floor origin and front `+Z` |
 | `backend/contracts.ts` | Type-only starting subset of room/evidence/product contracts; no runtime service or validators |
-| `reconstruction/contracts.ts` | Type-only confirmed-geometry-to-artifacts worker boundary; no running processor |
+| `reconstruction/contracts.ts` | Geometry-to-artifacts request/result and revision-bound manifest types |
+| `reconstruction/processor.server.ts` | Local Node adapter invoking the actual Python/Blender pipeline |
+| `reconstruction/geometry.py`, `joins.py` | Bounded runtime validation, concave triangulation, opening cuts, conservative corner joins |
+| `reconstruction/pipeline.py`, `cli.py`, `blender_worker.py` | Private staging, trusted headless Blender, editable `.blend`, GLB, hashes/manifest, and optional preview |
+| `reconstruction/tests/`, `verify-glb.mjs` | Geometry/failure tests, actual Blender reopen, Three.js loading, and optional Khronos validation |
 | `public/models/` | Seven bundled GLB models, referenced by the hero |
 | `app/fonts/` | Paper Mono WOFF2 and SIL Open Font License text |
 | `HANDOFF.md` | Earlier Michael product/design handoff; partially superseded by web-only requirements |
@@ -33,7 +37,7 @@ Commit `07d83cb` attributes the bundled furniture models to CC0 Poly Haven asset
 
 ## What does not exist
 
-No address search, upload route, room-capture pipeline, Apple RoomPlan import, Blender job, runtime room-plan service, backend persistence, authentication, product catalog, real retailer search, cart preparation, checkout, WebXR session, shared-device state, voice agent, Fetch agent, wallet, or Solana contract exists yet. Shared TypeScript types do not implement these behaviors. No automated application test suite is configured in `package.json`.
+No address search, upload route, camera/photo-to-geometry pipeline, Apple RoomPlan import, hosted job service, runtime room-plan service, backend persistence, authentication, product catalog, real retailer search, cart preparation, checkout, WebXR session, shared-device state, voice agent, Fetch agent, wallet, or Solana contract exists yet. The geometry-to-artifacts stage is implemented locally; shared TypeScript types alone do not implement the remaining behaviors. Reconstruction has a separate Python/integration suite; no application test script is configured in root `package.json`.
 
 ## Dependencies and local setup
 
@@ -66,7 +70,7 @@ The final four-folder scaffold, including the incoming ASCII update, passed `npm
 
 Before application changes, follow `AGENTS.md` and read the relevant installed Next.js guides under `node_modules/next/dist/docs/`. Do not assume older framework conventions apply to this version.
 
-There are no integration secrets or environment contracts established by this repository. Choose provider configuration when implementing each adapter and document the real variables in a sanitized example file. Do not paste guessed environment variables or actual credentials into public docs.
+Reconstruction accepts `BLENDER_BIN` or an explicit executable option, plus trusted private output paths and timeouts documented in [its README](../reconstruction/README.md). No external-provider secrets are established by the repository. Choose provider configuration when implementing each remaining adapter; do not paste guessed variables or actual credentials into public docs.
 
 ## Recommended implementation order
 
@@ -89,6 +93,8 @@ For address onboarding, search a prepared permitted demo property, show candidat
 Done when: an unmatched unit produces a useful capture/measurement fallback, a denied camera permission has a usable upload path, and each source/dimension retains its provenance. Capture does not need a research-grade neural reconstruction to establish a truthful first slice.
 
 ### 4. Add the Blender worker
+
+This stage is now implemented locally. See [working commands, verification, and handoffs](../reconstruction/README.md). Hosted queue/storage integration and upstream capture remain pending; the scope below describes the stage's acceptance criteria.
 
 Generate the confirmed shell from a validated geometry schema using controlled Python. Save source JSON, editable `.blend`, and optimized GLB with a manifest tied to the input revision. Add meaningful async stages and a failure/retry path.
 

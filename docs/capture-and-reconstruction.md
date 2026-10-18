@@ -2,6 +2,8 @@
 
 Research consolidated: October 17, 2026. This document describes the proposed pipeline and its limitations. It does not certify a working scanner, reconstruction service, or device integration in the repository.
 
+Implementation update: the downstream [validated geometry → editable Blender → GLB stage](../reconstruction/README.md) now works locally, with [primary-source research](../reconstruction/RESEARCH.md) and actual export/loader tests. It takes supplied geometry; neither address extraction nor photo-to-geometry processing is implemented by that stage.
+
 The current product requirement is **web only**, with two entry points: an address and unit number, or guided capture in an iPhone browser. Both must converge on a user-confirmed, dimensioned room model. Neither entry point guarantees an accurate reconstruction of an arbitrary apartment.
 
 The earlier root `HANDOFF.md` mentions Apple's room scan. That describes an earlier concept: native Apple RoomPlan is outside the current web-only scope. Existing RoomPlan output could be an optional future import without making a native application part of the core flow.
