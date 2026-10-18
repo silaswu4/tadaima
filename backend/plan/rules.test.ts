@@ -5,16 +5,22 @@ import { applyChanges, costOf, passes, validate } from "@/backend/plan/rules";
 
 const status = (plan = demoPlan, base = demoPlan) => Object.fromEntries(validate(plan, base).map((r) => [r.rule, r.status]));
 
+const id = (fragment: string) => demoPlan.products.find((p) => p.id.includes(fragment))!.id;
+
 test("fixture plan passes every rule", () => {
   const r = validate(demoPlan, demoPlan);
   assert.ok(passes(r), JSON.stringify(r.filter((x) => x.status !== "pass"), null, 2));
-  assert.equal(costOf(demoPlan).knownSubtotal.amountMinor, 172500);
+  assert.equal(costOf(demoPlan).knownSubtotal.amountMinor, 139797);
 });
 
-test("$300 cheaper by swapping the armchair keeps 4 seats", () => {
-  const next = applyChanges(demoPlan, [{ kind: "replace", itemId: "item_armchair", productId: "prod_armchair_cane" }]);
-  assert.ok(passes(validate(next, demoPlan)));
-  assert.equal(costOf(demoPlan).knownSubtotal.amountMinor - costOf(next).knownSubtotal.amountMinor, 30000);
+test("$300+ cheaper with real IKEA swaps keeps 4 seats", () => {
+  const next = applyChanges(demoPlan, [
+    { kind: "replace", itemId: "item_armchair", productId: id("poaeng") },
+    { kind: "replace", itemId: "item_coffee_table", productId: id("holmerud") },
+  ]);
+  const r = validate(next, demoPlan);
+  assert.ok(passes(r), JSON.stringify(r.filter((x) => x.status !== "pass"), null, 2));
+  assert.ok(costOf(demoPlan).knownSubtotal.amountMinor - costOf(next).knownSubtotal.amountMinor >= 30000);
 });
 
 test("dropping the armchair breaks seating", () => {
@@ -26,13 +32,13 @@ test("touching a locked item fails", () => {
 });
 
 test("unknown dimensions never pass fit", () => {
-  const s = status(applyChanges(demoPlan, [{ kind: "replace", itemId: "item_armchair", productId: "prod_ottoman_mystery" }]));
+  const s = status(applyChanges(demoPlan, [{ kind: "replace", itemId: "item_lamp", productId: id("isjakt") }]));
   assert.equal(s.dimensions_known, "unknown");
   assert.equal(s.no_overlap, "unknown");
 });
 
 test("unavailable product fails", () => {
-  assert.equal(status(applyChanges(demoPlan, [{ kind: "replace", itemId: "item_coffee_table", productId: "prod_table_marble" }])).product_known, "fail");
+  assert.equal(status(applyChanges(demoPlan, [{ kind: "replace", itemId: "item_rug", productId: id("tidtabell") }])).product_known, "fail");
 });
 
 test("sliding the armchair into the sofa is too tight", () => {
@@ -44,6 +50,6 @@ test("pushing an item through a wall fails", () => {
 });
 
 test("over budget fails", () => {
-  const next = applyChanges(demoPlan, [{ kind: "replace", itemId: "item_armchair", productId: "prod_armchair_boucle" }, { kind: "set_constraints", constraints: { budget: { amountMinor: 150000, currency: "USD" } } }]);
+  const next = applyChanges(demoPlan, [{ kind: "set_constraints", constraints: { budget: { amountMinor: 100000, currency: "USD" } } }]);
   assert.equal(status(next).budget, "fail");
 });
