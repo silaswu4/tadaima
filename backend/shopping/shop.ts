@@ -1,7 +1,7 @@
 import "server-only";
 
 import { after } from "next/server";
-import type { FloorSpot, Job, PlaceResult, ProductCandidate, ShopJobOutput, ShopRequest, ShopResult } from "@/backend/contracts";
+import type { ApplyResult, FloorSpot, Job, PlaceResult, PlanChange, ProductCandidate, ShopJobOutput, ShopRequest, ShopResult } from "@/backend/contracts";
 import { applyPlanChanges, getProject, NotFound, Unprocessable } from "@/backend/plan/operations";
 import { getJob, saveJob } from "@/backend/plan/store";
 import { researchProducts } from "@/backend/research/browserUse";
@@ -206,17 +206,36 @@ export async function moveItemTo(
     }
     const { position, rotationY, roomId } = fit.placement;
     if (roomId !== item.roomId) throw new Unprocessable("Moving a piece to another room isn't supported yet.");
-    // a locked piece is unlocked just for this move, then locked again where it lands
-    const changes = item.locked
-      ? [
-          { kind: "lock" as const, itemId: item.id, locked: false },
-          { kind: "move" as const, itemId: item.id, position, rotationY },
-          { kind: "lock" as const, itemId: item.id, locked: true },
-        ]
-      : [{ kind: "move" as const, itemId: item.id, position, rotationY }];
+    // a stored piece comes out of inventory; a locked one is unlocked just for this move, then locked again
+    const move: PlanChange = item.stored ? { kind: "take_out", itemId: item.id, position, rotationY } : { kind: "move", itemId: item.id, position, rotationY };
+    const changes: PlanChange[] = item.locked
+      ? [{ kind: "lock", itemId: item.id, locked: false }, move, { kind: "lock", itemId: item.id, locked: true }]
+      : [move];
     const r = await applyPlanChanges(projectId, plan.revision, changes);
     if (r.ok) return { ok: true, plan: r.plan, itemId: item.id, placement: fit.placement };
     if (r.reason === "validation_failed" || body.expectedRevision != null) return r;
+  }
+  const { plan } = await getProject(projectId);
+  return { ok: false, reason: "stale_revision", currentRevision: plan.revision };
+}
+
+/** Put a piece away in inventory. Locked pieces need `unlock: true` and stay locked. */
+export async function storeItem(
+  projectId: string,
+  body: { itemId: string; unlock?: boolean; expectedRevision?: number | null },
+): Promise<ApplyResult | { ok: false; reason: "locked"; message: string }> {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const { plan } = await getProject(projectId);
+    if (body.expectedRevision != null && body.expectedRevision !== plan.revision) return { ok: false, reason: "stale_revision", currentRevision: plan.revision };
+    const item = plan.items.find((i) => i.id === body.itemId);
+    if (!item) throw new NotFound(`no item ${body.itemId}`);
+    if (item.stored) return { ok: true, plan };
+    if (item.locked && !body.unlock) return { ok: false, reason: "locked", message: `${item.label} is locked. Unlock it to put it away.` };
+    const changes: PlanChange[] = item.locked
+      ? [{ kind: "lock", itemId: item.id, locked: false }, { kind: "store", itemId: item.id }, { kind: "lock", itemId: item.id, locked: true }]
+      : [{ kind: "store", itemId: item.id }];
+    const r = await applyPlanChanges(projectId, plan.revision, changes);
+    if (r.ok || r.reason === "validation_failed" || body.expectedRevision != null) return r;
   }
   const { plan } = await getProject(projectId);
   return { ok: false, reason: "stale_revision", currentRevision: plan.revision };

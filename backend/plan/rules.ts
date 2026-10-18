@@ -18,6 +18,10 @@ export const NO_FOOTPRINT = new Set(["rug"]);
 
 export class PlanChangeError extends Error {}
 
+/** In the room, as opposed to put away in inventory. */
+export const inRoom = (i: Pick<PlacedItem, "stored">) => !i.stored;
+const seatCount = (plan: RoomPlan) => plan.items.filter(inRoom).reduce((n, i) => n + (i.seats ?? 0), 0);
+
 export function applyChanges(plan: RoomPlan, changes: PlanChange[]): RoomPlan {
   const next: RoomPlan = structuredClone(plan);
   for (const c of changes) {
@@ -44,6 +48,14 @@ export function applyChanges(plan: RoomPlan, changes: PlanChange[]): RoomPlan {
       next.items.splice(idx, 1);
     } else if (c.kind === "lock") {
       item.locked = c.locked;
+    } else if (c.kind === "store") {
+      if (item.stored) throw new PlanChangeError(`${item.label} is already put away`);
+      item.stored = true;
+    } else if (c.kind === "take_out") {
+      if (!item.stored) throw new PlanChangeError(`${item.label} is already in the room`);
+      item.stored = false;
+      item.position = c.position;
+      item.rotationY = c.rotationY;
     } else if (c.kind === "move") {
       item.position = c.position;
       item.rotationY = c.rotationY;
@@ -70,7 +82,7 @@ export function costOf(plan: RoomPlan): CostSummary {
   let amountMinor = 0;
   const unknownPriceItemIds: string[] = [];
   for (const item of plan.items) {
-    if (item.origin !== "proposed_purchase") continue;
+    if (item.origin !== "proposed_purchase" || item.stored) continue;
     const price = plan.products.find((p) => p.id === item.productId)?.price;
     if (!price || price.currency !== currency) unknownPriceItemIds.push(item.id);
     else amountMinor += price.amountMinor;
@@ -138,9 +150,11 @@ const money = (minor: number) => `$${(minor / 100).toLocaleString("en-US", { min
 export function validate(plan: RoomPlan, base?: RoomPlan): ValidationResult[] {
   const out: ValidationResult[] = [];
   const rooms = new Map(plan.geometry.rooms.map((r) => [r.id, r]));
+  // stored pieces are out of the room: no fit, stock or seat checks
+  const items = plan.items.filter(inRoom);
 
   // dimensions known
-  const unsized = plan.items.filter((i) => !i.dimensions);
+  const unsized = items.filter((i) => !i.dimensions);
   out.push(
     unsized.length
       ? { rule: "dimensions_known", status: "unknown", itemIds: unsized.map((i) => i.id), message: `No size on record for ${unsized.map((i) => i.label).join(", ")}, so fit can't be checked.` }
@@ -148,12 +162,12 @@ export function validate(plan: RoomPlan, base?: RoomPlan): ValidationResult[] {
   );
 
   // proposed purchases point at a real, available product
-  const badProducts = plan.items.filter((i) => {
+  const badProducts = items.filter((i) => {
     if (i.origin !== "proposed_purchase") return false;
     const p = plan.products.find((x) => x.id === i.productId);
     return !p || p.availability === "unavailable";
   });
-  const unknownStock = plan.items.filter(
+  const unknownStock = items.filter(
     (i) => i.origin === "proposed_purchase" && plan.products.find((x) => x.id === i.productId)?.availability === "unknown",
   );
   out.push(
@@ -165,7 +179,7 @@ export function validate(plan: RoomPlan, base?: RoomPlan): ValidationResult[] {
   );
 
   // inside the room
-  const outside = plan.items.filter((i) => {
+  const outside = items.filter((i) => {
     const room = rooms.get(i.roomId);
     const fp = footprint(i);
     return room && fp && !fp.every((p) => inside(p, room.floorPolygon));
@@ -178,7 +192,7 @@ export function validate(plan: RoomPlan, base?: RoomPlan): ValidationResult[] {
 
   // no overlaps, with clearance between pieces
   const gap = plan.constraints.clearance / 2;
-  const solid = plan.items.filter((i) => i.dimensions && !NO_FOOTPRINT.has(i.category));
+  const solid = items.filter((i) => i.dimensions && !NO_FOOTPRINT.has(i.category));
   const clashes: string[][] = [];
   for (let a = 0; a < solid.length; a++) {
     for (let b = a + 1; b < solid.length; b++) {
@@ -186,7 +200,7 @@ export function validate(plan: RoomPlan, base?: RoomPlan): ValidationResult[] {
       if (overlaps(footprint(solid[a], gap)!, footprint(solid[b], gap)!)) clashes.push([solid[a].id, solid[b].id]);
     }
   }
-  const label = (id: string) => plan.items.find((i) => i.id === id)!.label;
+  const label = (id: string) => items.find((i) => i.id === id)!.label;
   out.push(
     clashes.length
       ? {
@@ -201,7 +215,7 @@ export function validate(plan: RoomPlan, base?: RoomPlan): ValidationResult[] {
   // seats
   const min = plan.constraints.minimumSeats;
   if (min !== null) {
-    const seats = plan.items.reduce((n, i) => n + (i.seats ?? 0), 0);
+    const seats = seatCount(plan);
     out.push({
       rule: "seats",
       status: seats >= min ? "pass" : "fail",
@@ -235,6 +249,7 @@ export function validate(plan: RoomPlan, base?: RoomPlan): ValidationResult[] {
           !now ||
           now.productId !== i.productId ||
           now.rotationY !== i.rotationY ||
+          !!now.stored !== !!i.stored ||
           now.position.some((v, k) => Math.abs(v - i.position[k]) > 1e-6)
         );
       });
@@ -249,6 +264,32 @@ export function validate(plan: RoomPlan, base?: RoomPlan): ValidationResult[] {
 }
 
 export const passes = (results: ValidationResult[]) => results.every((r) => r.status !== "fail");
+
+/**
+ * The failures a change is responsible for: new ones, or ones it makes worse.
+ * A rule that was already failing (a price went up past the budget, the
+ * shopper put a chair away) doesn't freeze the room; it only blocks changes
+ * that add to it. Putting things away never blocks on seats: it's temporary
+ * while rearranging, and the seats check still reports it.
+ */
+export function blocking(base: RoomPlan, changes: PlanChange[], next: RoomPlan, results: ValidationResult[]): ValidationResult[] {
+  const was = new Map(validate(base).filter((r) => r.status === "fail").map((r) => [r.rule, r]));
+  const onlyStoring = changes.every((c) => c.kind === "store" || c.kind === "lock");
+  return results.filter((r) => {
+    if (r.status !== "fail") return false;
+    const prev = was.get(r.rule);
+    switch (r.rule) {
+      case "seats":
+        return !onlyStoring && (!prev || seatCount(next) < seatCount(base));
+      case "budget":
+        return !prev || costOf(next).knownSubtotal.amountMinor > costOf(base).knownSubtotal.amountMinor;
+      case "locked_kept":
+        return true;
+      default:
+        return !prev || r.itemIds.some((id) => !prev.itemIds.includes(id));
+    }
+  });
+}
 
 /** Validate `next` against `base`, treating items the changes explicitly unlock as no longer locked. */
 export function validateChanges(base: RoomPlan, changes: PlanChange[], next: RoomPlan): ValidationResult[] {

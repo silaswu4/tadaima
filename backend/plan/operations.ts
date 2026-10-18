@@ -2,7 +2,7 @@ import "server-only";
 
 import type { ApplyResult, PlanChange, PlanProposal, RoomPlan } from "@/backend/contracts";
 import { planChanges } from "@/backend/plan/planner";
-import { applyChanges, costOf, passes, PlanChangeError, validate, validateChanges } from "@/backend/plan/rules";
+import { applyChanges, blocking, costOf, PlanChangeError, validate, validateChanges } from "@/backend/plan/rules";
 import { getPlan, getProposal, resetPlan, savePlan, saveProposal } from "@/backend/plan/store";
 
 /**
@@ -76,7 +76,7 @@ export async function applyPlanChanges(projectId: string, expectedRevision: numb
     throw e;
   }
   const validations = validateChanges(plan, changes, next);
-  if (!passes(validations)) return { ok: false, reason: "validation_failed", validations };
+  if (blocking(plan, changes, next, validations).length) return { ok: false, reason: "validation_failed", validations };
 
   const saved = await savePlan(projectId, expectedRevision, next);
   if (!saved.ok) return { ok: false, reason: "stale_revision", currentRevision: saved.revision };

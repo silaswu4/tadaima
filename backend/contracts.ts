@@ -98,6 +98,12 @@ export interface PlacedItem {
   dimensions: Vector3Meters | null;
   seats: number | null;
   locked: boolean;
+  /**
+   * Put away in the shopper's inventory: kept in the plan but not in the room.
+   * Takes no floor space, seats nobody, and a stored purchase isn't in the cart.
+   * Missing means false.
+   */
+  stored?: boolean;
 }
 
 export interface RoomPlan {
@@ -125,6 +131,10 @@ export type PlanChange =
   | { kind: "replace"; itemId: string; productId: string }
   | { kind: "move"; itemId: string; position: Vector3Meters; rotationY: number }
   | { kind: "lock"; itemId: string; locked: boolean }
+  /** Put a piece away in inventory. */
+  | { kind: "store"; itemId: string }
+  /** Bring a stored piece back into the room at a pose. */
+  | { kind: "take_out"; itemId: string; position: Vector3Meters; rotationY: number }
   /** Add researched products to the plan's catalog. Changes no furniture. */
   | { kind: "add_products"; products: ProductCandidate[]; evidence: Evidence[] }
   | { kind: "set_constraints"; constraints: Partial<RoomPlan["constraints"]> };

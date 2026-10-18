@@ -11,7 +11,8 @@ export function cartOf(plan: RoomPlan): Cart {
   const byProduct = new Map<string, CartLine & { merchant: string }>();
   const unpriced: string[] = [];
   for (const item of plan.items) {
-    if (item.origin !== "proposed_purchase" || !item.productId) continue;
+    // a purchase put away in inventory isn't being bought
+    if (item.origin !== "proposed_purchase" || !item.productId || item.stored) continue;
     const product = plan.products.find((p) => p.id === item.productId);
     if (!product) continue;
     if (!product.price) unpriced.push(product.id);

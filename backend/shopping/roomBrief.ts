@@ -115,10 +115,10 @@ export function shoppingBrief(
   const otherMinor = cost.knownSubtotal.amountMinor - replacingSpend;
   const capMinor = plan.constraints.budget?.amountMinor ?? null;
 
-  const seatsNow = plan.items.reduce((n, i) => n + (i.seats ?? 0), 0);
+  const seatsNow = plan.items.filter((i) => !i.stored).reduce((n, i) => n + (i.seats ?? 0), 0);
   const seatsRequired = Math.max(0, (plan.constraints.minimumSeats ?? 0) - (seatsNow - (replacing?.seats ?? 0)));
 
-  const others = plan.items.filter((i) => i.id !== replacing?.id);
+  const others = plan.items.filter((i) => i.id !== replacing?.id && !i.stored);
   const brief: Omit<ShoppingBrief, "text"> = {
     projectId: plan.projectId,
     planRevision: plan.revision,

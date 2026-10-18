@@ -124,7 +124,7 @@ export function voiceClientTools(opts: {
       const lines = plan.items.map((i) => {
         const price = plan.products.find((p) => p.id === i.productId)?.price;
         const tag = i.origin === "existing_owned" ? "owned" : price ? dollars(price.amountMinor) : "price unknown";
-        return `${i.label} [id ${i.id}] (${tag}${i.locked ? ", locked" : ""}${i.seats ? `, seats ${i.seats}` : ""}${i.id === selected ? ", selected" : ""})`;
+        return `${i.label} [id ${i.id}] (${tag}${i.stored ? ", put away in inventory" : ""}${i.locked ? ", locked" : ""}${i.seats ? `, seats ${i.seats}` : ""}${i.id === selected ? ", selected" : ""})`;
       });
       const budget = plan.constraints.budget;
       return `Items: ${lines.join("; ")}. New purchases total ${dollars(cost.knownSubtotal.amountMinor)}${
@@ -216,6 +216,27 @@ export function voiceClientTools(opts: {
         return `Not moved: ${res.validations.filter((v) => v.status === "fail").map((v) => v.message).join(" ")}`;
       } catch (e) {
         return `Not moved: ${(e as Error).message}`;
+      }
+    },
+
+    put_away: async ({ item_id, unlock }: { item_id: string; unlock?: boolean }) => {
+      try {
+        const res = await post<ApplyResult | { ok: false; reason: "locked"; message: string }>(`${base}/items/${encodeURIComponent(item_id)}/store`, { unlock: !!unlock });
+        if (res.ok) {
+          opts.onPlan?.(res.plan);
+          opts.onCheckout?.();
+          const item = res.plan.items.find((i) => i.id === item_id);
+          const seats = res.plan.items.filter((i) => !i.stored).reduce((n, i) => n + (i.seats ?? 0), 0);
+          const min = res.plan.constraints.minimumSeats;
+          return `ok: ${item?.label ?? "it"} is put away in inventory${item?.origin === "proposed_purchase" ? " and out of the cart" : ""}.${
+            min !== null && seats < min ? ` The room now seats ${seats}, under the ${min} wanted.` : ""
+          }`;
+        }
+        if (res.reason === "locked") return `Not put away: ${res.message} Ask the shopper if that's okay, then call again with unlock true.`;
+        if (res.reason === "stale_revision") return "Not put away: the room just changed. Try again.";
+        return `Not put away: ${res.validations.filter((v) => v.status === "fail").map((v) => v.message).join(" ")}`;
+      } catch (e) {
+        return `Not put away: ${(e as Error).message}`;
       }
     },
 
