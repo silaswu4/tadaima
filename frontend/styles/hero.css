@@ -20,8 +20,9 @@
 .tadaima-hero .hero-side {
   position: absolute;
   z-index: 3;
-  top: 18vh;
+  top: 50%;
   left: var(--hero-left);
+  transform: translateY(-50%);
   display: flex;
   flex-direction: column;
   gap: 28px;
@@ -64,18 +65,9 @@
   letter-spacing: -0.02em;
   transition: transform 0.45s var(--hero-ease);
 }
-.tadaima-hero .hero-row__arrow {
-  font-size: 20px;
-  opacity: 0;
-  transform: translateX(-6px);
-  transition: opacity 0.3s ease, transform 0.45s var(--hero-ease);
-}
 .tadaima-hero .hero-row__inner:hover .hero-row__label,
 .tadaima-hero .hero-row__inner:focus-visible .hero-row__label,
 .tadaima-hero .hero-row__inner[aria-expanded="true"] .hero-row__label { transform: translateX(6px); }
-.tadaima-hero .hero-row__inner:hover .hero-row__arrow,
-.tadaima-hero .hero-row__inner:focus-visible .hero-row__arrow,
-.tadaima-hero .hero-row__inner[aria-expanded="true"] .hero-row__arrow { opacity: 1; transform: none; }
 
 /* typing an address: the row becomes an underlined field */
 .tadaima-hero .hero-row__inner.is-form { cursor: text; }
@@ -146,11 +138,11 @@
 }
 .tadaima-hero .hero-word__line { display: block; overflow: hidden; padding-top: 0.04em; }
 .tadaima-hero .hero-word__char { display: inline-block; }
-/* sized to the lowercase height and sat on the baseline */
+/* as tall as the ascenders, sat on the baseline, tucked close to the word */
 .tadaima-hero .hero-word__mark {
-  width: 0.5em;
-  height: 0.5em;
-  margin-right: 0.14em;
+  width: 0.72em;
+  height: 0.72em;
+  margin-right: 0.03em;
   background: currentColor;
   -webkit-mask: center / contain no-repeat;
   mask: center / contain no-repeat;
@@ -217,7 +209,6 @@
 /* ---------- phone ---------- */
 @media (max-width: 809px) {
   .tadaima-hero { --hero-left: 16px; }
-  .tadaima-hero .hero-side { top: 13vh; }
   .tadaima-hero .hero-list { gap: 30px; }
   .tadaima-hero .hero-row__label { font-size: 22px; line-height: 26px; }
   .tadaima-hero .hero-word { font-size: 21vw; }
@@ -225,6 +216,5 @@
 
 @media (prefers-reduced-motion: reduce) {
   .tadaima-hero .hero-row__label,
-  .tadaima-hero .hero-row__arrow { transition: none; }
-  .tadaima-hero .hero-loader__frame { width: 236px; height: 152px; }
+    .tadaima-hero .hero-loader__frame { width: 236px; height: 152px; }
 }

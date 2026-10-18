@@ -258,9 +258,6 @@ function RowText({ row }: { row: Row }) {
       <span className="hero-row__text">
         <span className="hero-row__label">
           {row.label}
-          <span className="hero-row__arrow" aria-hidden="true">
-            →
-          </span>
         </span>
       </span>
     </>
