@@ -2,7 +2,7 @@
 import type { ApplyResult, RoomPlan } from "./contracts";
 import { ApiError } from "./client";
 
-export type RoomCapabilities = { liveSearch: boolean; testPayments: boolean; persistence: "memory" | "redis" };
+export type RoomCapabilities = { liveSearch: boolean; testPayments: boolean; persistence: "memory" | "redis"; planning?: boolean; voice?: boolean };
 export type RegisteredRoom = { plan: RoomPlan; capabilities: RoomCapabilities; resumed: boolean };
 
 async function post<T>(path: string, body: unknown, signal?: AbortSignal): Promise<T> {

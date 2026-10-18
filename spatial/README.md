@@ -212,3 +212,10 @@ Desktop uses one 2048px PCF shadow map. Mobile and immersive VR use one 1024px m
 The spatial suite includes lighting-budget, XR profile restore, shadow-frustum and cache invalidation regressions. Physical Quest frame rate still needs device verification. API references: [Three.js shadow caching](https://threejs.org/docs/pages/LightShadow.html), [WebXR resolution and foveation](https://threejs.org/docs/pages/WebXRManager.html).
 
 Semantic `WindowGlass` panes use inexpensive alpha PBR with no transmission render pass. The glass is excluded from opaque lightmaps and depth/shadow writing; actual modeled blinds remain opaque. A transparent pane does not supply an exterior reconstruction: the current backdrop remains a presentation environment.
+
+
+## In-room assistant
+
+`RoomAssistant.tsx` opens from **Ask Tadaima** in the canonical selected-room experience. It connects search, reviewed planner proposals and lazy `RoomAgentVoice.tsx` controls to the same room session, mutation queue and source-preserving persistence as manual edits. Browser helpers in `rooms/agent-operations.ts` reject foreign or stale proposals and reuse the backend's non-worsening validation policy for existing scan issues. `rooms/agent-tools.ts` binds voice to current context and screen review; voice cannot unlock furniture, approve proposals, confirm purchase placements or execute payments.
+
+Use the existing namespaced plain `.css` pattern for spatial components. The current custom Turbopack/Tailwind loader emits empty CSS-module mappings for these lazy components: a successful build can still produce DOM with missing classes. Verify actual browser styles, dialog scrolling and mobile layout, rather than treating type/build success as visual acceptance. See [shopping integration](../docs/shopping-integration.md) for provider setup and limits.
