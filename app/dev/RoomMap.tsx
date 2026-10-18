@@ -1,11 +1,11 @@
 "use client";
 
-import type { PlacedItem, RoomPlan } from "@/backend/contracts";
+import type { FloorSpot, PlacedItem, RoomPlan, Vector3Meters } from "@/backend/contracts";
 
 type Pt = readonly [number, number];
 
 /** Footprint corners on the floor. three.js rotation about +Y: x' = x cos + z sin, z' = -x sin + z cos. */
-export function footprint(item: PlacedItem): Pt[] {
+export function footprint(item: Pick<PlacedItem, "dimensions" | "position" | "rotationY">): Pt[] {
   const [w, , d] = item.dimensions ?? [0.3, 0, 0.3];
   const [cx, , cz] = item.position;
   const c = Math.cos(item.rotationY);
@@ -18,6 +18,16 @@ export function footprint(item: PlacedItem): Pt[] {
       [-w / 2, d / 2],
     ] as const
   ).map(([x, z]) => [cx + x * c + z * s, cz - x * s + z * c] as const);
+}
+
+function inside([x, z]: Pt, poly: readonly Pt[]) {
+  let hit = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [xi, zi] = poly[i];
+    const [xj, zj] = poly[j];
+    if (zi > z !== zj > z && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) hit = !hit;
+  }
+  return hit;
 }
 
 const pts = (p: Pt[]) => p.map(([x, z]) => `${x.toFixed(3)},${z.toFixed(3)}`).join(" ");
@@ -40,6 +50,9 @@ export function RoomMap({
   failing,
   selectedId,
   onSelect,
+  spot,
+  onSpot,
+  ghost,
 }: {
   plan: RoomPlan;
   /** When showing a proposal: the current plan, so changed/removed items can be marked. */
@@ -47,6 +60,12 @@ export function RoomMap({
   failing: Set<string>;
   selectedId: string | null;
   onSelect: (id: string | null) => void;
+  /** Picked floor point, drawn as a marker. */
+  spot?: FloorSpot | null;
+  /** Clicking empty floor picks a spot. */
+  onSpot?: (spot: FloorSpot) => void;
+  /** A product previewed where it would go, not yet in the plan. */
+  ghost?: { label: string; dimensions: Vector3Meters; position: Vector3Meters; rotationY: number } | null;
 }) {
   const g = plan.geometry;
   const all: Pt[] = [...g.rooms.flatMap((r) => r.floorPolygon), ...g.walls.flatMap((w) => [w.start, w.end])];
@@ -68,7 +87,15 @@ export function RoomMap({
     <svg
       viewBox={`${minX} ${minZ} ${w} ${h}`}
       className="block h-auto w-full select-none"
-      onClick={() => onSelect(null)}
+      onClick={(e) => {
+        const ctm = e.currentTarget.getScreenCTM();
+        // screen to world: the viewBox is in meters, x right, z down the page
+        const p = ctm && new DOMPoint(e.clientX, e.clientY).matrixTransform(ctm.inverse());
+        const onFloor = p && g.rooms.some((r) => inside([p.x, p.y], r.floorPolygon));
+        // floor clicks pick a spot and keep the selection (so "move selected here" works); outside the room deselects
+        if (!onSpot || !p || !onFloor) return onSelect(null);
+        onSpot({ position: [Math.round(p.x * 100) / 100, 0, Math.round(p.y * 100) / 100] });
+      }}
       role="img"
       aria-label="Top-down room map"
     >
@@ -76,6 +103,9 @@ export function RoomMap({
         <pattern id="grid" width="0.5" height="0.5" patternUnits="userSpaceOnUse">
           <path d="M 0.5 0 L 0 0 0 0.5" fill="none" stroke="#e7e7e4" strokeWidth="0.008" />
         </pattern>
+        <marker id="front" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="4" markerHeight="4" orient="auto-start-reverse">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="#2563eb" />
+        </marker>
         <pattern id="hatch" width="0.08" height="0.08" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
           <line x1="0" y1="0" x2="0" y2="0.08" stroke="#9ca3af" strokeWidth="0.012" />
         </pattern>
@@ -216,7 +246,36 @@ export function RoomMap({
           </g>
         );
       })}
+      {ghost && <Ghost ghost={ghost} />}
+
+      {spot && (
+        <g pointerEvents="none" transform={`translate(${spot.position[0]} ${spot.position[2]})`}>
+          <circle r="0.09" fill="rgba(37,99,235,0.12)" stroke="#2563eb" strokeWidth="0.015" />
+          <line x1="-0.15" x2="0.15" stroke="#2563eb" strokeWidth="0.012" />
+          <line y1="-0.15" y2="0.15" stroke="#2563eb" strokeWidth="0.012" />
+        </g>
+      )}
     </svg>
+  );
+}
+
+function Ghost({ ghost }: { ghost: { label: string; dimensions: Vector3Meters; position: Vector3Meters; rotationY: number } }) {
+  const corners = footprint(ghost);
+  const [cx, , cz] = ghost.position;
+  const d = ghost.dimensions[2];
+  // front is local +Z, which rotationY sends to (sin r, cos r)
+  const fx = Math.sin(ghost.rotationY);
+  const fz = Math.cos(ghost.rotationY);
+  const tip = [cx + fx * (d / 2 + 0.14), cz + fz * (d / 2 + 0.14)];
+  const back = [cx + fx * (d / 2 + 0.02), cz + fz * (d / 2 + 0.02)];
+  return (
+    <g pointerEvents="none">
+      <polygon points={pts(corners)} fill="rgba(37,99,235,0.10)" stroke="#2563eb" strokeWidth="0.025" strokeDasharray="0.07 0.045" />
+      <line x1={back[0]} y1={back[1]} x2={tip[0]} y2={tip[1]} stroke="#2563eb" strokeWidth="0.025" markerEnd="url(#front)" />
+      <text x={cx} y={cz} fontSize="0.09" fill="#1d4ed8" textAnchor="middle" dominantBaseline="middle" fontWeight={600}>
+        {short(ghost.label)}
+      </text>
+    </g>
   );
 }
 
