@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { toDataURL } from "qrcode";
 import gsap from "gsap";
 import { useCallback, useLayoutEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type FormEvent } from "react";
@@ -95,14 +94,13 @@ export default function Home() {
   const reveal = useCallback(() => setRevealed(true), []);
   const finishLoading = useCallback(() => setLoaderGone(true), []);
 
-  // The hero sets in as the loader lifts: letters rise out of the floor, then the rows and nav.
+  // The hero sets in as the loader lifts: letters rise out of the floor, then the three ways in.
   useLayoutEffect(() => {
     if (!revealed || !root.current) return;
     if (reduced) return;
     const ctx = gsap.context(() => {
       gsap.fromTo(".hero-word__char", { yPercent: 105 }, { yPercent: 0, duration: 1.15, ease: "power4.out", stagger: 0.05, delay: 0.1 });
-      gsap.fromTo(".hero-row", { y: 10, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: 0.7, ease: "power3.out", stagger: 0.08, delay: 0.45 });
-      gsap.fromTo([".hero-mark", ".hero-nav__link"], { autoAlpha: 0, y: -6 }, { autoAlpha: 1, y: 0, duration: 0.6, ease: "power3.out", stagger: 0.05, delay: 0.35 });
+      gsap.fromTo(".hero-row", { y: 14, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: 0.8, ease: "power3.out", stagger: 0.1, delay: 0.45 });
     }, root);
     return () => ctx.revert();
   }, [revealed, reduced]);
@@ -166,95 +164,83 @@ export default function Home() {
         grain={0.25}
         className="h-full"
       >
-        <header className="hero-top">
-          <Link href="/" className="hero-mark" aria-label="tadaima home">
-            <span className="hero-mark__img" style={markStyle} />
-          </Link>
-          <nav className="hero-nav" aria-label="Main">
-            <Link href="/" className="hero-nav__link n1">
-              Home
-            </Link>
-            <WipeLink href="/rooms" className="hero-nav__link n2">
-              Rooms
-            </WipeLink>
-            <WipeLink href="/capture" className="hero-nav__link n3">
-              Scan
-            </WipeLink>
-            <WipeLink href="/dev" className="hero-nav__link n4">
-              Basket
-            </WipeLink>
-          </nav>
-        </header>
-
-        <ul className="hero-list">
-          {ROWS.map((row, i) => (
-            <li key={row.key} className="hero-row">
-              {row.key === "type" && open === "type" ? (
-                <form className="hero-row__inner is-form" onSubmit={submitAddress}>
-                  <label htmlFor="hero-address" hidden>
-                    Address
-                  </label>
-                  <input
-                    id="hero-address"
-                    ref={addressRef}
-                    name="address"
-                    type="text"
-                    autoComplete="street-address"
-                    maxLength={512}
-                    aria-describedby={addressError ? "hero-address-error" : undefined}
-                    placeholder="580 Gayley Ave, Los Angeles"
-                    value={address}
-                    onChange={(e) => {
-                      setAddress(e.target.value);
-                      setAddressError("");
-                    }}
-                    onKeyDown={(e) => e.key === "Escape" && setOpen(null)}
-                  />
-                  <button type="submit" className="hero-row__go">
-                    [Go]
+        <div className="hero-side">
+          <ul className="hero-list">
+            {ROWS.map((row, i) => (
+              <li key={row.key} className="hero-row">
+                {row.key === "type" && open === "type" ? (
+                  <form className="hero-row__inner is-form" onSubmit={submitAddress}>
+                    <span className="hero-row__index" aria-hidden="true">
+                      {String(i + 1).padStart(2, "0")}
+                    </span>
+                    <span className="hero-row__field">
+                      <label htmlFor="hero-address" hidden>
+                        Address
+                      </label>
+                      <input
+                        id="hero-address"
+                        ref={addressRef}
+                        name="address"
+                        type="text"
+                        autoComplete="street-address"
+                        maxLength={512}
+                        aria-describedby={addressError ? "hero-address-error" : undefined}
+                        placeholder="580 Gayley Ave, Los Angeles"
+                        value={address}
+                        onChange={(e) => {
+                          setAddress(e.target.value);
+                          setAddressError("");
+                        }}
+                        onKeyDown={(e) => e.key === "Escape" && setOpen(null)}
+                      />
+                      <button type="submit" className="hero-row__go">
+                        Go
+                      </button>
+                    </span>
+                  </form>
+                ) : row.key === "demo" ? (
+                  <WipeLink href="/rooms" className="hero-row__inner">
+                    <RowText row={row} index={i + 1} />
+                  </WipeLink>
+                ) : (
+                  <button
+                    type="button"
+                    className="hero-row__inner"
+                    onClick={row.key === "scan" ? showScan : showType}
+                    aria-expanded={row.key === "scan" ? open === "scan" : undefined}
+                  >
+                    <RowText row={row} index={i + 1} />
                   </button>
-                </form>
-              ) : row.key === "demo" ? (
-                <WipeLink href="/rooms" className="hero-row__inner">
-                  <RowText row={row} index={i + 1} />
-                </WipeLink>
-              ) : (
-                <button
-                  type="button"
-                  className="hero-row__inner"
-                  onClick={row.key === "scan" ? showScan : showType}
-                  aria-expanded={row.key === "scan" ? open === "scan" : undefined}
-                >
-                  <RowText row={row} index={i + 1} />
-                </button>
-              )}
-            </li>
-          ))}
-        </ul>
+                )}
+              </li>
+            ))}
+          </ul>
 
-        {addressError ? (
-          <small className="hero-error" id="hero-address-error" role="alert">
-            {addressError}
-          </small>
-        ) : null}
-
-        {open === "scan" && (
-          <div className="hero-qr">
-            {qr ? (
-              <div className="code">
-                {/* data URL, so next/image has nothing to optimize */}
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={qr} alt="QR code that opens the capture page on your phone" />
-              </div>
-            ) : null}
-            <small>
-              Point your phone here, or <a href={captureUrl}>open capture on this device</a>.
+          {addressError ? (
+            <small className="hero-error" id="hero-address-error" role="alert">
+              {addressError}
             </small>
-          </div>
-        )}
+          ) : null}
+
+          {open === "scan" && (
+            <div className="hero-qr">
+              {qr ? (
+                <div className="code">
+                  {/* data URL, so next/image has nothing to optimize */}
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={qr} alt="QR code that opens the capture page on your phone" />
+                </div>
+              ) : null}
+              <small>
+                Point your phone here, or <a href={captureUrl}>open capture on this device</a>.
+              </small>
+            </div>
+          )}
+        </div>
 
         <h1 className="hero-word" aria-label="tadaima">
           <span className="hero-word__line" aria-hidden="true">
+            <span className="hero-word__char hero-word__mark" style={markStyle} />
             {Array.from("tadaima").map((c, i) => (
               <span key={i} className="hero-word__char">
                 {c}
@@ -272,14 +258,18 @@ export default function Home() {
 function RowText({ row, index }: { row: Row; index: number }) {
   return (
     <>
-      <span className="hero-row__label">{row.label}</span>
-      <span className="hero-row__cue" aria-hidden="true">
-        [Open]
-      </span>
       <span className="hero-row__index" aria-hidden="true">
-        [{index}]
+        {String(index).padStart(2, "0")}
       </span>
-      <span className="hero-row__note">{row.note}</span>
+      <span className="hero-row__text">
+        <span className="hero-row__label">
+          {row.label}
+          <span className="hero-row__arrow" aria-hidden="true">
+            →
+          </span>
+        </span>
+        <span className="hero-row__note">{row.note}</span>
+      </span>
     </>
   );
 }
