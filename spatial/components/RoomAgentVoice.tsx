@@ -5,10 +5,16 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { VoiceBeam } from "voice-glow";
 import "./RoomVoice.css";
 
+/** Shared by the flat-screen pill and the immersive Agent tab. No second session. */
+export type RoomVoiceControls = { toggleListening(): void; stop(): void };
+export type RoomVoiceState = { status: string; listening: boolean; connected: boolean; caption?: string; error?: string };
+
 export type RoomAgentVoiceProps = {
   projectId: string;
   getTools(): Record<string, (params: Record<string, unknown>) => Promise<string>>;
   disabled?: boolean;
+  onControls?(controls: RoomVoiceControls | null): void;
+  onStateChange?(state: RoomVoiceState): void;
   /** Something the agent should know and say (a finished live search). Sent once per id. */
   update?: { id: string; text: string };
 };
@@ -33,7 +39,7 @@ const editable = (target: EventTarget | null) =>
  * nothing can be clicked. The session connects on the first press and stays
  * up, so later presses are instant.
  */
-function VoiceSession({ getTools, disabled = false, update }: RoomAgentVoiceProps) {
+function VoiceSession({ getTools, disabled = false, update, onControls, onStateChange }: RoomAgentVoiceProps) {
   const [open, setOpen] = useState(false); // mic open: held or latched
   const [latched, setLatched] = useState(false);
   const [error, setError] = useState("");
@@ -45,6 +51,8 @@ function VoiceSession({ getTools, disabled = false, update }: RoomAgentVoiceProp
   const pressedAt = useRef(0);
   const lastUse = useRef(0);
   const connecting = useRef(false);
+  // Stop/unmount invalidates a pending token request before it can reopen the mic.
+  const connectionAttempt = useRef(0);
   const captionTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const sent = useRef<string | undefined>(undefined);
   useLayoutEffect(() => {
@@ -58,12 +66,14 @@ function VoiceSession({ getTools, disabled = false, update }: RoomAgentVoiceProp
   async function connect() {
     if (connecting.current || convo.current.status === "connected" || convo.current.status === "connecting") return;
     connecting.current = true;
+    const attempt = ++connectionAttempt.current;
     setError("");
     try {
       if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) throw new Error("Voice needs HTTPS or localhost and a microphone.");
       const res = await fetch("/api/voice/token", { credentials: "same-origin", cache: "no-store" });
       const body = (await res.json().catch(() => null)) as { token?: string; error?: string } | null;
       if (!res.ok || !body?.token) throw new Error(body?.error ?? "Voice isn't available right now.");
+      if (attempt !== connectionAttempt.current || latest.current.disabled) return;
       const tools = latest.current.getTools();
       const clientTools = Object.fromEntries(
         Object.entries(tools).map(([name, tool]) => [
@@ -79,7 +89,7 @@ function VoiceSession({ getTools, disabled = false, update }: RoomAgentVoiceProp
           },
         ]),
       );
-      convo.current.startSession({
+      await convo.current.startSession({
         conversationToken: body.token,
         connectionType: "webrtc",
         clientTools,
@@ -92,7 +102,11 @@ function VoiceSession({ getTools, disabled = false, update }: RoomAgentVoiceProp
           setCaption(text);
           captionTimer.current = setTimeout(() => setCaption(""), 9000);
         },
-        onError: (message) => setError(/permission|notallowed|denied/i.test(message) ? "Microphone blocked. Allow it in the browser to talk." : "Voice was interrupted. Press again to reconnect."),
+        onError: (message) => {
+          setOpen(false);
+          setLatched(false);
+          setError(/permission|notallowed|denied/i.test(message) ? "Microphone blocked. Allow it in the browser to talk." : "Voice was interrupted. Press again to reconnect.");
+        },
         onDisconnect: (details) => {
           setOpen(false);
           setLatched(false);
@@ -102,12 +116,35 @@ function VoiceSession({ getTools, disabled = false, update }: RoomAgentVoiceProp
       });
       lastUse.current = Date.now();
     } catch (e) {
+      if (attempt !== connectionAttempt.current) return;
       setError((e as Error).message);
       setOpen(false);
       setLatched(false);
     } finally {
-      connecting.current = false;
+      if (attempt === connectionAttempt.current) connecting.current = false;
     }
+  }
+
+  function stop() {
+    ++connectionAttempt.current;
+    connecting.current = false;
+    pressedAt.current = 0;
+    setOpen(false);
+    setLatched(false);
+    setWorking(0);
+    void convo.current.endSession();
+  }
+
+  // A ray-trigger click is a deliberate tap, without synthetic keyboard/DOM events.
+  // Closing the mic sends the utterance; Stop also releases the WebRTC session.
+  function toggleListening() {
+    if (latest.current.disabled) return;
+    const next = !open;
+    pressedAt.current = 0;
+    lastUse.current = Date.now();
+    setLatched(next);
+    setOpen(next);
+    if (next) { setError(""); void connect(); }
   }
 
   function press() {
@@ -134,6 +171,13 @@ function VoiceSession({ getTools, disabled = false, update }: RoomAgentVoiceProp
       setOpen(false);
     }
   }
+
+  const controls = useRef<RoomVoiceControls>({ toggleListening, stop });
+  useLayoutEffect(() => { controls.current = { toggleListening, stop }; });
+  useEffect(() => {
+    onControls?.({ toggleListening: () => controls.current.toggleListening(), stop: () => controls.current.stop() });
+    return () => onControls?.(null);
+  }, [onControls]);
 
   // hold Space anywhere in the room (not while typing)
   const pressRef = useRef(press);
@@ -181,9 +225,13 @@ function VoiceSession({ getTools, disabled = false, update }: RoomAgentVoiceProp
   }, []);
 
   useEffect(() => {
-    if (disabled && convo.current.status === "connected") convo.current.endSession();
+    if (disabled) controls.current.stop();
   }, [disabled]);
-  useEffect(() => () => convo.current.endSession(), []);
+  useEffect(() => () => {
+    ++connectionAttempt.current;
+    clearTimeout(captionTimer.current);
+    void convo.current.endSession();
+  }, []);
 
   // tell the agent about a finished live search, once
   useEffect(() => {
@@ -213,6 +261,10 @@ function VoiceSession({ getTools, disabled = false, update }: RoomAgentVoiceProp
   };
 
   const label = pending || (open && !live) ? "Connecting" : open ? "Listening" : working ? "Working" : conversation.isSpeaking ? "Speaking" : "Talk";
+
+  useEffect(() => {
+    onStateChange?.({ status: label, listening: open, connected: live, caption: caption || undefined, error: error || undefined });
+  }, [onStateChange, label, open, live, caption, error]);
 
   return (
     <div className="room-voice" data-tour="talk">

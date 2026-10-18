@@ -3,7 +3,7 @@ import type { WorkspaceXRShopping, WorkspaceXRLocomotion } from "./workspace-xr"
 
 export const XR_MENU_WIDTH = 1440;
 export const XR_MENU_HEIGHT = 1000;
-export type XRMenuTab = "shop" | "room" | "controls";
+export type XRMenuTab = "shop" | "room" | "agent" | "controls";
 export type XRMenuTarget = {
   id: string; x: number; y: number; width: number; height: number; disabled: boolean;
 };
@@ -187,6 +187,24 @@ export function createXRMenu(callbacks: XRMenuCallbacks) {
       "Aim your controller at furniture and pull the trigger. Your selection appears here.", 104, 714, 1224, 32);
   }
 
+  function agent() {
+    const voice = state.agent;
+    text("Your room agent", 64, 286, 42, C.ink, 1240, 500, true);
+    box(64, 332, 1312, 138, C.well);
+    text(voice?.available ? voice.status || "Ready to talk" : "Voice unavailable on this server", 104, 378, 38, C.ink, 1210, 500);
+    text(voice?.listening ? "Microphone on · tap Send to agent when you’re done" :
+      voice?.available ? "Uses your headset microphone. Tap Talk to start." : "You can still find and place furniture in Shop.", 104, 434, 30, C.muted, 1210);
+    // Microphone controls remain reachable while an agent tool edits the room.
+    const toggle = action("voice-toggle"), stop = action("voice-stop");
+    button("action:voice-toggle", voice?.listening ? "Send to agent" : "Talk to agent", 64, 502, 640, 100,
+      { primary: true, disabled: !voice?.available || !toggle || !!toggle.disabled });
+    button("action:voice-stop", "End conversation", 736, 502, 640, 100,
+      { disabled: !stop || !!stop.disabled });
+    box(64, 636, 1312, 162, C.white, C.line);
+    paragraph(voice?.error || voice?.caption || (voice?.available ? "Try: ‘Find a chair for this room under $200.’ The agent uses this room’s layout and furniture." :
+      "The room service needs voice credentials before you can speak with the agent here."), 104, 676, 1224, 30, voice?.error ? C.danger : C.muted, 3);
+  }
+
   function controls() {
     text("Your controls", 64, 286, 42, C.ink, 1240, 500, true);
     box(64, 332, 1312, 148, C.well);
@@ -226,10 +244,10 @@ export function createXRMenu(callbacks: XRMenuCallbacks) {
       text(state.basketLabel, 866, 84, 32, C.ink, 336, 500);
     }
     button("close", "×", 1284, 40, 92, 92);
-    (["shop", "room", "controls"] as const).forEach((item, index) => {
-      button(`tab-${item}`, item[0].toUpperCase() + item.slice(1), 64 + index * 444, 154, 424, 92, { selected: tab === item });
+    (["shop", "room", "agent", "controls"] as const).forEach((item, index) => {
+      button(`tab-${item}`, item[0].toUpperCase() + item.slice(1), 64 + index * 332, 154, 316, 92, { selected: tab === item });
     });
-    if (tab === "shop") shop(); else if (tab === "room") room(); else controls();
+    if (tab === "shop") shop(); else if (tab === "room") room(); else if (tab === "agent") agent(); else controls();
     footer();
     texture.needsUpdate = true;
   }
@@ -246,8 +264,8 @@ export function createXRMenu(callbacks: XRMenuCallbacks) {
       action("cancel-preview")?.disabled] : [state.status, state.busy];
     const body = tab === "shop" ? [state.offers, state.pendingOfferId, state.busy,
       ["search-chair", "search-rug", "search-lamp"].map(actionDisabled)] : tab === "room" ?
-      [state.selectedItemLabel, state.selectedItemLocked, actionDisabled("rotate-selected"), actionDisabled("store-selected")] :
-      [locomotion, state.busy];
+      [state.selectedItemLabel, state.selectedItemLocked, actionDisabled("rotate-selected"), actionDisabled("store-selected")] : tab === "agent" ?
+      [state.agent, action("voice-toggle")?.disabled, action("voice-stop")?.disabled] : [locomotion, state.busy];
     return JSON.stringify([tab, state.basketLabel, body, footerState]);
   }
 
@@ -270,10 +288,11 @@ export function createXRMenu(callbacks: XRMenuCallbacks) {
       const pendingOfferId = offers.some((offer) => offer.id === input.pendingOfferId) ? input.pendingOfferId : null;
       const projected: MenuState = {
         offers,
-        actions: (input.actions ?? []).filter((item) => ["search-chair", "search-rug", "search-lamp", "rotate-selected", "store-selected", "cancel-preview"].includes(item.id))
+        actions: (input.actions ?? []).filter((item) => ["search-chair", "search-rug", "search-lamp", "rotate-selected", "store-selected", "cancel-preview", "voice-toggle", "voice-stop"].includes(item.id))
           .map((item) => ({ id: item.id, label: "", disabled: !!item.disabled })),
         selectedItemLabel: clean(input.selectedItemLabel, 160), status: clean(input.status),
         pendingOfferId, canConfirm: !!pendingOfferId && !!input.canConfirm,
+        agent: input.agent ? { available: !!input.agent.available, status: clean(input.agent.status, 120), caption: clean(input.agent.caption, 600), listening: !!input.agent.listening, connected: !!input.agent.connected, error: clean(input.agent.error, 300) } : undefined,
         basketLabel: clean(input.basketLabel, 80), selectedItemLocked: !!input.selectedItemLocked, busy: !!input.busy,
       };
       const before = visibleKey();

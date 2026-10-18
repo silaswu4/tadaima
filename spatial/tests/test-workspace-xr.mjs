@@ -9,10 +9,10 @@ const canvasContext = new Proxy({ clearRect() {}, fillRect() {}, fillText(text) 
 globalThis.document = { body: {}, createElement: () => ({ width: 0, height: 0, getContext: () => canvasContext }) };
 globalThis.getComputedStyle = () => ({ fontFamily: "monospace" });
 
-function environment({ failSetSession = false } = {}) {
+function environment({ failSetSession = false, realTracking = false } = {}) {
   const controllers = [new THREE.Group(), new THREE.Group()];
   const events = new THREE.EventDispatcher();
-  const head = new THREE.PerspectiveCamera();
+  const head = realTracking ? new THREE.ArrayCamera() : new THREE.PerspectiveCamera();
   head.position.set(.25, 1.72, -.4);
   let session, cameraUpdates = 0;
   const system = {
@@ -33,8 +33,18 @@ function environment({ failSetSession = false } = {}) {
     updateCamera(camera) {
       cameraUpdates++;
       if (camera.parent?.name === "workspace-xr-rig") {
-        head.position.copy(new THREE.Vector3(.25, 1.72, -.4).applyMatrix4(camera.parent.matrixWorld));
-        head.updateMatrixWorld();
+        if (realTracking) {
+          // Real WebXR keeps an unparented ArrayCamera's local tracked pose,
+          // while updateCamera writes its rig-adjusted world matrix directly.
+          // Calling getWorldPosition/getWorldQuaternion here would erase that
+          // distinction and mask an XR-only rig/menu transform regression.
+          head.updateMatrix();
+          head.matrixWorld.multiplyMatrices(camera.parent.matrixWorld, head.matrix);
+          head.matrixWorldInverse.copy(head.matrixWorld).invert();
+        } else {
+          head.position.copy(new THREE.Vector3(.25, 1.72, -.4).applyMatrix4(camera.parent.matrixWorld));
+          head.updateMatrixWorld();
+        }
       }
     },
     async setSession() { if (failSetSession) throw new Error("WebGL session failed"); },
@@ -526,4 +536,130 @@ test("headset actions are bounded, disabled buttons block click-through, and mov
   assert.ok(drawnText.some((text) => text === "Use teleport"));
   pointMenu(env.controllers[1], xr, env.options.scene, "exit");
   await Promise.resolve(); assert.equal(xr.active, false); xr.dispose();
+});
+
+
+function trackedWorldPosition(head) {
+  return new THREE.Vector3().setFromMatrixPosition(head.matrixWorld);
+}
+
+function assertMenuFollowsHead(env) {
+  const hud = env.options.scene.getObjectByName("workspace-xr-shopping");
+  const head = trackedWorldPosition(env.head);
+  assert.ok(Math.abs(Math.hypot(hud.position.x - head.x, hud.position.z - head.z) - 1.25) < 1e-8,
+    "menu remains 1.25m from the rig-adjusted tracked head");
+  assert.ok(Math.abs(hud.position.y - head.y + .12) < 1e-8, "menu follows tracked eye height");
+  assert.ok(Math.abs(hud.rotation.x) < 1e-8 && Math.abs(hud.rotation.z) < 1e-8, "head pitch never tilts menu");
+  return hud;
+}
+
+test("real ArrayCamera local tracking stays distinct from world pose through spawn, physical motion and walking", async () => {
+  const env = environment({ realTracking: true }); delete env.options.locomotion;
+  const localStart = env.head.position.clone();
+  const xr = createWorkspaceXR(env.options); await xr.enter(); xr.update();
+  const spawnHead = trackedWorldPosition(env.head);
+  assert.ok(spawnHead.distanceTo(new THREE.Vector3(1, 1.72, 2)) < 1e-8);
+  assert.ok(env.head.position.equals(localStart), "XR local position is not rewritten into world coordinates");
+  const hud = assertMenuFollowsHead(env), beforeMenu = hud.position.clone();
+  env.head.position.add(new THREE.Vector3(.22, -.08, -.12));
+  xr.update(.05);
+  assert.ok(hud.position.clone().sub(beforeMenu).distanceTo(new THREE.Vector3(.22, -.08, -.12)) < 1e-8,
+    "menu follows physical tracking translation in the same frame");
+  assertMenuFollowsHead(env);
+  const beforeWalk = trackedWorldPosition(env.head), menuBeforeWalk = hud.position.clone();
+  env.controllers[0].dispatchEvent({ type: "connected", data: { handedness: "left", gamepad: { axes: [0, 0, 0, -1] } } });
+  xr.update(.05);
+  const afterWalk = trackedWorldPosition(env.head);
+  assert.ok(afterWalk.distanceTo(beforeWalk.clone().add(new THREE.Vector3(0, 0, -.065))) < 1e-8);
+  assert.ok(hud.position.clone().sub(menuBeforeWalk).distanceTo(afterWalk.clone().sub(beforeWalk)) < 1e-8);
+  assertMenuFollowsHead(env); xr.dispose();
+});
+
+test("real tracked yaw follows outside the menu deadzone while small turns and pitch preserve aim", async () => {
+  const env = environment({ realTracking: true });
+  const xr = createWorkspaceXR(env.options); await xr.enter(); xr.update();
+  const hud = assertMenuFollowsHead(env), initialPosition = hud.position.clone(), initialRotation = hud.quaternion.clone();
+  env.head.quaternion.setFromEuler(new THREE.Euler(.35, .06, 0, "YXZ"));
+  xr.update(.05);
+  assert.ok(hud.position.distanceTo(initialPosition) < 1e-8, "small glance does not make targets chase the pointer");
+  assert.ok(hud.quaternion.angleTo(initialRotation) < 1e-8);
+  env.head.quaternion.setFromEuler(new THREE.Euler(.35, .8, 0, "YXZ"));
+  for (let frame = 0; frame < 120; frame++) xr.update(1 / 72);
+  assert.ok(hud.position.distanceTo(initialPosition) > .25, "larger turn brings menu around automatically");
+  assertMenuFollowsHead(env);
+  const offset = hud.position.clone().sub(trackedWorldPosition(env.head)); offset.y = 0; offset.normalize();
+  const forward = new THREE.Vector3(0, 0, -1).transformDirection(env.head.matrixWorld); forward.y = 0; forward.normalize();
+  assert.ok(offset.angleTo(forward) < .25, "menu settles within the documented yaw deadzone");
+  xr.dispose();
+});
+
+test("real XR walking and snap-turn preserve head pivot and immediately recenter the following menu", async () => {
+  const env = environment({ realTracking: true }); delete env.options.locomotion;
+  const xr = createWorkspaceXR(env.options); await xr.enter(); xr.update();
+  env.controllers[0].dispatchEvent({ type: "connected", data: { handedness: "left", gamepad: { axes: [0, 0, 0, -1] } } });
+  env.controllers[1].dispatchEvent({ type: "connected", data: { handedness: "right", gamepad: { axes: [0, 0, 1, 0] } } });
+  const before = trackedWorldPosition(env.head); xr.update(.05);
+  const after = trackedWorldPosition(env.head);
+  assert.ok(after.distanceTo(before.clone().add(new THREE.Vector3(0, 0, -.065))) < 1e-8, "snap pivots around the moved head");
+  const hud = assertMenuFollowsHead(env), offset = hud.position.clone().sub(after); offset.y = 0; offset.normalize();
+  const forward = new THREE.Vector3(0, 0, -1).transformDirection(env.head.matrixWorld); forward.y = 0; forward.normalize();
+  assert.ok(offset.angleTo(forward) < 1e-8, "snap turn recenters menu immediately rather than waiting for yaw damping");
+  xr.dispose();
+});
+
+test("real XR teleport release moves the menu with the wearer in the same frame", async () => {
+  const env = environment({ realTracking: true });
+  const xr = createWorkspaceXR(env.options); await xr.enter(); xr.update();
+  const controller = env.controllers[0], source = { handedness: "left", gamepad: { axes: [0, 0, 0, -1] } };
+  controller.position.set(0, 1, 0); controller.rotation.x = -Math.PI / 4;
+  controller.dispatchEvent({ type: "connected", data: source });
+  const before = trackedWorldPosition(env.head); xr.update(.05);
+  assert.equal(env.options.scene.getObjectByName("workspace-xr-teleport-target").visible, true);
+  source.gamepad.axes[3] = 0; xr.update(.05);
+  assert.ok(trackedWorldPosition(env.head).distanceTo(before) > .1);
+  assertMenuFollowsHead(env); xr.dispose();
+});
+
+test("pitched tracked controller beam, menu cursor and activated target share the exact world hit", async () => {
+  const env = environment({ realTracking: true }), previews = [];
+  env.options.onPreviewOffer = (id) => previews.push(id);
+  const xr = createWorkspaceXR(env.options);
+  xr.setShoppingState({ offers: [{ id: "sku:pitch-test", label: "Measured chair" }] });
+  await xr.enter(); xr.update();
+  const controller = env.controllers[1];
+  controller.dispatchEvent({ type: "connected", data: { handedness: "right", gamepad: { axes: [0, 0, 0, 0] } } });
+  const rig = env.options.scene.getObjectByName("workspace-xr-rig");
+  snapTurnXR(rig, trackedWorldPosition(env.head), Math.PI / 5);
+  for (let frame = 0; frame < 120; frame++) xr.update(1 / 72);
+  const menu = env.options.scene.getObjectByName("workspace-xr-menu");
+  const target = xr.menuTargets.find((item) => item.id === "preview:sku:pitch-test");
+  assert.ok(target);
+  menu.updateWorldMatrix(true, false);
+  const targetLocal = new THREE.Vector3(((target.x + target.width / 2) / XR_MENU_WIDTH - .5) * 1.04,
+    (.5 - (target.y + target.height / 2) / XR_MENU_HEIGHT) * 1.04 * XR_MENU_HEIGHT / XR_MENU_WIDTH, 0);
+  const expectedHit = menu.localToWorld(targetLocal.clone());
+  const origin = menu.localToWorld(targetLocal.clone().add(new THREE.Vector3(.24, -.2, .55)));
+  const trackedWorld = new THREE.Matrix4().lookAt(origin, expectedHit, new THREE.Vector3(0, 1, 0));
+  trackedWorld.setPosition(origin);
+  controller.matrixAutoUpdate = false;
+  controller.matrix.copy(controller.parent.matrixWorld).invert().multiply(trackedWorld);
+  controller.matrixWorldNeedsUpdate = true;
+  // Do not traverse scene: the next update must use this frame's tracked matrix.
+  xr.update();
+  const line = controller.getObjectByName("workspace-xr-controller-ray"); assert.ok(line, "controller owns the visual laser");
+  line.updateWorldMatrix(true, false);
+  const endpoint = line.localToWorld(new THREE.Vector3(0, 0, -1));
+  const hud = env.options.scene.getObjectByName("workspace-xr-shopping");
+  const dot = hud.children.find((child) => child.geometry?.type === "CircleGeometry" && child.visible);
+  assert.ok(dot, "visible cursor belongs to the current hit");
+  assert.ok(endpoint.distanceTo(expectedHit) < 1e-8, "laser ends on the exact panel hit");
+  assert.ok(dot.getWorldPosition(new THREE.Vector3()).distanceTo(expectedHit) < 1e-8, "cursor matches the laser without panel-normal offset");
+  assert.equal(line.material.depthTest, false); assert.equal(line.renderOrder, 21);
+  assert.equal(line.material.transparent, true, "laser shares the transparent overlay render queue with the menu");
+  assert.equal(dot.material.transparent, true, "cursor is rendered after the transparent menu");
+  controller.dispatchEvent({ type: "select" }); assert.deepEqual(previews, ["sku:pitch-test"]);
+  controller.matrix.makeTranslation(0, 1, 1); controller.matrixWorldNeedsUpdate = true;
+  xr.update();
+  assert.equal(line.scale.z, 6); assert.equal(line.material.depthTest, true); assert.equal(line.renderOrder, 0);
+  assert.equal(dot.visible, false); xr.dispose();
 });

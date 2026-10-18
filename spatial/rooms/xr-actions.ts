@@ -44,3 +44,11 @@ export function roomXRActions(state: XRActionState): XRAction[] {
     { id: "cancel-preview", label: "Cancel preview", detail: "Nothing is added until you confirm placement.", disabled: state.busy || !state.pending },
   ];
 }
+
+/** Voice shares the room session, but its Stop control must survive a busy tool. */
+export function roomXRVoiceActions(state: { available: boolean; listening: boolean; connected: boolean; status: string }): XRAction[] {
+  return [
+    { id: "voice-toggle", label: state.listening ? "Send to agent" : "Talk to agent", detail: "Tap to speak; tap again to send.", disabled: !state.available },
+    { id: "voice-stop", label: "End conversation", detail: "Turn off the microphone and disconnect.", disabled: !state.connected && !state.listening && state.status !== "Connecting" },
+  ];
+}

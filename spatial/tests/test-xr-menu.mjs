@@ -86,3 +86,15 @@ test("invalid/background UVs do not activate anything and menu resources dispose
   menu.dispose(); menu.dispose(); menu.activate(new THREE.Vector2(.5, .5));
   assert.deepEqual(disposed.sort(), [0, 1, 2]); assert.equal(menu.targets.length, 0);
 });
+
+test("Agent tab uses real supplied state and keeps microphone stop controls active during a tool", () => {
+  const { menu, state, calls, uv } = fixture();
+  const voiceActions = [{ id: "voice-toggle", label: "Talk" }, { id: "voice-stop", label: "Stop" }];
+  menu.setState({ ...state, busy: true, agent: { available: true, connected: true, listening: true, status: "Listening", caption: "Agent response" }, actions: [...state.actions, ...voiceActions] }, "walk");
+  menu.activate(uv("tab-agent")); assert.equal(menu.activeTab, "agent");
+  menu.activate(uv("action:voice-toggle")); menu.activate(uv("action:voice-stop"));
+  assert.deepEqual(calls, [["action", "voice-toggle"], ["action", "voice-stop"]]);
+  menu.setState({ ...state, agent: { available: false, connected: false, listening: false, status: "Unavailable" }, actions: [...state.actions, { ...voiceActions[0], disabled: true }, { ...voiceActions[1], disabled: true }] }, "walk");
+  menu.activate(uv("action:voice-toggle")); menu.activate(uv("action:voice-stop"));
+  assert.equal(calls.length, 2); menu.dispose();
+});

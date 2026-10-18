@@ -18,6 +18,7 @@ export type WorkspaceXRShopping = {
   basketLabel?: string;
   selectedItemLocked?: boolean;
   busy?: boolean;
+  agent?: { available: boolean; status: string; caption?: string; listening: boolean; connected: boolean; error?: string };
 };
 export type WorkspaceXROptions = {
   renderer: THREE.WebGLRenderer;
@@ -168,8 +169,9 @@ export function createWorkspaceXR(options: WorkspaceXROptions) {
   // cannot cut holes through the controls. World selection remains occluded.
   menu.mesh.material.depthTest = false;
   hud.add(menu.mesh);
+  let hudYaw = 0, hudTurning = false;
   const menuPointers = controllers.map(() => {
-    const dot = new THREE.Mesh(new THREE.CircleGeometry(.006, 16), new THREE.MeshBasicMaterial({ color: XR_MENU_INK, depthTest: false, depthWrite: false }));
+    const dot = new THREE.Mesh(new THREE.CircleGeometry(.006, 16), new THREE.MeshBasicMaterial({ color: XR_MENU_INK, transparent: true, depthTest: false, depthWrite: false }));
     dot.visible = false; dot.renderOrder = 22; dot.raycast = () => {};
     hud.add(dot); return dot;
   });
@@ -178,18 +180,36 @@ export function createWorkspaceXR(options: WorkspaceXROptions) {
     return presenting && (!activeSession?.visibilityState || activeSession.visibilityState === "visible");
   }
 
-  function headPosition() { return renderer.xr.getCamera().getWorldPosition(new THREE.Vector3()); }
-
+  // WebXRManager writes a rig-adjusted matrixWorld onto an unparented
+  // ArrayCamera. Its getWorld* methods would recompute and erase that transform.
+  function headPosition() { return new THREE.Vector3().setFromMatrixPosition(renderer.xr.getCamera().matrixWorld); }
+  function headOrientation() {
+    return new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().extractRotation(renderer.xr.getCamera().matrixWorld));
+  }
+  function headYaw() {
+    const direction = new THREE.Vector3(0, 0, -1).applyQuaternion(headOrientation());
+    return Math.hypot(direction.x, direction.z) > 1e-5 ? Math.atan2(-direction.x, -direction.z) : hudYaw;
+  }
+  function positionHud() {
+    const head = headPosition();
+    hud.position.copy(head).add(new THREE.Vector3(-Math.sin(hudYaw) * 1.25, -.12, -Math.cos(hudYaw) * 1.25));
+    hud.lookAt(new THREE.Vector3(head.x, hud.position.y, head.z));
+    hud.updateWorldMatrix(true, true);
+  }
   function placeHud() {
-    const head = renderer.xr.getCamera();
-    const direction = new THREE.Vector3(0, 0, -1).applyQuaternion(head.getWorldQuaternion(new THREE.Quaternion()));
-    direction.y = 0;
-    if (direction.lengthSq() < 1e-6) direction.set(0, 0, -1);
-    direction.normalize();
-    hud.position.copy(headPosition()).addScaledVector(direction, 1.25);
-    hud.position.y -= .12;
-    // Keep the panel level instead of tilting it up with the head's pitch.
-    hud.lookAt(new THREE.Vector3(headPosition().x, hud.position.y, headPosition().z));
+    hudYaw = headYaw(); hudTurning = false; positionHud();
+  }
+  function followHud(deltaSeconds: number) {
+    if (!hud.visible) return;
+    const difference = Math.atan2(Math.sin(headYaw() - hudYaw), Math.cos(headYaw() - hudYaw));
+    if (Math.abs(difference) > Math.PI / 15) hudTurning = true;
+    if (hudTurning) {
+      hudYaw += difference * (1 - Math.exp(-10 * Math.min(Math.max(deltaSeconds, 0), .05)));
+      if (Math.abs(difference) < .01) hudTurning = false;
+    }
+    // Translation follows immediately. A yaw dead zone keeps small aiming
+    // movements from dragging buttons away from the controller ray.
+    positionHud();
   }
 
   function menuHit(controller: THREE.XRTargetRaySpace) {
@@ -204,8 +224,15 @@ export function createWorkspaceXR(options: WorkspaceXROptions) {
     controllers.forEach((controller, index) => {
       const hit = controller.visible && inputAvailable() ? menuHit(controller) : null;
       const pointer = menuPointers[index]; pointer.visible = !!hit?.uv;
+      const line = controller.getObjectByName("workspace-xr-controller-ray") as THREE.Line | undefined;
+      if (line) {
+        line.scale.z = hit?.uv ? hit.distance : 6;
+        const material = line.material as THREE.LineBasicMaterial;
+        material.depthTest = !hit?.uv;
+        line.renderOrder = hit?.uv ? 21 : 0;
+      }
       if (hit?.uv) {
-        pointer.position.copy(hud.worldToLocal(hit.point.clone())); pointer.position.z = .004;
+        pointer.position.copy(hud.worldToLocal(hit.point.clone()));
         hovered.push(hit.uv);
       }
     });
@@ -267,6 +294,7 @@ export function createWorkspaceXR(options: WorkspaceXROptions) {
 
   function select(controller: THREE.XRTargetRaySpace) {
     if (!inputAvailable() || !controller.visible) return;
+    renderer.xr.updateCamera(camera);
     const hit = pick(controller);
     if (hit?.kind === "menu") menu.activate(hit.uv);
     else if (hit?.kind === "item") options.onSelectItem(hit.id);
@@ -278,7 +306,8 @@ export function createWorkspaceXR(options: WorkspaceXROptions) {
   for (const controller of controllers) {
     rig.add(controller);
     const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(0, 0, -1)]),
-      new THREE.LineBasicMaterial({ color: "#8af1cc" }));
+      new THREE.LineBasicMaterial({ color: XR_MENU_INK, transparent: true, depthWrite: false }));
+    line.name = "workspace-xr-controller-ray";
     line.scale.z = 6;
     line.visible = false;
     controller.add(line);
@@ -289,7 +318,7 @@ export function createWorkspaceXR(options: WorkspaceXROptions) {
       teleportHeld = false; teleportTarget = null; reticle.visible = false;
     };
     const onSelect = () => select(controller);
-    const onSqueeze = () => { if (inputAvailable() && controller.visible) { hudVisible = sourceByController.get(controller)?.handedness === "left" || !hudVisible; hud.visible = hudVisible; if (hudVisible) placeHud(); } };
+    const onSqueeze = () => { if (inputAvailable() && controller.visible) { renderer.xr.updateCamera(camera); hudVisible = sourceByController.get(controller)?.handedness === "left" || !hudVisible; hud.visible = hudVisible; if (hudVisible) placeHud(); } };
     controller.addEventListener("connected", connected);
     controller.addEventListener("disconnected", disconnected);
     controller.addEventListener("select", onSelect);
@@ -356,7 +385,8 @@ export function createWorkspaceXR(options: WorkspaceXROptions) {
       const next = { offers, selectedItemLabel: state.selectedItemLabel?.slice(0, 200), status: state.status?.slice(0, 300),
         pendingOfferId, canConfirm: !!pendingOfferId && state.canConfirm === true,
         basketLabel: state.basketLabel?.slice(0, 80), selectedItemLocked: state.selectedItemLocked === true, busy: state.busy === true,
-        actions: (state.actions ?? []).slice(0, 6).filter((action, i, list) => action.id && action.id.length <= 80 && list.findIndex((other) => other.id === action.id) === i)
+        agent: state.agent ? { available: state.agent.available === true, status: state.agent.status.slice(0, 120), caption: state.agent.caption?.slice(0, 600), listening: state.agent.listening === true, connected: state.agent.connected === true, error: state.agent.error?.slice(0, 300) } : undefined,
+        actions: (state.actions ?? []).slice(0, 8).filter((action, i, list) => action.id && action.id.length <= 80 && list.findIndex((other) => other.id === action.id) === i)
           .map((action) => ({ id: action.id, label: action.label.slice(0, 80), detail: action.detail?.slice(0, 140), disabled: action.disabled === true })) };
       const key = JSON.stringify(next);
       if (key === shoppingKey) return;
@@ -433,14 +463,15 @@ export function createWorkspaceXR(options: WorkspaceXROptions) {
         if (source.handedness === "right") turn = x;
       }
       if (resumeNeutral) {
-        if (Math.hypot(walk.forward, walk.right) > 0 || Math.abs(turn) > .3) { updateMenuPointers(); return; }
+        if (Math.hypot(walk.forward, walk.right) > 0 || Math.abs(turn) > .3) { followHud(deltaSeconds); updateMenuPointers(); return; }
         resumeNeutral = false;
       }
-      if (locomotion === "walk") walkXR(rig, headPosition(), renderer.xr.getCamera().getWorldQuaternion(new THREE.Quaternion()), walk, deltaSeconds, validFloor, options.moveFloor);
+      if (locomotion === "walk") walkXR(rig, headPosition(), headOrientation(), walk, deltaSeconds, validFloor, options.moveFloor);
       reticle.visible = held && !!teleportTarget;
       if (reticle.visible && teleportTarget) reticle.position.copy(teleportTarget).add(new THREE.Vector3(0, .015, 0));
       if (!held && teleportHeld && teleportTarget && validFloor(teleportTarget)) {
         teleportXR(rig, headPosition(), teleportTarget); teleportTarget = null;
+        renderer.xr.updateCamera(camera); if (hud.visible) placeHud();
       }
       teleportHeld = held;
       // Walking/teleporting translated the rig. Snap-turn must pivot around the
@@ -449,9 +480,11 @@ export function createWorkspaceXR(options: WorkspaceXROptions) {
       if (Math.abs(turn) < .3) snapLatched = false;
       if (Math.abs(turn) > .7 && !snapLatched) {
         snapTurnXR(rig, headPosition(), -Math.sign(turn) * Math.PI / 6);
+        renderer.xr.updateCamera(camera); if (hud.visible) placeHud();
         snapLatched = true;
       }
       renderer.xr.updateCamera(camera);
+      followHud(deltaSeconds);
       updateMenuPointers();
     },
     dispose() {

@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic";
 import { useLayoutEffect, useRef } from "react";
 import type { FloorSpot, Job, PlanProposal, RoomPlan, ShopJobOutput, ShopRequest, ShopResult } from "../../backend/contracts";
+import type { RoomVoiceControls, RoomVoiceState } from "./RoomAgentVoice";
 import { createRoomAgentTools } from "../rooms/agent-tools";
 import "./RoomVoice.css";
 
@@ -15,6 +16,8 @@ type Props = {
   liveSearch: boolean;
   available: boolean;
   disabled?: boolean;
+  onControls?(controls: RoomVoiceControls | null): void;
+  onStateChange?(state: RoomVoiceState): void;
   getSpot(): FloorSpot;
   onRefresh(): Promise<unknown>;
   onPropose(request: string): Promise<PlanProposal>;
@@ -82,5 +85,5 @@ export function RoomVoice(props: Props) {
     : undefined;
 
   if (!projectId || !props.available) return null;
-  return <Session key={projectId} projectId={projectId} getTools={getTools} update={update} disabled={props.disabled} />;
+  return <Session key={projectId} projectId={projectId} getTools={getTools} update={update} disabled={props.disabled} onControls={props.onControls} onStateChange={props.onStateChange} />;
 }

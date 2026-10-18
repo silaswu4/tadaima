@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { roomXRActions, roomXRProducts, roomXRSearch } from "../rooms/xr-actions.ts";
+import { roomXRActions, roomXRProducts, roomXRSearch, roomXRVoiceActions } from "../rooms/xr-actions.ts";
 
 test("the active preview stays in the three VR products, including Fetch and later results", () => {
   const results = Array.from({ length: 5 }, (_, i) => ({ product: { id: `piece-${i}` }, fits: i > 0, source: "catalog" }));
@@ -40,4 +40,25 @@ test("offline, saving or moving disables all canonical changes", () => {
 test("a preview can be explicitly cancelled while item edits stay disabled", () => {
   assert.deepEqual(enabled({ ...ready, pending: true }), ["search-chair", "search-rug", "search-lamp", "cancel-preview"]);
   assert.deepEqual(enabled({ ...ready, pending: true, busy: true }), []);
+});
+
+test("VR voice requires the configured capability and starts with no open microphone", () => {
+  for (const available of [false, true]) {
+    const actions = roomXRVoiceActions({ available, connected: false, listening: false, status: "Talk" });
+    assert.equal(actions.find((a) => a.id === "voice-toggle").disabled, !available);
+    assert.equal(actions.find((a) => a.id === "voice-stop").disabled, true);
+  }
+});
+test("VR can end a pending connection or working voice session without waiting on shopping", () => {
+  for (const state of [
+    { connected: false, listening: true, status: "Connecting" },
+    { connected: false, listening: false, status: "Connecting" },
+    { connected: true, listening: false, status: "Working" },
+    { connected: true, listening: false, status: "Speaking" },
+  ]) {
+    const actions = roomXRVoiceActions({ available: true, ...state });
+    assert.equal(actions.find((a) => a.id === "voice-stop").disabled, false);
+  }
+  const actions = roomXRVoiceActions({ available: true, connected: true, listening: true, status: "Listening" });
+  assert.equal(actions.find((a) => a.id === "voice-toggle").label, "Send to agent");
 });

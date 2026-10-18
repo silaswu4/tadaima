@@ -6,9 +6,10 @@ import type { FloorSpot, FurnitureCategory, Job, ProductCandidate, PlanProposal,
 import dynamic from "next/dynamic";
 import { placeAt } from "../../backend/shopping/placement";
 import { evaluate } from "../../backend/shopping/spot";
+import type { RoomVoiceControls, RoomVoiceState } from "./RoomAgentVoice";
 import { useRoomShopping } from "../rooms/use-room-shopping";
 import { useRoomFetch } from "../rooms/use-room-fetch";
-import { roomXRActions, roomXRProducts, roomXRSearch } from "../rooms/xr-actions";
+import { roomXRActions, roomXRProducts, roomXRSearch, roomXRVoiceActions } from "../rooms/xr-actions";
 import type { WalkCallbacks, WalkCarryStatus, WalkEnvironment, WalkItem, WalkMode, WalkOptions, WalkScene } from "../room/walk-api";
 import mark from "../assets/tadaima-mark.png";
 import { WipeLink, useWipeHold } from "./PageWipe";
@@ -212,7 +213,6 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
   const [moving, setMoving] = useState(false);
   const [canUndo, setCanUndo] = useState(false);
   const [xr, setXr] = useState(false);
-  const [presenting, setPresenting] = useState(false);
   const [, setExploded] = useState(false);
   const [, setBlindsRaised] = useState<boolean | null>(null);
   const [pending, setPending] = useState<ProductCandidate | null>(null);
@@ -223,6 +223,9 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
   const confirmRef = useRef<() => void>(() => {});
   const xrActionRef = useRef<(id: string) => void>(() => {});
   const xrActionPending = useRef(false);
+  const voiceControls = useRef<RoomVoiceControls | null>(null);
+  const [voiceState, setVoiceState] = useState<RoomVoiceState>({ status: "Talk", listening: false, connected: false });
+  const registerVoiceControls = useCallback((controls: RoomVoiceControls | null) => { voiceControls.current = controls; }, []);
   const [panel, setPanel] = useState<Panel>(null);
   const [agentProposal, setAgentProposal] = useState<PlanProposal | null>(null);
   /** Search results shown beside the room without leaving first person (voice searches land here). */
@@ -465,7 +468,6 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
       onPreviewOffer(id) { const product = resultsRef.current.find((result) => result.product.id === id)?.product; if (product) previewRef.current(product); },
       onConfirmOffer() { confirmRef.current(); },
       onXRAction(id) { if (!cancelled) xrActionRef.current(id); },
-      onXRChange(value) { if (!cancelled) setPresenting(value); },
       onSelect(selection) {
         if (cancelled) return;
         anchorRef.current = selection?.anchor ?? null;
@@ -762,9 +764,21 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
   const inventory = useMemo(() => items.filter((i) => i.stored), [items]);
   useLayoutEffect(() => { inventoryRef.current = inventory; carryOutRef.current = (item) => { try { carryOut(item); } catch (err) { setNotice(err instanceof Error ? err.message : "Couldn't pick that up."); } }; });
   const basketTotal = formatTotals(basket);
-  const xrActions = useMemo(() => roomXRActions({ connected: Boolean(shopping.session), busy: blocked, pending: Boolean(pending), moving, selected }), [shopping.session, blocked, pending, moving, selected]);
+  const voiceAvailable = Boolean(shopping.session?.capabilities.voice);
+  const xrActions = useMemo(() => [
+    ...roomXRActions({ connected: Boolean(shopping.session), busy: blocked, pending: Boolean(pending), moving, selected }),
+    ...roomXRVoiceActions({ available: voiceAvailable, ...voiceState }),
+  ], [shopping.session, blocked, pending, moving, selected, voiceAvailable, voiceState]);
   useLayoutEffect(() => {
     xrActionRef.current = (id) => {
+      // Microphone controls remain reachable while a shopping tool is working.
+      if (id === "voice-toggle" || id === "voice-stop") {
+        if (!xrActions.some((action) => action.id === id && !action.disabled)) return;
+        const controls = voiceControls.current;
+        if (!controls) { setNotice("The voice agent is still loading. Try again in a moment."); return; }
+        if (id === "voice-toggle") controls.toggleListening(); else controls.stop();
+        return;
+      }
       if (xrActionPending.current || !xrActions.some((action) => action.id === id && !action.disabled)) return;
       if (id === "cancel-preview") { cancelProduct(); setNotice("Preview cancelled. Nothing was added."); return; }
       const request = roomXRSearch(id, merchant);
@@ -843,9 +857,10 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
       selectedItemLabel: selected?.label, selectedItemLocked: selected?.locked, pendingOfferId: pending?.id, canConfirm: Boolean(pending) && !blocked,
       busy: blocked, basketLabel: `Basket ${basket.length} · ${basketTotal}`,
       actions: xrActions,
+      agent: { available: voiceAvailable, ...voiceState },
       status: blocked ? "Updating your room…" : notice ?? shopping.job?.stage ?? "Point at clear floor to choose where you shop.",
     });
-  }, [status, results, selected, pending, notice, blocked, shopping.job, shopping.session, moving, basket.length, basketTotal, xrActions]);
+  }, [status, results, selected, pending, notice, blocked, shopping.job, shopping.session, moving, basket.length, basketTotal, xrActions, voiceAvailable, voiceState]);
 
   const ready = status === "ready";
   const showHint = ready && mode === "walk" && !hintSeen && !panel;
@@ -988,7 +1003,8 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
             getSpot={assistantSpot} onRefresh={shopping.refresh} onPropose={proposeByVoice}
             onApply={applyByVoice} getProposal={() => agentProposalRef.current} onSetBudget={shopping.setBudget}
             onSearch={assistantSearch} onPreview={(result) => addProduct(result.product)} onPlace={placeByVoice}
-            onMove={shopping.moveAgentItem} onStore={shopping.storeAgentItem} disabled={presenting}
+            onMove={shopping.moveAgentItem} onStore={shopping.storeAgentItem}
+            onControls={registerVoiceControls} onStateChange={setVoiceState}
           />
           <button
             type="button"
