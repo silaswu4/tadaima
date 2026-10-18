@@ -66,6 +66,20 @@ export async function applyProposal(projectId: string, proposalId: string, expec
 export async function applyPlanChanges(projectId: string, expectedRevision: number, changes: PlanChange[]): Promise<ApplyResult> {
   const plan = await mustGetPlan(projectId);
   if (plan.revision !== expectedRevision) return { ok: false, reason: "stale_revision", currentRevision: plan.revision };
+  // Imported rooms retain their source furniture identities. This belongs at
+  // the operation boundary so direct edits and saved agent proposals cannot
+  // bypass the same guarantee enforced by browser snapshot sync.
+  if (projectId.startsWith("proj_room_")) {
+    const ownedIds = new Set(plan.items.filter((item) => item.origin === "existing_owned").map((item) => item.id));
+    const destructive = changes.flatMap((change) =>
+      (change.kind === "remove" || change.kind === "replace") && ownedIds.has(change.itemId) ? [change.itemId]
+        : change.kind === "add" && change.item.origin === "existing_owned" ? [change.item.id] : [],
+    );
+    if (destructive.length) return {
+      ok: false, reason: "validation_failed",
+      validations: [{ rule: "locked_kept", status: "fail", itemIds: [...new Set(destructive)], message: "Owned furniture keeps its source identity. Put it away in inventory before adding a replacement; new items must be proposed purchases." }],
+    };
+  }
   let next: RoomPlan;
   try {
     next = applyChanges(plan, changes);

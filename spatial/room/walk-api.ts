@@ -34,6 +34,8 @@ export type WalkCallbacks = {
   onReady(items: WalkItem[]): void;
   /** Fired whenever pieces are added, removed, moved or rotated (including undo). */
   onItemsChange(items: WalkItem[]): void;
+  /** Authoritative server state applied without echoing a local edit. */
+  onPlanApplied?(items: WalkItem[]): void;
   onSelect(selection: WalkSelection): void;
   /** Fired each frame while something is selected so the HUD card can follow it. */
   onAnchor?(anchor: { x: number; y: number } | null): void;
@@ -54,11 +56,16 @@ export type AddRequest = {
   at?: [number, number];
 };
 
+export type WalkProductPreviewOptions = { swapId?: string; at?: [number, number];
+  /** Exact server-approved pose; never searches for a different placement. */
+  placement?: { position: Vector3Meters; rotationY: number };
+};
+
 export type WalkProductPreview = { productId: string; position: Vector3Meters; rotationY: number; swapId?: string };
 
 export type WalkScene = {
   ready: Promise<void>;
-  previewProduct(product: ProductCandidate, options?: { swapId?: string; at?: [number, number] }): WalkProductPreview;
+  previewProduct(product: ProductCandidate, options?: WalkProductPreviewOptions): WalkProductPreview;
   confirmProductPreview(): string;
   cancelProductPreview(): void;
   setExploded(exploded: boolean): void;
@@ -66,6 +73,10 @@ export type WalkScene = {
   setXRShopping(state: WorkspaceXRShopping): void;
   /** Current pieces in plan form; the HUD builds the basket and saves from this. */
   getPlan(): RoomPlan;
+  /** Apply canonical server items/products/revision in place, preserving the camera and source mesh binding. */
+  setPlan(plan: RoomPlan): Promise<void>;
+  /** Finite point on this room floor from the view, or a checked in-room fallback. */
+  getShoppingSpot(): FloorSpot;
   select(id: string | null): void;
   remove(id: string): void;
   /** Put an owned piece away: it leaves the room but stays in the plan as stored, ready to come back. */

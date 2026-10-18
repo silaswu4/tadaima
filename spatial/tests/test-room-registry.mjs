@@ -278,3 +278,14 @@ test("catalog storage isolates two room IDs sharing one project and preserves pr
     assert.deepEqual(reopened.sourcePlan, imported.sourcePlan);
   } finally { if (previous === undefined) delete globalThis.indexedDB; else globalThis.indexedDB = previous; }
 });
+
+// Schema parsing / HTTP transport may reorder keys without changing source facts.
+test("server JSON key ordering does not invalidate immutable scan furniture", async () => {
+  const { plan } = await roomSourceIdentity(fixture());
+  const reorder = (value) => Array.isArray(value) ? value.map(reorder) : value && typeof value === "object"
+    ? Object.fromEntries(Object.entries(value).reverse().map(([key, entry]) => [key, reorder(entry)])) : value;
+  const snapshot = reorder(structuredClone(plan)); snapshot.revision++;
+  assert.doesNotThrow(() => validateEditedRoom(plan, snapshot));
+  snapshot.items[0].dimensions[0] += .1;
+  assert.throws(() => validateEditedRoom(plan, snapshot), /dimensions and source IDs/);
+});

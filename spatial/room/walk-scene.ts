@@ -6,9 +6,9 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { dracoLoader } from "./draco";
 import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
 import { RectAreaLightUniformsLib } from "three/addons/lights/RectAreaLightUniformsLib.js";
-import type { PlacedItem, PointXZ, ProductCandidate, RoomPlan, Vector3Meters } from "../../backend/contracts";
+import type { FloorSpot, PlacedItem, PointXZ, ProductCandidate, RoomPlan, Vector3Meters } from "../../backend/contracts";
 import { LIBRARY, assetFor, assetTransform, itemAsset, type LibraryModel } from "../../backend/shopping/assets";
-import type { AddRequest, WalkCallbacks, WalkItem, WalkMode, WalkOptions, WalkProductPreview, WalkScene } from "./walk-api";
+import type { AddRequest, WalkCallbacks, WalkItem, WalkMode, WalkOptions, WalkProductPreview, WalkProductPreviewOptions, WalkScene } from "./walk-api";
 import { block, rug, standingLamp, surface } from "./parts";
 import { createRoomLighting, setMetricSurfaceUVs } from "./lighting";
 import { createFurnitureProxy, placeFurnitureModel } from "./furniture-model";
@@ -22,6 +22,7 @@ import { validateWalkProduct } from "./walk-shopping";
 import { normalizeWalkInput } from "./walk-input";
 import { createWalkRevisionTracker } from "./walk-revision";
 import { applyWalkCutaway } from "./walk-material";
+import { acceptWalkPlan, canPreserveWalkUndo, checkedWalkShoppingSpot, walkModelIdentity } from "./walk-authority";
 import { placeAt } from "../../backend/shopping/placement";
 import { createNavigationWorld, findNavigationSpawn, canNavigateAt } from "./navigation";
 import { createWorkspaceXR } from "./workspace-xr";
@@ -151,11 +152,11 @@ function isEditable(target: EventTarget | null) {
 
 export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callbacks: WalkCallbacks, options: WalkOptions = {}): WalkScene {
   // Own copy of the plan; edits change only this snapshot and are read back through getPlan().
-  const working: RoomPlan = structuredClone(plan);
+  let working: RoomPlan = structuredClone(plan);
   const rooms = working.geometry.rooms;
   if (!rooms.length || rooms.every((r) => r.floorPolygon.length < 3)) throw new Error("A room floor is required for the walk view.");
   const source = options.reconstruction ? { ...options.reconstruction, plan: structuredClone(options.reconstruction.plan), texturedModel: options.reconstruction.texturedModel.slice(0), binding: { ...options.reconstruction.binding } } : null;
-  if (source && (source.plan.projectId !== working.projectId || JSON.stringify(source.plan.geometry) !== JSON.stringify(working.geometry))) throw new Error("The editable plan must retain the reconstruction's measured room geometry.");
+  if (source) acceptWalkPlan(source.plan, working, source.plan);
   const lite = !!options.lite;
   const reduced = !!options.reducedMotion;
 
@@ -538,9 +539,11 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
     return stored ? [storedWalkItem(stored)] : [];
   });
   let revisions: ReturnType<typeof createWalkRevisionTracker> | null = null;
+  let applyingPlan = false;
+  let planApplication = 0;
   const emitItems = () => {
     itemsDirty = false;
-    if (disposed) return;
+    if (disposed || applyingPlan) return;
     // UI notifications also follow cancelled moves and model completion. Only a
     // changed canonical plan advances the revision used by the room registry.
     if (revisions) working.revision = revisions.accept(currentPlan());
@@ -813,6 +816,80 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
     });
     return out;
   }
+
+  async function setPlan(incoming: RoomPlan): Promise<void> {
+    if (disposed) throw new Error("This room view is closed.");
+    // Validate before changing any roots, selections, previews or revisions.
+    const accepted = acceptWalkPlan(working, incoming, source?.plan);
+    const application = ++planApplication;
+    await ready;
+    if (disposed || application !== planApplication) return;
+    const preserveUndo = canPreserveWalkUndo(currentPlan(), accepted);
+    const previous = working;
+    const previousEntries = new Map(entries);
+    const cameraPosition = camera.position.clone(), cameraRotation = camera.quaternion.clone();
+    const cameraTarget = controls.target.clone();
+    const loads: Promise<void>[] = [];
+    applyingPlan = true;
+    try {
+      restoreCanonical();
+      if (moving) cancelMove();
+      working = accepted;
+      entries.clear(); storedItems.clear(); order.length = 0;
+      for (const item of working.items) {
+        const existing = previousEntries.get(item.id);
+        if (item.stored) {
+          storedItems.set(item.id, item); order.push(item.id);
+          continue;
+        }
+        if (existing && walkModelIdentity(previous, existing.item) === walkModelIdentity(working, item)) {
+          previousEntries.delete(item.id);
+          existing.item = item;
+          const known = knownSize(item);
+          if (known) { existing.dims = known.dims; existing.source = known.source; }
+          syncEntry(existing); attach(existing);
+        } else {
+          const built = createEntry(item);
+          attach(built.entry); loads.push(built.loaded);
+        }
+      }
+      for (const entry of previousEntries.values()) entry.root.removeFromParent();
+      if (!preserveUndo) undoStack.length = 0;
+      revisions = createWalkRevisionTracker(currentPlan());
+      itemsDirty = false; pickDirty = true; labelKey = "";
+      if (selectedId && !entries.has(selectedId)) select(null);
+      if (hoverId && !entries.has(hoverId)) hoverId = null;
+      // Returning an exploded room to canonical poses must not reframe the camera
+      // while a search result or server edit is being applied.
+      camera.position.copy(cameraPosition); camera.quaternion.copy(cameraRotation);
+      controls.target.copy(cameraTarget);
+    } finally {
+      applyingPlan = false;
+    }
+    await Promise.all(loads);
+    if (disposed || application !== planApplication) return;
+    callbacks.onPlanApplied?.(listItems());
+    const selected = selectedId ? entries.get(selectedId) : null;
+    if (selected) callbacks.onSelect({ item: toWalkItem(selected), anchor: anchorFor(selected) });
+  }
+
+  function getShoppingSpot(): FloorSpot {
+    if (disposed) throw new Error("This room view is closed.");
+    scene.updateMatrixWorld(true); camera.updateMatrixWorld(true);
+    if (pickDirty) rebuildPicks();
+    raycaster.setFromCamera(center, camera);
+    const hit = raycaster.intersectObjects([...floorMeshes, ...pickRoots, ...wallMeshes.filter((mesh) => mesh.visible), ...envMeshes], true)[0];
+    const candidates: Vector3Meters[] = [];
+    if (hit && floorMeshes.includes(hit.object as THREE.Mesh)) candidates.push([hit.point.x, 0, hit.point.z]);
+    const viewer = new THREE.Vector3(), forward = new THREE.Vector3();
+    viewerFloor(viewer, forward);
+    candidates.push([viewer.x, 0, viewer.z]);
+    const spawn = safeSpawn();
+    if (spawn.ok) candidates.push(spawn.position);
+    const spot = checkedWalkShoppingSpot(working, candidates);
+    if (!spot) throw new Error("Look at or select a clear spot on this room's floor before shopping.");
+    return spot;
+  }
   function navigationWorld() {
     const snapshot = currentPlan();
     // Rendered bounds are valid navigation obstacles even when they are not measured plan evidence.
@@ -963,7 +1040,7 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
     pendingProduct.object.removeFromParent(); releaseAll([pendingProduct.object]); pendingProduct = null;
     if (!disposed) callbacks.onProductPreviewChange?.(null);
   }
-  function previewProduct(product: ProductCandidate, settings: { swapId?: string; at?: [number, number] } = {}): WalkProductPreview {
+  function previewProduct(product: ProductCandidate, settings: WalkProductPreviewOptions = {}): WalkProductPreview {
     restoreCanonical();
     if (moving) cancelMove();
     const dims = product.dimensions as Size | null;
@@ -971,7 +1048,8 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
     const target = settings.swapId ? entries.get(settings.swapId) : null;
     if (settings.swapId && !target) throw new Error("The piece to replace is no longer in the room.");
     let spot: { x: number; z: number; rotation: number };
-    if (target) spot = { x: target.item.position[0], z: target.item.position[2], rotation: target.item.rotationY };
+    if (settings.placement) spot = { x: settings.placement.position[0], z: settings.placement.position[2], rotation: settings.placement.rotationY };
+    else if (target) spot = { x: target.item.position[0], z: target.item.position[2], rotation: target.item.rotationY };
     else {
       const viewer = new THREE.Vector3(), forward = new THREE.Vector3();
       viewerFloor(viewer, forward);
@@ -980,7 +1058,7 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
       if (!fit.ok) throw new Error(fit.message);
       spot = { x: fit.placement.position[0], z: fit.placement.position[2], rotation: fit.placement.rotationY };
     }
-    const position: Vector3Meters = [spot.x, target?.item.position[1] ?? 0, spot.z];
+    const position: Vector3Meters = [spot.x, settings.placement?.position[1] ?? target?.item.position[1] ?? 0, spot.z];
     validateWalkProduct(currentPlan(), product, position, spot.rotation, settings.swapId);
     cancelProductPreview();
     const object = createFurnitureProxy(dims);
@@ -1714,6 +1792,8 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
   return {
     ready,
     getPlan: currentPlan,
+    setPlan,
+    getShoppingSpot,
     previewProduct, confirmProductPreview, cancelProductPreview, setExploded,
     get isExploded() { return exploder?.isExploded ?? false; },
     setXRShopping: (state) => xr?.setShoppingState(state),

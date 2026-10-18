@@ -53,6 +53,8 @@ Deployed at `https://tadaima-matthew-kims-projects-b1fc1628.vercel.app` behind V
 
 Errors: 400 bad body, 404 unknown project/item/product/job, 409 refused checkout, 422 a spot that isn't on the floor.
 
+For the website’s selected-room connection, private browser sessions and in-room checkout, see [in-room shopping integration](../docs/shopping-integration.md).
+
 ## Viewer integration (spot shopping)
 
 1. Raycast the floor where the shopper looks or taps; that hit is the `FloorSpot` (`{ position: [x, 0, z] }`, plan meters).
