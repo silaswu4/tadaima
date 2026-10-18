@@ -138,7 +138,10 @@
 .tadaima-hero .hero-word__line { display: block; overflow: hidden; padding-top: 0.04em; }
 /* two copies of the word: a fill blended into the room, so the letters glow where the
    window light lands and the leaf shadows pass through them, and a thin outline on top */
-.tadaima-hero .hero-word__fill { mix-blend-mode: overlay; }
+.tadaima-hero .hero-word__fill { mix-blend-mode: overlay; will-change: transform; }
+/* Safari only blends with the light's canvas while the letters sit on their own layer,
+   which they do during the rise; keep them there so the blend survives the intro */
+.tadaima-hero .hero-word__fill .hero-word__char { will-change: transform; }
 .tadaima-hero .hero-word__edge {
   position: absolute;
   inset: 0;
