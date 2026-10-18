@@ -27,10 +27,15 @@ import { normalizeWalkInput } from "./walk-input";
 import { createWalkRevisionTracker } from "./walk-revision";
 import { applyWalkCutaway } from "./walk-material";
 import { acceptWalkPlan, canPreserveWalkUndo, checkedWalkShoppingSpot, walkModelIdentity } from "./walk-authority";
-import { placeAt } from "../../backend/shopping/placement";
+import { facingAt, placeAt, WALL_BACKED } from "../../backend/shopping/placement";
+import { dragCheck } from "../../backend/shopping/drag";
 import { createNavigationWorld, findNavigationSpawn, canNavigateAt, moveNavigation } from "./navigation";
 import { createWorkspaceXR } from "./workspace-xr";
 import { makeExplodeController, type ExplodeController } from "./explode";
+import {
+  CARRY, angleDelta, angleSpringStep, carryLevel, createLocomotion, dropBounce, dropSquash, easeInOutCubic, easeOutCubic, headBob,
+  locomotionStep, refusalShake, springSet, springStep, stashPose, wheelSteps, type CarryLevel, type Spring,
+} from "./game-feel";
 
 type Size = [number, number, number];
 
@@ -50,6 +55,10 @@ const WALK_FOV = 70;
 const ORBIT_FOV = 42;
 const FLAT_HEIGHT = 0.05;
 const TURN_STEP = THREE.MathUtils.degToRad(15);
+const CARRY_QUARTER = Math.PI / 2;
+const SNAPPING = "#c98a2b";
+/** A wall-backed piece snaps its back to a wall when carried within this of it, meters. */
+const WALL_SNAP = 0.3;
 
 type Entry = {
   item: PlacedItem;
@@ -79,9 +88,33 @@ type MoveState = {
   x: number;
   z: number;
   rotation: number;
+  /** True when the piece may be dropped now (at `pose`). */
   valid: boolean;
   checkedKey: string;
+  /** Where the piece would land: the fit check's snapped pose when droppable, else the raw target. */
+  pose: { x: number; z: number; rotation: number };
+  level: CarryLevel;
+  problems: string[];
+  /** Plan used for the fit check; other pieces do not change during a carry. */
+  plan: RoomPlan | null;
+  /** The shopper turned the piece by hand, so walls stop choosing its facing. */
+  userRotated: boolean;
+  /** Came straight out of storage: cancelling puts it back. */
+  fromStorage: boolean;
+  /** Drawn pose, eased toward `pose` every frame. */
+  shown: { x: Spring; z: Spring; rotation: Spring; lift: Spring; scale: Spring };
+  /** Seconds since a refused drop, for the shake; Infinity when idle. */
+  shake: number;
 };
+
+type PoseAnim = {
+  kind: "settle" | "glide" | "turn";
+  t: number;
+  duration: number;
+  from: { x: number; y: number; z: number; rotation: number };
+};
+
+type Flight = { root: THREE.Object3D; t: number; from: THREE.Vector3; rotation: number; to: THREE.Vector3 };
 
 type Segment = { ax: number; az: number; bx: number; bz: number; radius: number };
 
@@ -162,7 +195,15 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
   const source = options.reconstruction ? { ...options.reconstruction, plan: structuredClone(options.reconstruction.plan), texturedModel: options.reconstruction.texturedModel.slice(0), binding: { ...options.reconstruction.binding } } : null;
   if (source) acceptWalkPlan(source.plan, working, source.plan);
   const lite = !!options.lite;
-  const reduced = !!options.reducedMotion;
+  // The host's setting, or the system preference, whichever asks for less motion. Followed live.
+  const motionQuery = typeof window !== "undefined" && typeof window.matchMedia === "function" ? window.matchMedia("(prefers-reduced-motion: reduce)") : null;
+  let reduced = !!options.reducedMotion || !!motionQuery?.matches;
+  const onMotionPreference = () => {
+    reduced = !!options.reducedMotion || !!motionQuery?.matches;
+    controls.enableDamping = !reduced;
+    if (reduced) finishAllMotion();
+  };
+  motionQuery?.addEventListener?.("change", onMotionPreference);
 
   // ------------------------------------------------------------ renderer
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
@@ -426,7 +467,12 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
   let exploder: ExplodeController | null = null;
   let pendingProduct: { product: ProductCandidate; preview: WalkProductPreview; object: THREE.Object3D } | null = null;
   const savedRig = new THREE.Vector3();
-  const velocity = new THREE.Vector3();
+  const locomotion = createLocomotion();
+  let walked = 0;
+  const poseAnims = new Map<string, PoseAnim>();
+  const flights: Flight[] = [];
+  let wheelRest = 0;
+  let carryStatusKey = "";
   const keys = new Set<string>();
   let moveInput = { forward: 0, right: 0 };
   const mouse = new THREE.Vector2();
@@ -691,13 +737,18 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
       entry.loaded = true;
       syncEntry(entry);
       pickDirty = true;
-      if (moving?.id === item.id) moving.checkedKey = "";
+      if (moving) { moving.checkedKey = ""; moving.plan = null; }
       labelKey = "";
     });
     return { entry, loaded };
   }
 
   function attach(entry: Entry, index = order.length) {
+    // Undo of a put-away can land mid-flight: bring the piece back whole, at its plan pose.
+    const flying = flights.findIndex((flight) => flight.root === entry.root);
+    if (flying >= 0) endFlight(flying);
+    entry.root.scale.set(1, 1, 1);
+    syncEntry(entry);
     entries.set(entry.item.id, entry);
     order.splice(Math.min(index, order.length), 0, entry.item.id);
     scene.add(entry.root);
@@ -1053,6 +1104,7 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
   const usesCenter = () => renderer.xr.isPresenting || (mode === "walk" && pointerLocked) || !mouseOnCanvas;
 
   function restoreCanonical() {
+    for (const id of [...poseAnims.keys()]) finishPose(id);
     cancelProductPreview();
     if (!exploder) return;
     const was = exploder.isExploded;
@@ -1209,9 +1261,12 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
   }
 
   function store(id: string) {
+    // A piece still in hand straight out of storage simply goes back.
+    if (moving?.id === id && moving.fromStorage) { cancelMove(); return; }
     restoreCanonical();
     const entry = entries.get(id);
     if (!entry || entry.item.locked) return;
+    const from = drawnPose(entry);
     const out = detach(id);
     if (!out) return;
     const item = structuredClone(entry.item);
@@ -1220,6 +1275,7 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
     // keeps its place in plan order, so the plan and undo stay stable
     order.splice(Math.min(out.index, order.length), 0, id);
     pushUndo({ kind: "store", entry: out.entry, index: out.index });
+    stash(out.entry.root, from);
     emitItems();
   }
 
@@ -1246,10 +1302,9 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
     return id;
   }
 
-  /** Delete key: owned pieces go to the inventory, pieces being bought come out of the basket. */
+  /** Delete key means stash: every piece, owned or proposed, goes to the inventory (undoable, never lost). */
   function discard(id: string) {
-    if (entries.get(id)?.item.origin === "existing_owned") store(id);
-    else remove(id);
+    store(id);
   }
 
   function add(request: AddRequest): string {
@@ -1287,7 +1342,9 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
   function rotate(id: string, radians: number) {
     restoreCanonical();
     if (moving?.id === id) {
+      if (!Number.isFinite(radians) || !radians) return;
       moving.rotation += radians;
+      moving.userRotated = true;
       moving.checkedKey = "";
       return;
     }
@@ -1300,37 +1357,87 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
     if (before && !placementValid(id, x, y, z, next, entry.dims)) return;
     if (!before && !insideRoom(x, z, next, entry.dims) && insideRoom(x, z, entry.item.rotationY, entry.dims)) return;
     pushUndo({ kind: "transform", id, position: [...entry.item.position] as Vector3Meters, rotationY: entry.item.rotationY });
+    const from = drawnPose(entry);
     setTransform(entry, entry.item.position, next);
+    animatePose(entry, "turn", from);
     emitItems();
   }
 
-  function beginMove(id: string) {
+  function beginMove(id: string, fromStorage = false) {
     restoreCanonical();
     const entry = entries.get(id);
     if (!entry || entry.item.locked) return;
     if (moving) cancelMove();
     select(id);
+    const { position, rotationY } = entry.item;
     moving = {
       id,
-      startPosition: [...entry.item.position] as Vector3Meters,
-      startRotation: entry.item.rotationY,
-      x: entry.item.position[0],
-      z: entry.item.position[2],
-      rotation: entry.item.rotationY,
+      startPosition: [...position] as Vector3Meters,
+      startRotation: rotationY,
+      x: position[0],
+      z: position[2],
+      rotation: rotationY,
       valid: true,
       checkedKey: "",
+      pose: { x: position[0], z: position[2], rotation: rotationY },
+      level: "fits",
+      problems: [],
+      plan: null,
+      userRotated: false,
+      fromStorage,
+      shown: {
+        x: { value: position[0], velocity: 0 },
+        z: { value: position[2], velocity: 0 },
+        rotation: { value: rotationY, velocity: 0 },
+        lift: { value: 0, velocity: 0 },
+        scale: { value: fromStorage && !reduced ? 0.2 : 1, velocity: 0 },
+      },
+      shake: Infinity,
     };
+    carryStatusKey = "";
+    wheelRest = 0;
+    if (fromStorage) {
+      // Out of the inventory it appears right under the crosshair, growing in, not flying across the room.
+      updateMove(true);
+      springSet(moving.shown.x, moving.pose.x);
+      springSet(moving.shown.z, moving.pose.z);
+      springSet(moving.shown.rotation, moving.pose.rotation);
+      drawCarried(0);
+    }
     callbacks.onMoveChange?.(true);
+  }
+
+  /** Ends the carry state without touching the piece; returns the drawn pose it was left at. */
+  function endCarry() {
+    const state = moving!;
+    moving = null;
+    footprintMesh.visible = false;
+    carryStatusKey = "";
+    callbacks.onMoveChange?.(false);
+    callbacks.onCarryStatus?.(null);
+    return state;
   }
 
   function cancelMove() {
     if (!moving) return;
     const entry = entries.get(moving.id);
-    const state = moving;
-    moving = null;
-    callbacks.onMoveChange?.(false);
-    footprintMesh.visible = false;
-    if (entry) setTransform(entry, state.startPosition, state.startRotation);
+    const state = endCarry();
+    const from = entry ? drawnPose(entry) : null;
+    const lastOp = undoStack[undoStack.length - 1];
+    if (state.fromStorage && entry && lastOp?.kind === "takeOut" && lastOp.id === state.id) {
+      // Never into the room by accident: a piece taken out and cancelled goes back to the inventory.
+      undoStack.pop();
+      const out = detach(state.id);
+      storedItems.set(state.id, lastOp.item);
+      order.splice(Math.min(lastOp.index, order.length), 0, state.id);
+      if (out && from) stash(out.entry.root, from);
+      emitItems();
+      return;
+    }
+    if (entry) {
+      setTransform(entry, state.startPosition, state.startRotation);
+      if (from) animatePose(entry, "glide", from);
+    }
     emitItems();
   }
 
@@ -1338,25 +1445,69 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
     if (!moving) return false;
     const entry = entries.get(moving.id);
     if (!entry) {
-      moving = null;
-      callbacks.onMoveChange?.(false);
+      endCarry();
       return false;
     }
     updateMove(true);
-    if (!moving.valid) return false; // refuses to land overlapping or outside the room
-    const state = moving;
-    moving = null;
-    callbacks.onMoveChange?.(false);
-    footprintMesh.visible = false;
-    pushUndo({ kind: "transform", id: state.id, position: state.startPosition, rotationY: state.startRotation });
-    setTransform(entry, [state.x, 0, state.z], state.rotation);
+    let valid = moving.valid;
+    if (valid && moving.fromStorage && entry.item.origin === "proposed_purchase") {
+      const product = productFor(entry.item);
+      try {
+        if (product) validateWalkProduct(currentPlan(), product, [moving.pose.x, 0, moving.pose.z], moving.pose.rotation, entry.item.id);
+      } catch (cause) {
+        valid = false;
+        moving.problems = [cause instanceof Error ? cause.message : "This piece does not fit here."];
+        carryStatusKey = "";
+      }
+    }
+    if (!valid) {
+      // Refuses to land overlapping or outside the room; the piece stays in hand and shakes no.
+      moving.shake = reduced ? Infinity : 0;
+      return false;
+    }
+    const from = drawnPose(entry);
+    const state = endCarry();
+    // Out of storage, the take-out entry already undoes the whole trip.
+    if (!state.fromStorage) pushUndo({ kind: "transform", id: state.id, position: state.startPosition, rotationY: state.startRotation });
+    setTransform(entry, [state.pose.x, 0, state.pose.z], state.pose.rotation);
+    animatePose(entry, "settle", from);
     emitItems();
     return true;
   }
 
-  function undo() {
+  /** Take a stored piece straight into the shopper's hands at the crosshair; it is checked only when dropped. */
+  function takeOutAndCarry(id: string): string | null {
     restoreCanonical();
     if (moving) cancelMove();
+    const stored = storedItems.get(id);
+    if (!stored) return null;
+    if (stored.locked) throw new Error("Unlock this piece before taking it out of storage.");
+    const viewer = new THREE.Vector3(), forward = new THREE.Vector3();
+    viewerFloor(viewer, forward);
+    const known = knownSize(stored);
+    const depth = known ? known.dims[2] : 0.6;
+    const at = gazeFloor(tmpC) ? [tmpC.x, tmpC.z] : [viewer.x + forward.x * (1.1 + depth / 2), viewer.z + forward.z * (1.1 + depth / 2)];
+    const index = order.indexOf(id);
+    storedItems.delete(id);
+    if (index >= 0) order.splice(index, 1);
+    const item: PlacedItem = { ...structuredClone(stored), position: [at[0], 0, at[1]], roomId: roomFor(at[0], at[1]).id };
+    delete item.stored;
+    const { entry } = createEntry(item);
+    attach(entry, index >= 0 ? index : order.length);
+    pushUndo({ kind: "takeOut", id, item: stored, index: index >= 0 ? index : order.length - 1 });
+    // The room only hears about it on a checked drop (confirmMove) or a cancel back to storage.
+    beginMove(id, true);
+    return id;
+  }
+
+  function undo() {
+    restoreCanonical();
+    if (moving) {
+      const fromStorage = moving.fromStorage;
+      cancelMove();
+      // Cancelling a fresh take-out already undid it.
+      if (fromStorage) return;
+    }
     const op = undoStack.pop();
     if (!op) return;
     if (op.kind === "add") detach(op.id);
@@ -1377,7 +1528,8 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
       if (at >= 0) order.splice(at, 1);
       attach(op.entry, op.index);
     } else if (op.kind === "takeOut") {
-      detach(op.id);
+      const back = detach(op.id);
+      if (back) stash(back.entry.root, drawnPose(back.entry));
       storedItems.set(op.id, op.item);
       order.splice(Math.min(op.index, order.length), 0, op.id);
     } else {
@@ -1388,35 +1540,214 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
   }
 
   // ------------------------------------------------------------ move preview
-  function updateMove(force = false) {
+  /** Floor point under the crosshair (or mouse), kept within reach when looking toward the horizon. */
+  function gazeFloor(out: THREE.Vector3): boolean {
+    raycaster.setFromCamera(usesCenter() ? center : mouse, camera);
+    if (!raycaster.ray.intersectPlane(floorPlane, out)) return false;
+    camera.getWorldPosition(tmpB);
+    const dx = out.x - tmpB.x;
+    const dz = out.z - tmpB.z;
+    const reach = Math.hypot(dx, dz);
+    const max = mode === "orbit" ? 60 : 6;
+    if (reach > max) out.set(tmpB.x + (dx / reach) * max, 0, tmpB.z + (dz / reach) * max);
+    return true;
+  }
+
+  function carryPlan(): RoomPlan {
+    if (!moving) throw new Error("Nothing is being carried.");
+    moving.plan ??= currentPlan();
+    return moving.plan;
+  }
+
+  /** Fit check for a carried pose: the shared backend rules (dragCheck) plus the engine's wall padding. */
+  function checkCarry(entry: Entry, x: number, z: number, rotation: number) {
+    const state = moving!;
+    const plan = carryPlan();
+    const sized = !!plan.items.find((item) => item.id === state.id)?.dimensions;
+    let check: ReturnType<typeof dragCheck> | null = null;
+    if (sized) {
+      try { check = dragCheck(plan, state.id, [x, 0, z], rotation); }
+      catch { check = null; }
+    }
+    if (!check) {
+      // No recorded size (model bounds only): the engine's own footprint rules decide.
+      state.valid = placementValid(state.id, x, 0, z, rotation, entry.dims);
+      state.pose = { x, z, rotation };
+      state.level = state.valid ? "fits" : "blocked";
+      state.problems = state.valid ? [] : ["This spot is blocked by a wall or another piece."];
+      return;
+    }
+    const px = check.pose.position[0], pz = check.pose.position[2];
+    const droppable = check.droppable && placementValid(state.id, px, 0, pz, rotation, entry.dims);
+    state.valid = droppable;
+    state.pose = droppable ? { x: px, z: pz, rotation } : { x, z, rotation };
+    state.level = droppable ? carryLevel(check) : "blocked";
+    state.problems = droppable || check.problems.length ? check.problems : ["Too close to a wall or another piece."];
+  }
+
+  function updateMove(force = false, dt = 0) {
     if (!moving) return;
     const entry = entries.get(moving.id);
     if (!entry) return;
-    raycaster.setFromCamera(usesCenter() ? center : mouse, camera);
-    if (raycaster.ray.intersectPlane(floorPlane, tmpA)) {
-      camera.getWorldPosition(tmpB);
-      // Keep the piece within reach when looking toward the horizon.
-      const dx = tmpA.x - tmpB.x;
-      const dz = tmpA.z - tmpB.z;
-      const reach = Math.hypot(dx, dz);
-      const max = mode === "orbit" ? 60 : 6;
-      if (reach > max) tmpA.set(tmpB.x + (dx / reach) * max, 0, tmpB.z + (dz / reach) * max);
+    if (gazeFloor(tmpA)) {
       moving.x = Math.round(tmpA.x / GRID) * GRID;
       moving.z = Math.round(tmpA.z / GRID) * GRID;
     }
-    const key = `${moving.x.toFixed(3)},${moving.z.toFixed(3)},${moving.rotation.toFixed(4)},${entry.dims.join(",")}`;
+    let x = moving.x, z = moving.z;
+    // Sofas, shelves, desks and beds back up against a nearby wall until the shopper turns them by hand.
+    if (!moving.userRotated && WALL_BACKED.has(entry.item.category)) {
+      const facing = facingAt(carryPlan(), { roomId: roomFor(x, z).id, position: [x, 0, z] });
+      if (facing && facing.wall.dist <= entry.dims[2] / 2 + WALL_SNAP) {
+        const { n } = facing.wall.edge;
+        const back = entry.dims[2] / 2 + halfWall + 0.01;
+        x = facing.wall.foot[0] + n[0] * back;
+        z = facing.wall.foot[1] + n[1] * back;
+        moving.rotation = facing.rotationY;
+      }
+    }
+    const key = `${x.toFixed(3)},${z.toFixed(3)},${moving.rotation.toFixed(4)},${entry.dims.join(",")}`;
     if (force || key !== moving.checkedKey) {
       moving.checkedKey = key;
-      moving.valid = placementValid(moving.id, moving.x, 0, moving.z, moving.rotation, entry.dims);
+      checkCarry(entry, x, z, moving.rotation);
+      const status = `${moving.level}|${moving.problems.join("|")}`;
+      if (status !== carryStatusKey) {
+        carryStatusKey = status;
+        callbacks.onCarryStatus?.({ level: moving.level, droppable: moving.valid, problems: [...moving.problems] });
+      }
     }
-    entry.root.position.set(moving.x, 0, moving.z);
-    entry.root.rotation.y = moving.rotation;
+    drawCarried(dt);
+  }
+
+  /** Eases the held piece toward where it would land, lifted a few centimeters, with the ghost footprint underneath. */
+  function drawCarried(dt: number) {
+    if (!moving) return;
+    const entry = entries.get(moving.id);
+    if (!entry) return;
+    const { shown, pose } = moving;
+    if (reduced) {
+      springSet(shown.x, pose.x); springSet(shown.z, pose.z); springSet(shown.rotation, pose.rotation);
+      springSet(shown.lift, 0); springSet(shown.scale, 1);
+    } else {
+      springStep(shown.x, pose.x, CARRY.followOmega, dt);
+      springStep(shown.z, pose.z, CARRY.followOmega, dt);
+      angleSpringStep(shown.rotation, pose.rotation, CARRY.turnOmega, dt);
+      springStep(shown.lift, CARRY.lift, CARRY.liftOmega, dt);
+      springStep(shown.scale, 1, CARRY.liftOmega, dt);
+    }
+    let sx = 0, sz = 0;
+    if (moving.shake < CARRY.shakeSeconds) {
+      moving.shake += dt;
+      const offset = refusalShake(moving.shake);
+      sx = Math.cos(shown.rotation.value) * offset;
+      sz = -Math.sin(shown.rotation.value) * offset;
+    }
+    entry.root.position.set(shown.x.value + sx, Math.max(0, shown.lift.value), shown.z.value + sz);
+    entry.root.rotation.y = shown.rotation.value;
+    entry.root.scale.setScalar(Math.max(0.01, shown.scale.value));
     syncEntryIndirect(entry);
     footprintMesh.visible = true;
-    footprintMesh.position.set(moving.x, 0.006, moving.z);
-    footprintMesh.rotation.y = moving.rotation;
+    footprintMesh.position.set(pose.x, 0.006, pose.z);
+    footprintMesh.rotation.y = pose.rotation;
     footprintMesh.scale.set(entry.dims[0], 1, entry.dims[2]);
-    footprintMaterial.color.set(moving.valid ? VALID : INVALID);
+    footprintMaterial.color.set(moving.level === "fits" ? VALID : moving.level === "snap" ? SNAPPING : INVALID);
+    footprintMaterial.opacity = moving.level === "blocked" ? 0.38 : 0.3;
+  }
+
+  // ------------------------------------------------------------ eased poses and the put-away flight
+  function drawnPose(entry: Entry): PoseAnim["from"] {
+    return { x: entry.root.position.x, y: entry.root.position.y, z: entry.root.position.z, rotation: entry.root.rotation.y };
+  }
+
+  /** The piece's plan pose is already final; only its drawing eases there from `from`. */
+  function animatePose(entry: Entry, kind: PoseAnim["kind"], from: PoseAnim["from"]) {
+    if (reduced) return;
+    const duration = kind === "settle" ? CARRY.settleSeconds : kind === "glide" ? CARRY.glideSeconds : CARRY.turnSeconds;
+    const anim: PoseAnim = { kind, t: 0, duration, from };
+    poseAnims.set(entry.item.id, anim);
+    drawPoseAnim(entry, anim);
+  }
+
+  function drawPoseAnim(entry: Entry, anim: PoseAnim) {
+    const p = anim.t / anim.duration;
+    const [tx, , tz] = entry.item.position;
+    const turn = angleDelta(anim.from.rotation, entry.item.rotationY);
+    const { from } = anim;
+    let e: number, y: number, squash = 1;
+    if (anim.kind === "settle") {
+      e = easeOutCubic(Math.min(1, p * 1.6));
+      y = from.y * dropBounce(p);
+      squash = dropSquash(p);
+    } else if (anim.kind === "glide") {
+      e = easeInOutCubic(p);
+      y = from.y * (1 - e);
+    } else {
+      e = easeOutCubic(p);
+      y = entry.item.position[1];
+    }
+    entry.root.position.set(from.x + (tx - from.x) * e, y, from.z + (tz - from.z) * e);
+    entry.root.rotation.y = from.rotation + turn * e;
+    entry.root.scale.set(1, squash, 1);
+  }
+
+  function finishPose(id: string) {
+    poseAnims.delete(id);
+    const entry = entries.get(id);
+    if (!entry) return;
+    entry.root.scale.set(1, 1, 1);
+    syncEntry(entry);
+  }
+
+  function updatePoseAnims(dt: number) {
+    for (const [id, anim] of poseAnims) {
+      const entry = entries.get(id);
+      if (!entry || moving?.id === id) { poseAnims.delete(id); continue; }
+      anim.t += dt;
+      if (anim.t >= anim.duration) finishPose(id);
+      else drawPoseAnim(entry, anim);
+    }
+  }
+
+  /** Put-away: the piece (already out of the plan) shrinks and drops toward the viewer's feet, then leaves the scene. */
+  function stash(root: THREE.Object3D, from: PoseAnim["from"]) {
+    if (reduced || disposed) return;
+    const to = new THREE.Vector3();
+    camera.getWorldPosition(to);
+    const forward = new THREE.Vector3();
+    camera.getWorldDirection(forward);
+    forward.y = 0;
+    if (forward.lengthSq() < 1e-6) forward.set(0, 0, -1);
+    to.addScaledVector(forward.normalize(), 0.35);
+    to.y = mode === "orbit" ? 0 : -0.35;
+    if (mode === "orbit") to.set(from.x, -0.5, from.z);
+    root.position.set(from.x, from.y, from.z);
+    root.rotation.y = from.rotation;
+    scene.add(root);
+    flights.push({ root, t: 0, from: new THREE.Vector3(from.x, from.y, from.z), rotation: from.rotation, to });
+  }
+
+  function endFlight(index: number) {
+    const [flight] = flights.splice(index, 1);
+    flight.root.removeFromParent();
+    flight.root.scale.set(1, 1, 1);
+  }
+
+  function updateFlights(dt: number) {
+    for (let i = flights.length - 1; i >= 0; i--) {
+      const flight = flights[i];
+      flight.t += dt;
+      const p = flight.t / CARRY.stashSeconds;
+      if (p >= 1) { endFlight(i); continue; }
+      const pose = stashPose(p);
+      flight.root.position.lerpVectors(flight.from, flight.to, pose.travel);
+      flight.root.position.y += pose.hop;
+      flight.root.rotation.y = flight.rotation + pose.spin;
+      flight.root.scale.setScalar(pose.scale);
+    }
+  }
+
+  function finishAllMotion() {
+    for (const id of [...poseAnims.keys()]) finishPose(id);
+    for (let i = flights.length - 1; i >= 0; i--) endFlight(i);
   }
 
   // ------------------------------------------------------------ input
@@ -1530,7 +1861,9 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
         if (target) rotate(target, TURN_STEP);
         break;
       case "KeyR":
-        if (target) rotate(target, Math.PI / 4);
+        // Carrying: a quarter turn, Shift for a fine 15 degree step. In place: the toolbar's 45 degrees.
+        if (moving) rotate(moving.id, event.shiftKey ? TURN_STEP : CARRY_QUARTER);
+        else if (target) rotate(target, Math.PI / 4);
         break;
       case "KeyG":
         if (!event.repeat && selectedId && !moving) beginMove(selectedId);
@@ -1558,10 +1891,19 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
   function onKeyUp(event: KeyboardEvent) {
     keys.delete(event.code);
   }
+  /** Scroll turns the carried piece in 15 degree steps (and never zooms the overview meanwhile). */
+  function onWheel(event: WheelEvent) {
+    if (!moving || disposed) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    const { steps, rest } = wheelSteps(wheelRest, event.deltaY, event.deltaMode);
+    wheelRest = rest;
+    if (steps) rotate(moving.id, steps * TURN_STEP);
+  }
   function setMoveInput(input: { forward: number; right: number }) {
     const next = normalizeWalkInput(input);
     moveInput = disposed || mode !== "walk" || renderer.xr.isPresenting ? { forward: 0, right: 0 } : next;
-    if (!moveInput.forward && !moveInput.right) { keys.clear(); velocity.set(0, 0, 0); }
+    if (!moveInput.forward && !moveInput.right) { keys.clear(); }
   }
   function onBlur() {
     setMoveInput({ forward: 0, right: 0 });
@@ -1572,6 +1914,8 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
   canvas.addEventListener("pointerup", onPointerUp);
   canvas.addEventListener("pointercancel", onPointerCancel);
   canvas.addEventListener("pointerleave", onPointerLeave);
+  // Capture phase on the canvas runs before OrbitControls' own wheel zoom.
+  canvas.addEventListener("wheel", onWheel, { capture: true, passive: false });
   document.addEventListener("pointerlockchange", onLockChange);
   document.addEventListener("mousemove", onMouseMove);
   document.addEventListener("keydown", onKeyDown);
@@ -1595,7 +1939,7 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
     if (moving) cancelMove();
     mode = next;
     keys.clear();
-    velocity.set(0, 0, 0);
+    stopWalking();
     hoverId = null;
     if (next === "orbit") {
       if (document.pointerLockElement === canvas) document.exitPointerLock();
@@ -1638,7 +1982,8 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
     onSessionChange: (active) => {
       indoorLighting?.setImmersive(active);
       shadowCache.invalidate();
-      setMoveInput({ forward: 0, right: 0 }); hoverId = null;
+      setMoveInput({ forward: 0, right: 0 }); stopWalking(); hoverId = null;
+      if (active) camera.position.set(0, 0, 0);
       controls.enabled = !active && mode === "orbit";
       if (active && document.pointerLockElement === canvas) document.exitPointerLock();
       crosshair.visible = false;
@@ -1660,6 +2005,11 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
   }
 
   // ------------------------------------------------------------ frame
+  function stopWalking() {
+    locomotion.vx = 0; locomotion.vz = 0; locomotion.ax = 0; locomotion.az = 0;
+    if (mode === "walk" && !renderer.xr.isPresenting) camera.position.y = 0;
+  }
+
   function updateWalk(dt: number) {
     let forward = moveInput.forward;
     let strafe = moveInput.right;
@@ -1668,25 +2018,35 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
     if (keys.has("KeyD") || keys.has("ArrowRight")) strafe += 1;
     if (keys.has("KeyA") || keys.has("ArrowLeft")) strafe -= 1;
     const speed = keys.has("ShiftLeft") || keys.has("ShiftRight") ? FAST_SPEED : WALK_SPEED;
-    const length = Math.hypot(forward, strafe) || 1;
+    // Analog pads keep partial speed; keys and full deflection cap at walking speed.
+    const length = Math.max(1, Math.hypot(forward, strafe));
     const s = Math.sin(yaw);
     const c = Math.cos(yaw);
     // forward is -z in the rig's frame
     const tx = ((-s * forward + c * strafe) / length) * speed;
     const tz = ((-c * forward - s * strafe) / length) * speed;
-    if (reduced) velocity.set(tx, 0, tz);
-    else {
-      velocity.x = THREE.MathUtils.damp(velocity.x, tx, 10, dt);
-      velocity.z = THREE.MathUtils.damp(velocity.z, tz, 10, dt);
-    }
-    if (Math.abs(velocity.x) + Math.abs(velocity.z) > 1e-4) {
-      desired.set(rig.position.x + velocity.x * dt, rig.position.y, rig.position.z + velocity.z * dt);
+    // Velocity springs toward the target: speed eases in from rest and eases out on release.
+    const startX = locomotion.vx, startZ = locomotion.vz;
+    locomotionStep(locomotion, tx, tz, dt, reduced);
+    const stepX = ((startX + locomotion.vx) / 2) * dt;
+    const stepZ = ((startZ + locomotion.vz) / 2) * dt;
+    if (Math.abs(stepX) + Math.abs(stepZ) > 1e-6) {
+      desired.set(rig.position.x + stepX, rig.position.y, rig.position.z + stepZ);
       collideInto(rig.position, desired, tmpA);
+      const movedX = tmpA.x - rig.position.x, movedZ = tmpA.z - rig.position.z;
       rig.position.x = tmpA.x;
       rig.position.z = tmpA.z;
+      walked += Math.hypot(movedX, movedZ);
+      // Pressing into a wall or a piece must not bank speed that fires off when turning away.
+      if (dt > 0) {
+        if (Math.abs(movedX) < Math.abs(stepX) * 0.5) { locomotion.vx = movedX / dt; locomotion.ax = 0; }
+        if (Math.abs(movedZ) < Math.abs(stepZ) * 0.5) { locomotion.vz = movedZ / dt; locomotion.az = 0; }
+      }
     }
     rig.rotation.y = yaw;
     camera.rotation.set(pitch, 0, 0);
+    // Mouse look stays 1:1; only a small footstep bob, never under reduced motion.
+    camera.position.set(0, reduced ? 0 : headBob(walked, Math.hypot(locomotion.vx, locomotion.vz) / WALK_SPEED), 0);
   }
 
   function updateOrbitWalls() {
@@ -1704,6 +2064,27 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
     line.position.y -= 0.01;
     line.rotation.y = entry.root.rotation.y;
     line.scale.set(entry.dims[0] + 0.04, entry.dims[1] + 0.02, entry.dims[2] + 0.04);
+  }
+
+  function drawHeadsetLabel(selected: Entry) {
+    const [w, h, d] = selected.dims;
+    const displayLabel = toWalkItem(selected).label;
+    const key = `${displayLabel}|${w}|${h}|${d}|${selected.source}`;
+    if (key !== labelKey) {
+      labelKey = key;
+      panel.draw([
+        { text: selected.source === "model" ? `${displayLabel} · model bounds` : displayLabel, size: 26, muted: true },
+        { text: `${Math.round(w * 100)} x ${Math.round(d * 100)} x ${Math.round(h * 100)} cm`, size: 46 },
+        { text: `${inches(w)} x ${inches(d)} x ${inches(h)} in`, size: 28, muted: true },
+      ]);
+    }
+    panel.mesh.visible = true;
+    panel.mesh.position.set(selected.root.position.x, selected.root.position.y + h + 0.22, selected.root.position.z);
+    camera.getWorldPosition(tmpA);
+    camera.getWorldQuaternion(tmpQ);
+    panel.mesh.quaternion.copy(tmpQ);
+    const distance = tmpA.distanceTo(panel.mesh.position);
+    panel.mesh.scale.setScalar(THREE.MathUtils.clamp(distance / 2.5, 0.7, mode === "orbit" ? 4 : 1.8));
   }
 
   function updateOverlays() {
@@ -1726,24 +2107,9 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
     placeOutline(selectionOutline, selected);
     (selectionOutline.material as THREE.LineBasicMaterial).color.set(moving && !moving.valid ? INVALID : ACCENT);
 
-    const [w, h, d] = selected.dims;
-    const displayLabel = toWalkItem(selected).label;
-    const key = `${displayLabel}|${w}|${h}|${d}|${selected.source}`;
-    if (key !== labelKey) {
-      labelKey = key;
-      panel.draw([
-        { text: selected.source === "model" ? `${displayLabel} · model bounds` : displayLabel, size: 26, muted: true },
-        { text: `${Math.round(w * 100)} x ${Math.round(d * 100)} x ${Math.round(h * 100)} cm`, size: 46 },
-        { text: `${inches(w)} x ${inches(d)} x ${inches(h)} in`, size: 28, muted: true },
-      ]);
-    }
-    panel.mesh.visible = true;
-    panel.mesh.position.set(selected.root.position.x, selected.root.position.y + h + 0.22, selected.root.position.z);
-    camera.getWorldPosition(tmpA);
-    camera.getWorldQuaternion(tmpQ);
-    panel.mesh.quaternion.copy(tmpQ);
-    const distance = tmpA.distanceTo(panel.mesh.position);
-    panel.mesh.scale.setScalar(THREE.MathUtils.clamp(distance / 2.5, 0.7, mode === "orbit" ? 4 : 1.8));
+    // On screen the HTML toolbar over the piece names and sizes it; the in-world label is for the headset only.
+    if (presenting) drawHeadsetLabel(selected);
+    else panel.mesh.visible = false;
 
     if (!presenting && callbacks.onAnchor) {
       const anchor = anchorFor(selected);
@@ -1770,7 +2136,9 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
       // A headset layer fault must not stop the room from drawing.
     }
     exploder?.update(time);
-    if (moving) updateMove();
+    if (moving) updateMove(false, dt);
+    if (poseAnims.size) updatePoseAnims(dt);
+    if (flights.length) updateFlights(dt);
     if (!presenting) hoverId = mouseOnCanvas || pointerLocked || mode === "walk" ? pickAt(usesCenter() ? center : mouse) : null;
     updateOverlays();
     if (itemsDirty) emitItems();
@@ -1781,6 +2149,19 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
   if ((mode as WalkMode) === "orbit") { rig.position.set(0, 0, 0); rig.rotation.set(0, 0, 0); camera.fov = ORBIT_FOV; controls.enabled = true; fitOrbit(); }
   applyWallMode();
   renderer.setAnimationLoop(frame);
+  // Development-only probe for browser checks of motion feel; never shipped in production builds.
+  if (process.env.NODE_ENV !== "production") {
+    (canvas as HTMLCanvasElement & { __walkProbe?: () => unknown }).__walkProbe = () => ({
+      rig: [rig.position.x, rig.position.z],
+      speed: Math.hypot(locomotion.vx, locomotion.vz),
+      bob: camera.position.y,
+      selected: selectedId,
+      locked: selectedId ? entries.get(selectedId)?.item.locked ?? null : null,
+      moving: moving ? { id: moving.id, level: moving.level, pose: moving.pose, lift: moving.shown.lift.value } : null,
+      flights: flights.length,
+      anims: poseAnims.size,
+    });
+  }
 
   const ready = Promise.all([Promise.all(initialLoads), lighting.ready, envLoad, sourceLoad])
     .then(() => {
@@ -1818,6 +2199,10 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
     canvas.removeEventListener("pointerup", onPointerUp);
     canvas.removeEventListener("pointercancel", onPointerCancel);
     canvas.removeEventListener("pointerleave", onPointerLeave);
+    canvas.removeEventListener("wheel", onWheel, { capture: true });
+    motionQuery?.removeEventListener?.("change", onMotionPreference);
+    finishAllMotion();
+    poseAnims.clear();
     document.removeEventListener("pointerlockchange", onLockChange);
     document.removeEventListener("mousemove", onMouseMove);
     document.removeEventListener("keydown", onKeyDown);
@@ -1857,11 +2242,12 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
     remove,
     store,
     takeOut,
+    takeOutAndCarry,
     add,
     swap,
     setLocked,
     rotate,
-    beginMove,
+    beginMove: (id: string) => beginMove(id),
     confirmMove,
     cancelMove,
     undo,
