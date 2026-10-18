@@ -4,7 +4,7 @@ import { toDataURL } from "qrcode";
 import gsap from "gsap";
 import { useCallback, useLayoutEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type FormEvent } from "react";
 import mark from "@/spatial/assets/tadaima-mark.png";
-import { WipeLink, useWipe, wipeInProgress } from "@/spatial/components/PageWipe";
+import { WipeLink, useWipe, wipeInProgress, whenWipeLifts } from "@/spatial/components/PageWipe";
 import { DappledLight } from "./DappledLight";
 import "./styles/hero.css";
 
@@ -90,17 +90,19 @@ export default function Home() {
   const reduced = useSyncExternalStore(subscribeToMotion, readMotion, () => false);
   const root = useRef<HTMLElement>(null);
   // arriving by a page wipe means the wipe already covered the screen, so skip the loader
-  const [revealed, setRevealed] = useState(() => typeof window !== "undefined" && wipeInProgress());
-  const [loaderGone, setLoaderGone] = useState(revealed);
+  // and start the intro as the panel lifts instead
+  const [arrivedByWipe] = useState(() => typeof window !== "undefined" && wipeInProgress());
+  const [revealed, setRevealed] = useState(false);
+  const [loaderGone, setLoaderGone] = useState(arrivedByWipe);
   const [open, setOpen] = useState<"scan" | "type" | null>(null);
   const [qr, setQr] = useState<string | null>(null);
   const [captureUrl, setCaptureUrl] = useState("/capture");
   const [address, setAddress] = useState("");
   const [addressError, setAddressError] = useState("");
-  const [signInNote, setSignInNote] = useState(false);
   const addressRef = useRef<HTMLInputElement>(null);
   const reveal = useCallback(() => setRevealed(true), []);
   const finishLoading = useCallback(() => setLoaderGone(true), []);
+  useLayoutEffect(() => (arrivedByWipe ? whenWipeLifts(reveal) : undefined), [arrivedByWipe, reveal]);
 
   // The hero sets in as the loader lifts: letters rise out of the floor, then the three ways in.
   useLayoutEffect(() => {
@@ -113,7 +115,6 @@ export default function Home() {
         gsap.fromTo(`${layer} .hero-word__char`, { yPercent: 105 }, { yPercent: 0, duration: 1.15, ease: "power4.out", stagger: 0.05, delay: 0.1, force3D });
       }
       // each option rises out of its own line, like the wordmark
-      gsap.fromTo(".hero-account", { autoAlpha: 0, y: -6 }, { autoAlpha: 1, y: 0, duration: 0.7, ease: "power3.out", delay: 0.4 });
       gsap.fromTo(".hero-row__label", { yPercent: 110 }, { yPercent: 0, duration: 0.9, ease: "power4.out", stagger: 0.1, delay: 0.45 });
     }, root);
     return () => ctx.revert();
@@ -179,22 +180,6 @@ export default function Home() {
         breeze={false}
         className="h-full"
       >
-        {/* accounts are not built yet, so the button says so rather than going nowhere */}
-        <div className="hero-account">
-          <button type="button" className="hero-signin" onClick={() => setSignInNote((v) => !v)} aria-expanded={signInNote}>
-            <svg className="hero-signin__icon" viewBox="0 0 24 24" aria-hidden="true">
-              <circle cx="12" cy="8.5" r="3.5" />
-              <path d="M5 20c.8-3.6 3.6-5.5 7-5.5s6.2 1.9 7 5.5" />
-            </svg>
-            <span className="hero-signin__label">Sign in</span>
-          </button>
-          {signInNote ? (
-            <small className="hero-signin__note" role="status">
-              Accounts are coming soon.
-            </small>
-          ) : null}
-        </div>
-
         <div className="hero-side">
           <ul className="hero-list">
             {ROWS.map((row) => (

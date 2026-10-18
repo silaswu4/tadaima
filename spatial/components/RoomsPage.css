@@ -36,27 +36,27 @@
   font-size: 22px;
   letter-spacing: -0.01em;
   text-decoration: none;
-}
-
-/* the mark lifts a touch on hover */
-.rooms-page__mark {
-  width: 30px;
-  height: 30px;
   transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.rooms-page__wordmark:hover .rooms-page__mark,
-.rooms-page__wordmark:focus-visible .rooms-page__mark {
-  transform: translateY(-2px) scale(1.08);
+/* the mark and the word lift together on hover, as one lockup */
+.rooms-page__mark {
+  width: 30px;
+  height: 30px;
+}
+
+.rooms-page__wordmark:hover,
+.rooms-page__wordmark:focus-visible {
+  transform: translateY(-2px);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .rooms-page__mark {
+  .rooms-page__wordmark {
     transition: none;
   }
 
-  .rooms-page__wordmark:hover .rooms-page__mark,
-  .rooms-page__wordmark:focus-visible .rooms-page__mark {
+  .rooms-page__wordmark:hover,
+  .rooms-page__wordmark:focus-visible {
     transform: none;
   }
 }

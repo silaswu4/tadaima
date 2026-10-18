@@ -12,6 +12,20 @@ import "./PageWipe.css";
 let panel: HTMLDivElement | null = null;
 // pages that arrive under the panel and still need a moment (a gallery building, a room loading)
 let holds = 0;
+// callbacks from the arriving page that want to start exactly as the panel lifts
+let onLift: Array<() => void> = [];
+
+/** Run `cb` as the panel starts lifting off the page, or right away when no wipe is running. */
+export function whenWipeLifts(cb: () => void): () => void {
+  if (!panel) {
+    cb();
+    return () => {};
+  }
+  onLift.push(cb);
+  return () => {
+    onLift = onLift.filter((f) => f !== cb);
+  };
+}
 
 /** True while a wipe is covering the screen, so the next page can skip its own intro cover. */
 export function wipeInProgress(): boolean {
@@ -44,6 +58,12 @@ function wipeTo(href: string, push: (href: string) => void) {
       duration: 0.75,
       ease: "power3.inOut",
       delay: 0.15,
+      // the arriving page's intro starts the moment the panel starts to move
+      onStart: () => {
+        const waiting = onLift;
+        onLift = [];
+        waiting.forEach((cb) => cb());
+      },
       onComplete: () => {
         el.remove();
         panel = null;

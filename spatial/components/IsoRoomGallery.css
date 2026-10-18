@@ -231,8 +231,11 @@
   position: relative;
   display: inline-flex;
   overflow: hidden;
-  padding: 11px 26px;
+  /* the label fills the full button height so the roll below moves it fully out of view */
+  height: 43px;
+  padding: 0 26px;
   border-radius: 999px;
+  line-height: 43px;
   background: var(--ink);
   color: var(--paper);
   font-size: 14px;
@@ -253,6 +256,7 @@
 
 /* Hover rolls the label up and a copy in from below. */
 .iso-gallery__enter-text {
+  position: relative;
   display: inline-block;
   transition: transform 0.6s var(--ease);
 }
