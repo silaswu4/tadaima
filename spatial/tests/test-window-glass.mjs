@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import * as THREE from "three";
 import { applyBakedIndirect, INDIRECT_PROFILE } from "../room/baked-indirect.ts";
-import { prepareWindowGlass } from "../room/window-glass.ts";
+import { createWindowBlinds, createWindowDaylightBackground, prepareWindowGlass } from "../room/window-glass.ts";
 
 function fixture() {
   const root = new THREE.Group(), opening = new THREE.Group();
@@ -20,8 +20,8 @@ test("semantic panes become clear alpha PBR without transmission or opaque shado
   const { root, pane, material } = fixture();
   assert.equal(prepareWindowGlass(root), 1);
   assert.notEqual(pane.material, material);
-  assert.equal(pane.material.color.getHex(), new THREE.Color("#e4f0f3").getHex());
-  assert.equal(pane.material.opacity, .1); assert.equal(pane.material.transparent, true);
+  assert.equal(pane.material.color.getHex(), new THREE.Color("#ffffff").getHex());
+  assert.equal(pane.material.opacity, .025); assert.equal(pane.material.transparent, true);
   assert.equal(pane.material.roughness, .05); assert.equal(pane.material.metalness, 0);
   assert.equal(pane.material.depthWrite, false); assert.equal(pane.material.side, THREE.DoubleSide);
   assert.equal(pane.material.forceSinglePass, true); assert.equal(pane.material.envMapIntensity, 1);
@@ -101,7 +101,7 @@ test("physical source glass cannot enable an expensive transmission pass", () =>
   const { root, pane } = fixture();
   pane.material = new THREE.MeshPhysicalMaterial({ transmission: 1, opacity: 1 });
   prepareWindowGlass(root);
-  assert.equal(pane.material.transmission, 0); assert.equal(pane.material.opacity, .1);
+  assert.equal(pane.material.transmission, 0); assert.equal(pane.material.opacity, .025);
 });
 
 test("unknown baked profiles remain visible to the validation boundary", () => {
@@ -112,4 +112,45 @@ test("unknown baked profiles remain visible to the validation boundary", () => {
   assert.equal(pane.material.userData.tadaimaIndirectLightmap, "unsupported-profile");
   assert.equal(pane.material.emissiveMap, map);
   assert.throws(() => applyBakedIndirect(root), /Unsupported baked room lighting profile/);
+});
+
+
+test("raising blinds changes only verified fabric visibility and restores the original state", () => {
+  const { root, opening, pane, material } = fixture();
+  const fabric = new THREE.Mesh(new THREE.BoxGeometry(), material);
+  fabric.userData = { componentKind: "PartialRollerBlind", ownerOpeningId: "window-1" };
+  fabric.position.set(1, 2, 3); opening.add(fabric);
+  const header = fabric.clone(); header.userData.componentKind = "RollerBlindHeader"; opening.add(header);
+  const hidden = fabric.clone(); hidden.visible = false; opening.add(hidden);
+  const unrelated = fabric.clone(); unrelated.userData.ownerOpeningId = "not-this-opening"; opening.add(unrelated);
+  const before = fabric.matrix.clone(), blinds = createWindowBlinds(root);
+  assert.equal(blinds.count, 2);
+  blinds.setRaised(true);
+  assert.equal(fabric.visible, false); assert.equal(hidden.visible, false);
+  assert.equal(header.visible, true); assert.equal(pane.visible, true); assert.equal(unrelated.visible, true);
+  assert.equal(fabric.material, material); assert.deepEqual(fabric.position.toArray(), [1, 2, 3]);
+  assert.deepEqual(fabric.matrix, before);
+  blinds.setRaised(false);
+  assert.equal(fabric.visible, true); assert.equal(hidden.visible, false);
+  blinds.setRaised(true); blinds.setRaised(false);
+  assert.equal(fabric.visible, true); assert.equal(header.visible, true);
+});
+
+test("daylight preview is a tiny opaque continuous horizon without changing the lighting environment", () => {
+  const sky = createWindowDaylightBackground();
+  assert.equal(sky.mapping, THREE.EquirectangularReflectionMapping);
+  assert.equal(sky.colorSpace, THREE.SRGBColorSpace);
+  assert.equal(sky.minFilter, THREE.LinearFilter); assert.equal(sky.generateMipmaps, false);
+  const { width, height, data } = sky.image;
+  assert.equal(data.byteLength, 524288);
+  const row = (y) => [...data.slice(y * width * 4, y * width * 4 + 3)];
+  assert.notDeepEqual(row(0), row(height - 1));
+  assert.ok(row(height - 1)[2] > row(height - 1)[0], "sky is blue rather than a gray panel");
+  for (let y = 0; y < height; y++) {
+    const offset = y * width * 4;
+    assert.deepEqual([...data.slice(offset, offset + 4)], [...data.slice(offset + (width - 1) * 4, offset + width * 4)], "no longitude seam");
+    assert.equal(data[offset + 3], 255);
+  }
+  assert.match(sky.name, /exterior not captured/);
+  sky.dispose();
 });
