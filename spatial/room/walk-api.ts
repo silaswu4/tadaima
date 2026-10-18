@@ -134,6 +134,8 @@ export type WalkScene = {
   setWindowBlindsRaised(raised: boolean): void;
   /** Request pointer lock for mouse look (desktop walk mode). */
   lockPointer(): void;
+  /** Turn the first-person view smoothly toward a floor point (x, z), e.g. a previewed piece. */
+  lookAt(x: number, z: number): void;
   /** Bounded touch/controller-free locomotion; zero also releases held movement keys. */
   setMoveInput(input: { forward: number; right: number }): void;
   /** True when this browser can enter an immersive VR session (Quest 3S browser). */
