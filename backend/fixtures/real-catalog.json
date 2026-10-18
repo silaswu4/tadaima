@@ -1,0 +1,1218 @@
+{
+  "generatedAt": "2026-10-18T06:59:20.808Z",
+  "note": "Real retailer observations collected by Browser Use. Prices and stock change; recheck before cart.",
+  "products": [
+    {
+      "id": "prod_ikea_skalboda-armchair-black-90554388",
+      "category": "chair",
+      "merchant": "IKEA",
+      "sourceUrl": "https://www.ikea.com/us/en/p/skalboda-armchair-black-90554388/",
+      "variantId": "black",
+      "label": "SKÅLBODA armchair, black",
+      "dimensions": [
+        0.641,
+        0.711,
+        0.689
+      ],
+      "seats": 1,
+      "price": {
+        "amountMinor": 9999,
+        "currency": "USD"
+      },
+      "availability": "available",
+      "imageUrl": "https://www.ikea.com/us/en/images/products/skalboda-armchair-black__1180834_pe896474_s5.jpg?f=u",
+      "observedAt": "2026-10-18T06:54:45.632Z",
+      "evidenceIds": [
+        "ev_ikea_skalboda-armchair-black-90554388"
+      ],
+      "fixture": false
+    },
+    {
+      "id": "prod_ikea_arsunda-armchair-knisa-light-gray-30535897",
+      "category": "chair",
+      "merchant": "IKEA",
+      "sourceUrl": "https://www.ikea.com/us/en/p/arsunda-armchair-knisa-light-gray-30535897/",
+      "variantId": "Knisa light gray",
+      "label": "ÅRSUNDA armchair, Knisa light gray",
+      "dimensions": [
+        0.664,
+        0.997,
+        0.724
+      ],
+      "seats": 1,
+      "price": {
+        "amountMinor": 9999,
+        "currency": "USD"
+      },
+      "availability": "available",
+      "imageUrl": "https://www.ikea.com/us/en/images/products/arsunda-armchair-knisa-light-gray__1276550_pe930953_s5.jpg?f=u",
+      "observedAt": "2026-10-18T06:54:45.632Z",
+      "evidenceIds": [
+        "ev_ikea_arsunda-armchair-knisa-light-gray-30535897"
+      ],
+      "fixture": false
+    },
+    {
+      "id": "prod_target_a-51206267",
+      "category": "chair",
+      "merchant": "Target",
+      "sourceUrl": "https://www.target.com/p/modern-barrel-accent-chair-homepop/-/A-51206267?preselect=16723296",
+      "variantId": "Navy",
+      "label": "Modern Barrel Accent Chair Navy - HomePop: Upholstered Tub Style for Bedroom & Living Room",
+      "dimensions": [
+        0.66,
+        0.838,
+        0.711
+      ],
+      "seats": 1,
+      "price": {
+        "amountMinor": 12494,
+        "currency": "USD"
+      },
+      "availability": "available",
+      "imageUrl": "https://target.scene7.com/is/image/Target/GUEST_cf2d99e8-a2b8-4361-b829-4fa58ca00fd7?wid=800&hei=800&qlt=80&fmt=pjpeg",
+      "observedAt": "2026-10-18T06:54:24.430Z",
+      "evidenceIds": [
+        "ev_target_a-51206267"
+      ],
+      "fixture": false
+    },
+    {
+      "id": "prod_ikea_poaeng-armchair-birch-veneer-knisa-light-beige-s",
+      "category": "chair",
+      "merchant": "IKEA",
+      "sourceUrl": "https://www.ikea.com/us/en/p/poaeng-armchair-birch-veneer-knisa-light-beige-s59305928/",
+      "variantId": "birch veneer/Knisa light beige",
+      "label": "POÄNG armchair, birch veneer/Knisa light beige",
+      "dimensions": [
+        0.679,
+        1,
+        0.819
+      ],
+      "seats": 1,
+      "price": {
+        "amountMinor": 14900,
+        "currency": "USD"
+      },
+      "availability": "available",
+      "imageUrl": "https://www.ikea.com/us/en/images/products/poaeng-armchair-birch-veneer-knisa-light-beige__0571500_pe666933_s5.jpg?f=u",
+      "observedAt": "2026-10-18T06:54:45.632Z",
+      "evidenceIds": [
+        "ev_ikea_poaeng-armchair-birch-veneer-knisa-light-beige-s"
+      ],
+      "fixture": false
+    },
+    {
+      "id": "prod_target_a-1012411667",
+      "category": "chair",
+      "merchant": "Target",
+      "sourceUrl": "https://www.target.com/p/modern-accent-chair-microfiber-upholstery-solid-wood-frame-space-saving-mid-century-seating-for-living-room-bedroom-cozy-reading-nook/-/A-1012411667?preselect=1012411671",
+      "variantId": "Light Camel + Microfiber",
+      "label": "Modern Accent Chair – Microfiber Upholstery & Solid Wood Frame, Space-Saving Mid-Century Seating for Living Room, Bedroom, Cozy Reading Nook",
+      "dimensions": [
+        0.67,
+        0.81,
+        0.77
+      ],
+      "seats": 1,
+      "price": {
+        "amountMinor": 17899,
+        "currency": "USD"
+      },
+      "availability": "available",
+      "imageUrl": "https://target.scene7.com/is/image/Target/GUEST_1f568d25-34d4-4fcd-9804-5404ef709fa8?wid=800&hei=800&qlt=80&fmt=pjpeg",
+      "observedAt": "2026-10-18T06:54:24.430Z",
+      "evidenceIds": [
+        "ev_target_a-1012411667"
+      ],
+      "fixture": false
+    },
+    {
+      "id": "prod_ikea_herrakra-armchair-diseroed-dark-yellow-40535547",
+      "category": "chair",
+      "merchant": "IKEA",
+      "sourceUrl": "https://www.ikea.com/us/en/p/herrakra-armchair-diseroed-dark-yellow-40535547/",
+      "variantId": "Diseröd dark yellow",
+      "label": "HERRÅKRA armchair, Diseröd dark yellow",
+      "dimensions": [
+        0.711,
+        0.73,
+        0.66
+      ],
+      "seats": 1,
+      "price": {
+        "amountMinor": 19999,
+        "currency": "USD"
+      },
+      "availability": "available",
+      "imageUrl": "https://www.ikea.com/us/en/images/products/herrakra-armchair-diseroed-dark-yellow__1213667_pe911203_s5.jpg?f=u",
+      "observedAt": "2026-10-18T06:54:45.632Z",
+      "evidenceIds": [
+        "ev_ikea_herrakra-armchair-diseroed-dark-yellow-40535547"
+      ],
+      "fixture": false
+    },
+    {
+      "id": "prod_ikea_stockholm-2025-armchair-djurmo-gray-white-405947",
+      "category": "chair",
+      "merchant": "IKEA",
+      "sourceUrl": "https://www.ikea.com/us/en/p/stockholm-2025-armchair-djurmo-gray-white-40594754/",
+      "variantId": "Djurmo gray/white",
+      "label": "STOCKHOLM 2025 armchair, Djurmo gray/white",
+      "dimensions": [
+        0.759,
+        0.679,
+        0.721
+      ],
+      "seats": 1,
+      "price": {
+        "amountMinor": 39900,
+        "currency": "USD"
+      },
+      "availability": "available",
+      "imageUrl": "https://www.ikea.com/us/en/images/products/stockholm-2025-armchair-djurmo-gray-white__1362740_pe955313_s5.jpg?f=u",
+      "observedAt": "2026-10-18T06:54:45.632Z",
+      "evidenceIds": [
+        "ev_ikea_stockholm-2025-armchair-djurmo-gray-white-405947"
+      ],
+      "fixture": false
+    },
+    {
+      "id": "prod_ikea_tagarp-floor-uplighter-black-white-60464049",
+      "category": "lamp",
+      "merchant": "IKEA",
+      "sourceUrl": "https://www.ikea.com/us/en/p/tagarp-floor-uplighter-black-white-60464049/",
+      "variantId": "black/white",
+      "label": "TÅGARP Floor uplighter, black/white",
+      "dimensions": [
+        0.229,
+        1.803,
+        0.229
+      ],
+      "seats": null,
+      "price": {
+        "amountMinor": 1499,
+        "currency": "USD"
+      },
+      "availability": "available",
+      "imageUrl": "https://www.ikea.com/us/en/images/products/tagarp-floor-uplighter-black-white__0810840_pe771436_s5.jpg?f=u",
+      "observedAt": "2026-10-18T06:59:20.805Z",
+      "evidenceIds": [
+        "ev_ikea_tagarp-floor-uplighter-black-white-60464049"
+      ],
+      "fixture": false
+    },
+    {
+      "id": "prod_ikea_roedflik-floor-reading-lamp-gray-green-80563581",
+      "category": "lamp",
+      "merchant": "IKEA",
+      "sourceUrl": "https://www.ikea.com/us/en/p/roedflik-floor-reading-lamp-gray-green-80563581/",
+      "variantId": "gray-green",
+      "label": "RÖDFLIK Floor/reading lamp, gray-green",
+      "dimensions": [
+        0.406,
+        1.397,
+        0.406
+      ],
+      "seats": null,
+      "price": {
+        "amountMinor": 5999,
+        "currency": "USD"
+      },
+      "availability": "available",
+      "imageUrl": "https://www.ikea.com/us/en/images/products/roedflik-floor-reading-lamp-gray-green__1232722_pe916583_s5.jpg?f=u",
+      "observedAt": "2026-10-18T06:59:20.805Z",
+      "evidenceIds": [
+        "ev_ikea_roedflik-floor-reading-lamp-gray-green-80563581"
+      ],
+      "fixture": false
+    },
+    {
+      "id": "prod_ikea_lauters-floor-lamp-ash-white-00405048",
+      "category": "lamp",
+      "merchant": "IKEA",
+      "sourceUrl": "https://www.ikea.com/us/en/p/lauters-floor-lamp-ash-white-00405048/",
+      "variantId": "ash/white",
+      "label": "LAUTERS Floor lamp, ash/white",
+      "dimensions": [
+        0.61,
+        1.499,
+        0.61
+      ],
+      "seats": null,
+      "price": {
+        "amountMinor": 7999,
+        "currency": "USD"
+      },
+      "availability": "available",
+      "imageUrl": "https://www.ikea.com/us/en/images/products/lauters-floor-lamp-ash-white__0663863_pe712536_s5.jpg?f=u",
+      "observedAt": "2026-10-18T06:59:20.805Z",
+      "evidenceIds": [
+        "ev_ikea_lauters-floor-lamp-ash-white-00405048"
+      ],
+      "fixture": false
+    },
+    {
+      "id": "prod_ikea_isjakt-led-floor-uplighter-reading-lamp-dimmable",
+      "category": "lamp",
+      "merchant": "IKEA",
+      "sourceUrl": "https://www.ikea.com/us/en/p/isjakt-led-floor-uplighter-reading-lamp-dimmable-nickel-plated-70459716/",
+      "variantId": "dimmable/nickel plated",
+      "label": "ISJAKT LED floor uplighter/reading lamp, dimmable/nickel plated, 71 \"",
+      "dimensions": null,
+      "seats": null,
+      "price": {
+        "amountMinor": 14999,
+        "currency": "USD"
+      },
+      "availability": "available",
+      "imageUrl": "https://www.ikea.com/us/en/images/products/isjakt-led-floor-uplighter-reading-lamp-dimmable-nickel-plated__1006753_pe825819_s5.jpg?f=u",
+      "observedAt": "2026-10-18T06:54:40.247Z",
+      "evidenceIds": [
+        "ev_ikea_isjakt-led-floor-uplighter-reading-lamp-dimmable"
+      ],
+      "fixture": false
+    },
+    {
+      "id": "prod_ikea_simrishamn-floor-lamp-chrome-plated-opal-glass-5",
+      "category": "lamp",
+      "merchant": "IKEA",
+      "sourceUrl": "https://www.ikea.com/us/en/p/simrishamn-floor-lamp-chrome-plated-opal-glass-50437773/",
+      "variantId": "chrome plated/opal glass",
+      "label": "SIMRISHAMN Floor lamp, chrome plated/opal glass",
+      "dimensions": [
+        0.305,
+        1.575,
+        0.305
+      ],
+      "seats": null,
+      "price": {
+        "amountMinor": 19999,
+        "currency": "USD"
+      },
+      "availability": "available",
+      "imageUrl": "https://www.ikea.com/us/en/images/products/simrishamn-floor-lamp-chrome-plated-opal-glass__0789445_pe763989_s5.jpg?f=u",
+      "observedAt": "2026-10-18T06:59:20.805Z",
+      "evidenceIds": [
+        "ev_ikea_simrishamn-floor-lamp-chrome-plated-opal-glass-5"
+      ],
+      "fixture": false
+    },
+    {
+      "id": "prod_ikea_elsystem-rug-low-pile-multicolor-30580922",
+      "category": "rug",
+      "merchant": "IKEA",
+      "sourceUrl": "https://www.ikea.com/us/en/p/elsystem-rug-low-pile-multicolor-30580922/",
+      "variantId": "Multicolor, 4 ' 4 \"x6 ' 5 \"",
+      "label": "ELSYSTEM, Rug, low pile, multicolor, 4 ' 4 \"x6 ' 5 \"",
+      "dimensions": [
+        1.321,
+        0.006,
+        1.956
+      ],
+      "seats": null,
+      "price": {
+        "amountMinor": 7999,
+        "currency": "USD"
+      },
+      "availability": "available",
+      "imageUrl": "https://www.ikea.com/us/en/images/products/elsystem-rug-low-pile-multicolor__1390072_pe965350_s5.jpg?f=u",
+      "observedAt": "2026-10-18T06:54:56.277Z",
+      "evidenceIds": [
+        "ev_ikea_elsystem-rug-low-pile-multicolor-30580922"
+      ],
+      "fixture": false
+    },
+    {
+      "id": "prod_ikea_vaendplats-rug-low-pile-white-black-dotted-30600",
+      "category": "rug",
+      "merchant": "IKEA",
+      "sourceUrl": "https://www.ikea.com/us/en/p/vaendplats-rug-low-pile-white-black-dotted-30600939/",
+      "variantId": "White/black dotted, 4 ' 4 \"x6 ' 5 \"",
+      "label": "VÄNDPLATS, Rug, low pile, white/black dotted, 4 ' 4 \"x6 ' 5 \"",
+      "dimensions": [
+        1.321,
+        0.01,
+        1.956
+      ],
+      "seats": null,
+      "price": {
+        "amountMinor": 7999,
+        "currency": "USD"
+      },
+      "availability": "available",
+      "imageUrl": "https://www.ikea.com/us/en/images/products/vaendplats-rug-low-pile-white-black-dotted__1370843_pe958911_s5.jpg?f=u",
+      "observedAt": "2026-10-18T06:54:56.277Z",
+      "evidenceIds": [
+        "ev_ikea_vaendplats-rug-low-pile-white-black-dotted-30600"
+      ],
+      "fixture": false
+    },
+    {
+      "id": "prod_target_a-94258305",
+      "category": "rug",
+      "merchant": "Target",
+      "sourceUrl": "https://www.target.com/p/5-39-x7-39-high-low-geo-area-rug-ivory-threshold-8482/-/A-94258305",
+      "variantId": "Ivory",
+      "label": "5'x7' High Low Geo Area Rug Ivory - Threshold™",
+      "dimensions": [
+        1.524,
+        0.01,
+        2.134
+      ],
+      "seats": null,
+      "price": {
+        "amountMinor": 8000,
+        "currency": "USD"
+      },
+      "availability": "available",
+      "imageUrl": "https://target.scene7.com/is/image/Target/GUEST_815b0d73-a236-46ea-af26-ea3e6b0e05fc?wid=800&hei=800&qlt=80&fmt=pjpeg",
+      "observedAt": "2026-10-18T06:53:52.233Z",
+      "evidenceIds": [
+        "ev_target_a-94258305"
+      ],
+      "fixture": false
+    },
+    {
+      "id": "prod_ikea_lohals-rug-flatwoven-natural-30511288",
+      "category": "rug",
+      "merchant": "IKEA",
+      "sourceUrl": "https://www.ikea.com/us/en/p/lohals-rug-flatwoven-natural-30511288/",
+      "variantId": "Natural, 4 ' 4 \"x6 ' 5 \"",
+      "label": "LOHALS, Rug, flatwoven, natural, 4 ' 4 \"x6 ' 5 \"",
+      "dimensions": [
+        1.321,
+        0.013,
+        1.956
+      ],
+      "seats": null,
+      "price": {
+        "amountMinor": 9999,
+        "currency": "USD"
+      },
+      "availability": "available",
+      "imageUrl": "https://www.ikea.com/us/en/images/products/lohals-rug-flatwoven-natural__0280221_pe419173_s5.jpg?f=u",
+      "observedAt": "2026-10-18T06:54:56.277Z",
+      "evidenceIds": [
+        "ev_ikea_lohals-rug-flatwoven-natural-30511288"
+      ],
+      "fixture": false
+    },
+    {
+      "id": "prod_target_a-94258226",
+      "category": "rug",
+      "merchant": "Target",
+      "sourceUrl": "https://www.target.com/p/5-39-x7-39-braided-area-rug-light-brown-ivory-threshold-8482/-/A-94258226",
+      "variantId": "Light Brown/Ivory",
+      "label": "5'x7' Braided Area Rug Light Brown/Ivory - Threshold™",
+      "dimensions": [
+        1.524,
+        0.01,
+        2.134
+      ],
+      "seats": null,
+      "price": {
+        "amountMinor": 10000,
+        "currency": "USD"
+      },
+      "availability": "available",
+      "imageUrl": "https://target.scene7.com/is/image/Target/GUEST_7a6b84ea-a444-42be-a567-2ae29f12ecee?wid=800&hei=800&qlt=80&fmt=pjpeg",
+      "observedAt": "2026-10-18T06:53:52.233Z",
+      "evidenceIds": [
+        "ev_target_a-94258226"
+      ],
+      "fixture": false
+    },
+    {
+      "id": "prod_ikea_tidtabell-rug-flatwoven-gray-10561854",
+      "category": "rug",
+      "merchant": "IKEA",
+      "sourceUrl": "https://www.ikea.com/us/en/p/tidtabell-rug-flatwoven-gray-10561854/",
+      "variantId": "Gray, 4 ' 4 \"x6 ' 5 \"",
+      "label": "TIDTABELL, Rug, flatwoven, gray, 4 ' 4 \"x6 ' 5 \"",
+      "dimensions": [
+        1.321,
+        0.006,
+        1.956
+      ],
+      "seats": null,
+      "price": {
+        "amountMinor": 14999,
+        "currency": "USD"
+      },
+      "availability": "unavailable",
+      "imageUrl": "https://www.ikea.com/us/en/images/products/tidtabell-rug-flatwoven-gray__1205732_pe907227_s5.jpg?f=u",
+      "observedAt": "2026-10-18T06:54:56.277Z",
+      "evidenceIds": [
+        "ev_ikea_tidtabell-rug-flatwoven-gray-10561854"
+      ],
+      "fixture": false
+    },
+    {
+      "id": "prod_target_a-94257319",
+      "category": "rug",
+      "merchant": "Target",
+      "sourceUrl": "https://www.target.com/p/5-39-x7-39-floral-handtufted-area-rug-dark-green-threshold-8482/-/A-94257319",
+      "variantId": "Dark Green",
+      "label": "5'x7' Floral Handtufted Area Rug Dark Green - Threshold™",
+      "dimensions": [
+        1.524,
+        0.01,
+        2.134
+      ],
+      "seats": null,
+      "price": {
+        "amountMinor": 20000,
+        "currency": "USD"
+      },
+      "availability": "available",
+      "imageUrl": "https://target.scene7.com/is/image/Target/GUEST_5548043a-ecbd-4026-802c-b7c6d8aaaea9?wid=800&hei=800&qlt=80&fmt=pjpeg",
+      "observedAt": "2026-10-18T06:53:52.233Z",
+      "evidenceIds": [
+        "ev_target_a-94257319"
+      ],
+      "fixture": false
+    },
+    {
+      "id": "prod_ikea_saltmyran-loveseat-oereryd-gray-beige-80618531",
+      "category": "sofa",
+      "merchant": "IKEA",
+      "sourceUrl": "https://www.ikea.com/us/en/p/saltmyran-loveseat-oereryd-gray-beige-80618531/",
+      "variantId": "Öreryd gray-beige",
+      "label": "SALTMYRAN loveseat, Öreryd gray-beige",
+      "dimensions": [
+        1.47,
+        0.772,
+        0.791
+      ],
+      "seats": 2,
+      "price": {
+        "amountMinor": 29900,
+        "currency": "USD"
+      },
+      "availability": "available",
+      "imageUrl": "https://www.ikea.com/us/en/images/products/saltmyran-loveseat-oereryd-gray-beige__1576105_pe1032229_s5.jpg?f=s",
+      "observedAt": "2026-10-18T06:53:30.952Z",
+      "evidenceIds": [
+        "ev_ikea_saltmyran-loveseat-oereryd-gray-beige-80618531"
+      ],
+      "fixture": false
+    },
+    {
+      "id": "prod_ikea_gullvalla-loveseat-silkeryd-dark-gray-beige-0061",
+      "category": "sofa",
+      "merchant": "IKEA",
+      "sourceUrl": "https://www.ikea.com/us/en/p/gullvalla-loveseat-silkeryd-dark-gray-beige-00618506/",
+      "variantId": "Silkeryd dark gray-beige",
+      "label": "GULLVALLA loveseat, Silkeryd dark gray-beige",
+      "dimensions": [
+        1.419,
+        0.781,
+        0.829
+      ],
+      "seats": 2,
+      "price": {
+        "amountMinor": 39900,
+        "currency": "USD"
+      },
+      "availability": "available",
+      "imageUrl": "https://www.ikea.com/us/en/images/products/gullvalla-loveseat-silkeryd-dark-gray-beige__1578446_pe1034089_s5.jpg?f=s",
+      "observedAt": "2026-10-18T06:53:30.952Z",
+      "evidenceIds": [
+        "ev_ikea_gullvalla-loveseat-silkeryd-dark-gray-beige-0061"
+      ],
+      "fixture": false
+    },
+    {
+      "id": "prod_ikea_ekholma-loveseat-hakebo-dark-gray-s39537401",
+      "category": "sofa",
+      "merchant": "IKEA",
+      "sourceUrl": "https://www.ikea.com/us/en/p/ekholma-loveseat-hakebo-dark-gray-s39537401/",
+      "variantId": "Hakebo dark gray",
+      "label": "EKHOLMA loveseat, Hakebo dark gray",
+      "dimensions": [
+        1.67,
+        0.94,
+        0.851
+      ],
+      "seats": 2,
+      "price": {
+        "amountMinor": 69900,
+        "currency": "USD"
+      },
+      "availability": "available",
+      "imageUrl": "https://www.ikea.com/us/en/images/products/ekholma-loveseat-hakebo-dark-gray__1577920_pe1033666_s5.jpg?f=s",
+      "observedAt": "2026-10-18T06:53:30.952Z",
+      "evidenceIds": [
+        "ev_ikea_ekholma-loveseat-hakebo-dark-gray-s39537401"
+      ],
+      "fixture": false
+    },
+    {
+      "id": "prod_ikea_gersby-bookcase-white-70261131",
+      "category": "storage",
+      "merchant": "IKEA",
+      "sourceUrl": "https://www.ikea.com/us/en/p/gersby-bookcase-white-70261131/",
+      "variantId": "White",
+      "label": "GERSBY Bookcase, white",
+      "dimensions": [
+        0.6,
+        1.8,
+        0.241
+      ],
+      "seats": null,
+      "price": {
+        "amountMinor": 3999,
+        "currency": "USD"
+      },
+      "availability": "available",
+      "imageUrl": "https://www.ikea.com/us/en/images/products/gersby-bookcase-white__1590290_pe1038929_s5.jpg?f=u",
+      "observedAt": "2026-10-18T06:54:40.231Z",
+      "evidenceIds": [
+        "ev_ikea_gersby-bookcase-white-70261131"
+      ],
+      "fixture": false
+    },
+    {
+      "id": "prod_ikea_skruvby-bookcase-black-blue-20520354",
+      "category": "storage",
+      "merchant": "IKEA",
+      "sourceUrl": "https://www.ikea.com/us/en/p/skruvby-bookcase-black-blue-20520354/",
+      "variantId": "Black-blue",
+      "label": "SKRUVBY Bookcase, black-blue",
+      "dimensions": [
+        0.6,
+        1.4,
+        0.375
+      ],
+      "seats": null,
+      "price": {
+        "amountMinor": 9900,
+        "currency": "USD"
+      },
+      "availability": "available",
+      "imageUrl": "https://www.ikea.com/us/en/images/products/skruvby-bookcase-black-blue__1590303_pe1038942_s5.jpg?f=u",
+      "observedAt": "2026-10-18T06:54:40.231Z",
+      "evidenceIds": [
+        "ev_ikea_skruvby-bookcase-black-blue-20520354"
+      ],
+      "fixture": false
+    },
+    {
+      "id": "prod_ikea_lommarp-bookcase-dark-blue-green-40415465",
+      "category": "storage",
+      "merchant": "IKEA",
+      "sourceUrl": "https://www.ikea.com/us/en/p/lommarp-bookcase-dark-blue-green-40415465/",
+      "variantId": "Dark blue-green",
+      "label": "LOMMARP Bookcase, dark blue-green",
+      "dimensions": [
+        0.651,
+        1.991,
+        0.34
+      ],
+      "seats": null,
+      "price": {
+        "amountMinor": 24900,
+        "currency": "USD"
+      },
+      "availability": "available",
+      "imageUrl": "https://www.ikea.com/us/en/images/products/lommarp-bookcase-dark-blue-green__1602152_pe1043244_s5.jpg?f=u",
+      "observedAt": "2026-10-18T06:54:40.231Z",
+      "evidenceIds": [
+        "ev_ikea_lommarp-bookcase-dark-blue-green-40415465"
+      ],
+      "fixture": false
+    },
+    {
+      "id": "prod_ikea_hemnes-bookcase-white-stain-light-brown-60413502",
+      "category": "storage",
+      "merchant": "IKEA",
+      "sourceUrl": "https://www.ikea.com/us/en/p/hemnes-bookcase-white-stain-light-brown-60413502/",
+      "variantId": "White stain/light brown",
+      "label": "HEMNES Bookcase, white stain/light brown",
+      "dimensions": [
+        0.899,
+        1.969,
+        0.371
+      ],
+      "seats": null,
+      "price": {
+        "amountMinor": 34900,
+        "currency": "USD"
+      },
+      "availability": "available",
+      "imageUrl": "https://www.ikea.com/us/en/images/products/hemnes-bookcase-white-stain-light-brown__1590316_pe1038955_s5.jpg?f=u",
+      "observedAt": "2026-10-18T06:54:40.231Z",
+      "evidenceIds": [
+        "ev_ikea_hemnes-bookcase-white-stain-light-brown-60413502"
+      ],
+      "fixture": false
+    },
+    {
+      "id": "prod_ikea_lack-coffee-table-black-brown-40104294",
+      "category": "table",
+      "merchant": "IKEA",
+      "sourceUrl": "https://www.ikea.com/us/en/p/lack-coffee-table-black-brown-40104294/",
+      "variantId": "black-brown",
+      "label": "LACK Coffee table, black-brown, 35 3/8x21 5/8 \"",
+      "dimensions": [
+        0.899,
+        0.451,
+        0.549
+      ],
+      "seats": null,
+      "price": {
+        "amountMinor": 2999,
+        "currency": "USD"
+      },
+      "availability": "available",
+      "imageUrl": "https://www.ikea.com/us/en/images/products/lack-coffee-table-black-brown__57540_pe163122_s5.jpg?f=u",
+      "observedAt": "2026-10-18T06:54:50.979Z",
+      "evidenceIds": [
+        "ev_ikea_lack-coffee-table-black-brown-40104294"
+      ],
+      "fixture": false
+    },
+    {
+      "id": "prod_target_a-82624055",
+      "category": "table",
+      "merchant": "Target",
+      "sourceUrl": "https://www.target.com/p/wood-and-metal-coffee-table-room-essentials/-/A-82624055?preselect=80602680",
+      "variantId": "Black",
+      "label": "Wood and Metal Coffee Table Black - Room Essentials™",
+      "dimensions": [
+        0.8,
+        0.457,
+        0.508
+      ],
+      "seats": null,
+      "price": {
+        "amountMinor": 4200,
+        "currency": "USD"
+      },
+      "availability": "available",
+      "imageUrl": "https://target.scene7.com/is/image/Target/GUEST_a490316f-d5b4-45c9-845d-3ab5f1fe6397?wid=800&hei=800&qlt=80&fmt=pjpeg",
+      "observedAt": "2026-10-18T06:53:46.998Z",
+      "evidenceIds": [
+        "ev_target_a-82624055"
+      ],
+      "fixture": false
+    },
+    {
+      "id": "prod_ikea_holmerud-coffee-table-oak-effect-90540706",
+      "category": "table",
+      "merchant": "IKEA",
+      "sourceUrl": "https://www.ikea.com/us/en/p/holmerud-coffee-table-oak-effect-90540706/",
+      "variantId": "oak effect",
+      "label": "HOLMERUD coffee table, oak effect, 35 3/8x21 5/8 \"",
+      "dimensions": [
+        0.899,
+        0.4,
+        0.549
+      ],
+      "seats": null,
+      "price": {
+        "amountMinor": 8999,
+        "currency": "USD"
+      },
+      "availability": "available",
+      "imageUrl": "https://www.ikea.com/us/en/images/products/holmerud-coffee-table-oak-effect__1193663_pe901563_s5.jpg?f=u",
+      "observedAt": "2026-10-18T06:54:50.979Z",
+      "evidenceIds": [
+        "ev_ikea_holmerud-coffee-table-oak-effect-90540706"
+      ],
+      "fixture": false
+    },
+    {
+      "id": "prod_ikea_borgeby-coffee-table-birch-veneer-70389356",
+      "category": "table",
+      "merchant": "IKEA",
+      "sourceUrl": "https://www.ikea.com/us/en/p/borgeby-coffee-table-birch-veneer-70389356/",
+      "variantId": "birch veneer",
+      "label": "BORGEBY coffee table, birch veneer, 27 1/2 \"",
+      "dimensions": [
+        0.699,
+        0.419,
+        0.699
+      ],
+      "seats": null,
+      "price": {
+        "amountMinor": 19999,
+        "currency": "USD"
+      },
+      "availability": "available",
+      "imageUrl": "https://www.ikea.com/us/en/images/products/borgeby-coffee-table-birch-veneer__0987623_pe817609_s5.jpg?f=u",
+      "observedAt": "2026-10-18T06:54:50.979Z",
+      "evidenceIds": [
+        "ev_ikea_borgeby-coffee-table-birch-veneer-70389356"
+      ],
+      "fixture": false
+    },
+    {
+      "id": "prod_target_a-91526136",
+      "category": "table",
+      "merchant": "Target",
+      "sourceUrl": "https://www.target.com/p/castalia-coffee-table-threshold/-/A-91526136?preselect=89207298",
+      "variantId": "Black",
+      "label": "Castalia Coffee Table Black - Threshold™",
+      "dimensions": [
+        0.813,
+        0.406,
+        0.813
+      ],
+      "seats": null,
+      "price": {
+        "amountMinor": 20000,
+        "currency": "USD"
+      },
+      "availability": "available",
+      "imageUrl": "https://target.scene7.com/is/image/Target/GUEST_6d981ad5-f6c8-46c2-b315-99ab254c4db9?wid=800&hei=800&qlt=80&fmt=pjpeg",
+      "observedAt": "2026-10-18T06:53:46.998Z",
+      "evidenceIds": [
+        "ev_target_a-91526136"
+      ],
+      "fixture": false
+    },
+    {
+      "id": "prod_target_a-90758465",
+      "category": "table",
+      "merchant": "Target",
+      "sourceUrl": "https://www.target.com/p/wooden-round-pedestal-coffee-table-hearth-hand-with-magnolia/-/A-90758465?preselect=84826258",
+      "variantId": "Natural",
+      "label": "Wooden Round Pedestal Coffee Table - Natural - Hearth & Hand™ with Magnolia: Farmhouse Style, No Assembly Required",
+      "dimensions": [
+        0.8,
+        0.457,
+        0.8
+      ],
+      "seats": null,
+      "price": {
+        "amountMinor": 27999,
+        "currency": "USD"
+      },
+      "availability": "available",
+      "imageUrl": "https://target.scene7.com/is/image/Target/GUEST_886fce3d-7cb2-4515-9222-61027bc31216?wid=800&hei=800&qlt=80&fmt=pjpeg",
+      "observedAt": "2026-10-18T06:53:46.998Z",
+      "evidenceIds": [
+        "ev_target_a-90758465"
+      ],
+      "fixture": false
+    },
+    {
+      "id": "prod_ikea_tonstad-coffee-table-oak-veneer-10489311",
+      "category": "table",
+      "merchant": "IKEA",
+      "sourceUrl": "https://www.ikea.com/us/en/p/tonstad-coffee-table-oak-veneer-10489311/",
+      "variantId": "oak veneer",
+      "label": "TONSTAD coffee table, oak veneer, 33 1/8x32 1/4 \"",
+      "dimensions": [
+        0.841,
+        0.349,
+        0.819
+      ],
+      "seats": null,
+      "price": {
+        "amountMinor": 34999,
+        "currency": "USD"
+      },
+      "availability": "available",
+      "imageUrl": "https://www.ikea.com/us/en/images/products/tonstad-coffee-table-oak-veneer__1319540_pe940959_s5.jpg?f=u",
+      "observedAt": "2026-10-18T06:54:50.979Z",
+      "evidenceIds": [
+        "ev_ikea_tonstad-coffee-table-oak-veneer-10489311"
+      ],
+      "fixture": false
+    }
+  ],
+  "evidence": [
+    {
+      "id": "ev_ikea_skalboda-armchair-black-90554388",
+      "sourceUrl": "https://www.ikea.com/us/en/p/skalboda-armchair-black-90554388/",
+      "privateAssetId": null,
+      "observedAt": "2026-10-18T06:54:45.632Z",
+      "claim": "Price $99.99; dimensions as listed: Width 25 1/4 \"; Depth 27 1/8 \"; Height 28 \"",
+      "dimensionStatus": "source_dimension",
+      "confirmedByUserAt": null
+    },
+    {
+      "id": "ev_ikea_arsunda-armchair-knisa-light-gray-30535897",
+      "sourceUrl": "https://www.ikea.com/us/en/p/arsunda-armchair-knisa-light-gray-30535897/",
+      "privateAssetId": null,
+      "observedAt": "2026-10-18T06:54:45.632Z",
+      "claim": "Price $99.99; dimensions as listed: Width 26 1/8 \"; Depth 28 1/2 \"; Height 39 1/4 \"",
+      "dimensionStatus": "source_dimension",
+      "confirmedByUserAt": null
+    },
+    {
+      "id": "ev_ikea_poaeng-armchair-birch-veneer-knisa-light-beige-s",
+      "sourceUrl": "https://www.ikea.com/us/en/p/poaeng-armchair-birch-veneer-knisa-light-beige-s59305928/",
+      "privateAssetId": null,
+      "observedAt": "2026-10-18T06:54:45.632Z",
+      "claim": "Price $149.00; dimensions as listed: Width 26 3/4 \"; Depth 32 1/4 \"; Height 39 3/8 \"",
+      "dimensionStatus": "source_dimension",
+      "confirmedByUserAt": null
+    },
+    {
+      "id": "ev_ikea_herrakra-armchair-diseroed-dark-yellow-40535547",
+      "sourceUrl": "https://www.ikea.com/us/en/p/herrakra-armchair-diseroed-dark-yellow-40535547/",
+      "privateAssetId": null,
+      "observedAt": "2026-10-18T06:54:45.632Z",
+      "claim": "Price $199.99; dimensions as listed: Width 28 \"; Depth 26 \"; Height 28 3/4 \"",
+      "dimensionStatus": "source_dimension",
+      "confirmedByUserAt": null
+    },
+    {
+      "id": "ev_ikea_stockholm-2025-armchair-djurmo-gray-white-405947",
+      "sourceUrl": "https://www.ikea.com/us/en/p/stockholm-2025-armchair-djurmo-gray-white-40594754/",
+      "privateAssetId": null,
+      "observedAt": "2026-10-18T06:54:45.632Z",
+      "claim": "Price $399.00; dimensions as listed: Width 29 7/8 \"; Depth 28 3/8 \"; Height 26 3/4 \"",
+      "dimensionStatus": "source_dimension",
+      "confirmedByUserAt": null
+    },
+    {
+      "id": "ev_ikea_saltmyran-loveseat-oereryd-gray-beige-80618531",
+      "sourceUrl": "https://www.ikea.com/us/en/p/saltmyran-loveseat-oereryd-gray-beige-80618531/",
+      "privateAssetId": null,
+      "observedAt": "2026-10-18T06:53:30.952Z",
+      "claim": "Price $299.00; dimensions as listed: Depth\n31 1/8 \"\nHeight including back cushions\n30 3/8 \"\nWidth\n57 7/8 \"",
+      "dimensionStatus": "source_dimension",
+      "confirmedByUserAt": null
+    },
+    {
+      "id": "ev_ikea_gullvalla-loveseat-silkeryd-dark-gray-beige-0061",
+      "sourceUrl": "https://www.ikea.com/us/en/p/gullvalla-loveseat-silkeryd-dark-gray-beige-00618506/",
+      "privateAssetId": null,
+      "observedAt": "2026-10-18T06:53:30.952Z",
+      "claim": "Price $399.00; dimensions as listed: Depth\n32 5/8 \"\nHeight including back cushions\n30 3/4 \"\nWidth\n55 7/8 \"",
+      "dimensionStatus": "source_dimension",
+      "confirmedByUserAt": null
+    },
+    {
+      "id": "ev_ikea_ekholma-loveseat-hakebo-dark-gray-s39537401",
+      "sourceUrl": "https://www.ikea.com/us/en/p/ekholma-loveseat-hakebo-dark-gray-s39537401/",
+      "privateAssetId": null,
+      "observedAt": "2026-10-18T06:53:30.952Z",
+      "claim": "Price $699.00; dimensions as listed: Depth\n33 1/2 \"\nHeight including back cushions\n37 \"\nWidth\n65 3/4 \"",
+      "dimensionStatus": "source_dimension",
+      "confirmedByUserAt": null
+    },
+    {
+      "id": "ev_ikea_lack-coffee-table-black-brown-40104294",
+      "sourceUrl": "https://www.ikea.com/us/en/p/lack-coffee-table-black-brown-40104294/",
+      "privateAssetId": null,
+      "observedAt": "2026-10-18T06:54:50.979Z",
+      "claim": "Price $29.99; dimensions as listed: Length\n35 3/8 \"\nWidth\n21 5/8 \"\nHeight\n17 3/4 \"",
+      "dimensionStatus": "source_dimension",
+      "confirmedByUserAt": null
+    },
+    {
+      "id": "ev_ikea_holmerud-coffee-table-oak-effect-90540706",
+      "sourceUrl": "https://www.ikea.com/us/en/p/holmerud-coffee-table-oak-effect-90540706/",
+      "privateAssetId": null,
+      "observedAt": "2026-10-18T06:54:50.979Z",
+      "claim": "Price $89.99; dimensions as listed: Height under furniture\n2 3/4 \"\nHeight\n15 3/4 \"\nLength\n35 3/8 \"\nWidth\n21 5/8 \"",
+      "dimensionStatus": "source_dimension",
+      "confirmedByUserAt": null
+    },
+    {
+      "id": "ev_ikea_borgeby-coffee-table-birch-veneer-70389356",
+      "sourceUrl": "https://www.ikea.com/us/en/p/borgeby-coffee-table-birch-veneer-70389356/",
+      "privateAssetId": null,
+      "observedAt": "2026-10-18T06:54:50.979Z",
+      "claim": "Price $199.99; dimensions as listed: Height\n16 1/2 \"\nDiameter\n27 1/2 \"\nHeight under furniture\n2 3/8 \"",
+      "dimensionStatus": "source_dimension",
+      "confirmedByUserAt": null
+    },
+    {
+      "id": "ev_ikea_tonstad-coffee-table-oak-veneer-10489311",
+      "sourceUrl": "https://www.ikea.com/us/en/p/tonstad-coffee-table-oak-veneer-10489311/",
+      "privateAssetId": null,
+      "observedAt": "2026-10-18T06:54:50.979Z",
+      "claim": "Price $349.99; dimensions as listed: Height under furniture\n7 7/8 \"\nHeight\n13 3/4 \"\nLength\n33 1/8 \"\nWidth\n32 1/4 \"",
+      "dimensionStatus": "source_dimension",
+      "confirmedByUserAt": null
+    },
+    {
+      "id": "ev_ikea_elsystem-rug-low-pile-multicolor-30580922",
+      "sourceUrl": "https://www.ikea.com/us/en/p/elsystem-rug-low-pile-multicolor-30580922/",
+      "privateAssetId": null,
+      "observedAt": "2026-10-18T06:54:56.277Z",
+      "claim": "Price $79.99; dimensions as listed: Length\n6 ' 5 \"\nWidth\n4 ' 4 \"\nArea\n27.99 sq feet\nThickness\n¼ \"",
+      "dimensionStatus": "source_dimension",
+      "confirmedByUserAt": null
+    },
+    {
+      "id": "ev_ikea_vaendplats-rug-low-pile-white-black-dotted-30600",
+      "sourceUrl": "https://www.ikea.com/us/en/p/vaendplats-rug-low-pile-white-black-dotted-30600939/",
+      "privateAssetId": null,
+      "observedAt": "2026-10-18T06:54:56.277Z",
+      "claim": "Price $79.99; dimensions as listed: Length\n6 ' 5 \"\nWidth\n4 ' 4 \"\nArea\n27.88 sq feet; rug thickness not listed, 1 cm used for rendering",
+      "dimensionStatus": "inferred",
+      "confirmedByUserAt": null
+    },
+    {
+      "id": "ev_ikea_lohals-rug-flatwoven-natural-30511288",
+      "sourceUrl": "https://www.ikea.com/us/en/p/lohals-rug-flatwoven-natural-30511288/",
+      "privateAssetId": null,
+      "observedAt": "2026-10-18T06:54:56.277Z",
+      "claim": "Price $99.99; dimensions as listed: Width\n4 ' 4 \"\nLength\n6 ' 5 \"\nArea\n27.99 sq feet\nSurface density\n9.34 oz/sq ft\nThickness\n½ \"",
+      "dimensionStatus": "source_dimension",
+      "confirmedByUserAt": null
+    },
+    {
+      "id": "ev_ikea_tidtabell-rug-flatwoven-gray-10561854",
+      "sourceUrl": "https://www.ikea.com/us/en/p/tidtabell-rug-flatwoven-gray-10561854/",
+      "privateAssetId": null,
+      "observedAt": "2026-10-18T06:54:56.277Z",
+      "claim": "Price $149.99; dimensions as listed: Length\n6 ' 5 \"\nWidth\n4 ' 4 \"\nArea\n27.99 sq feet\nSurface density\n4.59 oz/sq ft\nThickness\n¼ \"",
+      "dimensionStatus": "source_dimension",
+      "confirmedByUserAt": null
+    },
+    {
+      "id": "ev_ikea_tagarp-floor-uplighter-black-white-60464049",
+      "sourceUrl": "https://www.ikea.com/us/en/p/tagarp-floor-uplighter-black-white-60464049/",
+      "privateAssetId": null,
+      "observedAt": "2026-10-18T06:59:20.805Z",
+      "claim": "Price $14.99; dimensions as listed: Height\n71 \"\nBase diameter\n8 \"\nShade diameter\n9 \"",
+      "dimensionStatus": "source_dimension",
+      "confirmedByUserAt": null
+    },
+    {
+      "id": "ev_ikea_roedflik-floor-reading-lamp-gray-green-80563581",
+      "sourceUrl": "https://www.ikea.com/us/en/p/roedflik-floor-reading-lamp-gray-green-80563581/",
+      "privateAssetId": null,
+      "observedAt": "2026-10-18T06:59:20.805Z",
+      "claim": "Price $59.99; dimensions as listed: Width\n16 \"\nHeight\n55 \"",
+      "dimensionStatus": "source_dimension",
+      "confirmedByUserAt": null
+    },
+    {
+      "id": "ev_ikea_isjakt-led-floor-uplighter-reading-lamp-dimmable",
+      "sourceUrl": "https://www.ikea.com/us/en/p/isjakt-led-floor-uplighter-reading-lamp-dimmable-nickel-plated-70459716/",
+      "privateAssetId": null,
+      "observedAt": "2026-10-18T06:54:40.247Z",
+      "claim": "Price $149.99; dimensions as listed: Height\n70 7/8 \"\nBase diameter\n9 1/2 \"\nWidth\n19 5/8 \"",
+      "dimensionStatus": null,
+      "confirmedByUserAt": null
+    },
+    {
+      "id": "ev_ikea_simrishamn-floor-lamp-chrome-plated-opal-glass-5",
+      "sourceUrl": "https://www.ikea.com/us/en/p/simrishamn-floor-lamp-chrome-plated-opal-glass-50437773/",
+      "privateAssetId": null,
+      "observedAt": "2026-10-18T06:59:20.805Z",
+      "claim": "Price $199.99; dimensions as listed: Height\n62 \"\nBase diameter\n12 \"",
+      "dimensionStatus": "source_dimension",
+      "confirmedByUserAt": null
+    },
+    {
+      "id": "ev_ikea_gersby-bookcase-white-70261131",
+      "sourceUrl": "https://www.ikea.com/us/en/p/gersby-bookcase-white-70261131/",
+      "privateAssetId": null,
+      "observedAt": "2026-10-18T06:54:40.231Z",
+      "claim": "Price $39.99; dimensions as listed: Width: 23 5/8 \"; Height: 70 7/8 \"; Depth: 9 1/2 \"",
+      "dimensionStatus": "source_dimension",
+      "confirmedByUserAt": null
+    },
+    {
+      "id": "ev_ikea_skruvby-bookcase-black-blue-20520354",
+      "sourceUrl": "https://www.ikea.com/us/en/p/skruvby-bookcase-black-blue-20520354/",
+      "privateAssetId": null,
+      "observedAt": "2026-10-18T06:54:40.231Z",
+      "claim": "Price $99.00; dimensions as listed: Width: 23 5/8 \"; Height: 55 1/8 \"; Depth: 14 3/4 \"",
+      "dimensionStatus": "source_dimension",
+      "confirmedByUserAt": null
+    },
+    {
+      "id": "ev_ikea_lommarp-bookcase-dark-blue-green-40415465",
+      "sourceUrl": "https://www.ikea.com/us/en/p/lommarp-bookcase-dark-blue-green-40415465/",
+      "privateAssetId": null,
+      "observedAt": "2026-10-18T06:54:40.231Z",
+      "claim": "Price $249.00; dimensions as listed: Width: 25 5/8 \"; Height: 78 3/8 \"; Depth: 13 3/8 \"",
+      "dimensionStatus": "source_dimension",
+      "confirmedByUserAt": null
+    },
+    {
+      "id": "ev_ikea_hemnes-bookcase-white-stain-light-brown-60413502",
+      "sourceUrl": "https://www.ikea.com/us/en/p/hemnes-bookcase-white-stain-light-brown-60413502/",
+      "privateAssetId": null,
+      "observedAt": "2026-10-18T06:54:40.231Z",
+      "claim": "Price $349.00; dimensions as listed: Width: 35 3/8 \"; Height: 77 1/2 \"; Depth: 14 5/8 \"",
+      "dimensionStatus": "source_dimension",
+      "confirmedByUserAt": null
+    },
+    {
+      "id": "ev_target_a-51206267",
+      "sourceUrl": "https://www.target.com/p/modern-barrel-accent-chair-homepop/-/A-51206267?preselect=16723296",
+      "privateAssetId": null,
+      "observedAt": "2026-10-18T06:54:24.430Z",
+      "claim": "Price $124.94; dimensions as listed: 33.0 Inches (H) x 26.0 Inches (W) x 28.0 Inches (D)",
+      "dimensionStatus": "source_dimension",
+      "confirmedByUserAt": null
+    },
+    {
+      "id": "ev_target_a-1012411667",
+      "sourceUrl": "https://www.target.com/p/modern-accent-chair-microfiber-upholstery-solid-wood-frame-space-saving-mid-century-seating-for-living-room-bedroom-cozy-reading-nook/-/A-1012411667?preselect=1012411671",
+      "privateAssetId": null,
+      "observedAt": "2026-10-18T06:54:24.430Z",
+      "claim": "Price $178.99; dimensions as listed: 31.88 inches (H) x 26.37 inches (W) x 30.31 inches (D)",
+      "dimensionStatus": "source_dimension",
+      "confirmedByUserAt": null
+    },
+    {
+      "id": "ev_target_a-82624055",
+      "sourceUrl": "https://www.target.com/p/wood-and-metal-coffee-table-room-essentials/-/A-82624055?preselect=80602680",
+      "privateAssetId": null,
+      "observedAt": "2026-10-18T06:53:46.998Z",
+      "claim": "Price $42.00; dimensions as listed: 18 Inches (H) x 31.5 Inches (W) x 20 Inches (D)",
+      "dimensionStatus": "source_dimension",
+      "confirmedByUserAt": null
+    },
+    {
+      "id": "ev_target_a-91526136",
+      "sourceUrl": "https://www.target.com/p/castalia-coffee-table-threshold/-/A-91526136?preselect=89207298",
+      "privateAssetId": null,
+      "observedAt": "2026-10-18T06:53:46.998Z",
+      "claim": "Price $200.00; dimensions as listed: 16 Inches (H) x 32 Inches (W) x 32 Inches (D)",
+      "dimensionStatus": "source_dimension",
+      "confirmedByUserAt": null
+    },
+    {
+      "id": "ev_target_a-90758465",
+      "sourceUrl": "https://www.target.com/p/wooden-round-pedestal-coffee-table-hearth-hand-with-magnolia/-/A-90758465?preselect=84826258",
+      "privateAssetId": null,
+      "observedAt": "2026-10-18T06:53:46.998Z",
+      "claim": "Price $279.99; dimensions as listed: 18 Inches (H) x 31.5 Inches (W) x 31.5 Inches (D)",
+      "dimensionStatus": "source_dimension",
+      "confirmedByUserAt": null
+    },
+    {
+      "id": "ev_target_a-94257319",
+      "sourceUrl": "https://www.target.com/p/5-39-x7-39-floral-handtufted-area-rug-dark-green-threshold-8482/-/A-94257319",
+      "privateAssetId": null,
+      "observedAt": "2026-10-18T06:53:52.233Z",
+      "claim": "Price $200.00; dimensions as listed: 84 Inches (L), 60 Inches (W); rug thickness not listed, 1 cm used for rendering",
+      "dimensionStatus": "inferred",
+      "confirmedByUserAt": null
+    },
+    {
+      "id": "ev_target_a-94258226",
+      "sourceUrl": "https://www.target.com/p/5-39-x7-39-braided-area-rug-light-brown-ivory-threshold-8482/-/A-94258226",
+      "privateAssetId": null,
+      "observedAt": "2026-10-18T06:53:52.233Z",
+      "claim": "Price $100.00; dimensions as listed: 84 Inches (L), 60 Inches (W); rug thickness not listed, 1 cm used for rendering",
+      "dimensionStatus": "inferred",
+      "confirmedByUserAt": null
+    },
+    {
+      "id": "ev_target_a-94258305",
+      "sourceUrl": "https://www.target.com/p/5-39-x7-39-high-low-geo-area-rug-ivory-threshold-8482/-/A-94258305",
+      "privateAssetId": null,
+      "observedAt": "2026-10-18T06:53:52.233Z",
+      "claim": "Price $80.00; dimensions as listed: 7 Feet (L), 5 Feet (W); rug thickness not listed, 1 cm used for rendering",
+      "dimensionStatus": "inferred",
+      "confirmedByUserAt": null
+    },
+    {
+      "id": "ev_ikea_lauters-floor-lamp-ash-white-00405048",
+      "sourceUrl": "https://www.ikea.com/us/en/p/lauters-floor-lamp-ash-white-00405048/",
+      "privateAssetId": null,
+      "observedAt": "2026-10-18T06:59:20.805Z",
+      "claim": "Price $79.99; dimensions as listed: Shade width\n15 \"\nMin. height\n47 \"\nMax. height\n59 \"\nBase diameter\n24 \"",
+      "dimensionStatus": "source_dimension",
+      "confirmedByUserAt": null
+    }
+  ],
+  "runs": [
+    {
+      "key": "ikea-chair",
+      "runId": "eb5939b0-a22b-4b5d-bda1-f3e9aec985b5",
+      "status": "completed",
+      "costUsd": 0.015001,
+      "found": 5,
+      "error": null,
+      "notes": null
+    },
+    {
+      "key": "ikea-sofa",
+      "runId": "40020ae8-d179-491c-a0c2-cf16f90333a1",
+      "status": "completed",
+      "costUsd": 0.010265,
+      "found": 3,
+      "error": null,
+      "notes": null
+    },
+    {
+      "key": "ikea-table",
+      "runId": "59d1194a-dda0-40cd-a457-2d1941f29755",
+      "status": "completed",
+      "costUsd": 0.013925,
+      "found": 4,
+      "error": null,
+      "notes": "All four product pages showed home-delivery options. For rectangular tables, IKEA lists the horizontal dimensions as Length and Width; I mapped Length to widthValue and Width to depthValue. For BORGEBY, the listed diameter is used for both widthValue and depthValue."
+    },
+    {
+      "key": "ikea-rug",
+      "runId": "e4a41c45-6cb3-4e89-b12e-a8a731705fd3",
+      "status": "completed",
+      "costUsd": 0.018459,
+      "found": 4,
+      "error": null,
+      "notes": "TIDTABELL showed $149.99 but was unavailable online for the selected area, 21133 (Baltimore, MD)."
+    },
+    {
+      "key": "ikea-lamp",
+      "runId": "6ee96903-b7c0-4af0-90bd-ad7a22886b70",
+      "status": "completed",
+      "costUsd": 0.010452,
+      "found": 4,
+      "error": null,
+      "notes": null
+    },
+    {
+      "key": "ikea-storage",
+      "runId": "59e99c10-be52-4f4d-908b-32f589e36921",
+      "status": "completed",
+      "costUsd": 0.015418,
+      "found": 4,
+      "error": null,
+      "notes": null
+    },
+    {
+      "key": "target-chair",
+      "runId": "0d065583-f8a5-4bb8-8a65-941f3471e634",
+      "status": "completed",
+      "costUsd": 0.013265,
+      "found": 4,
+      "error": null,
+      "notes": "The Yaheetech page also shows different dimensions in its seller description; the reported measurements are from its Specifications section's “Dimensions (Overall)” field."
+    },
+    {
+      "key": "target-table",
+      "runId": "32503b1c-79aa-445a-a679-5ef04a717fed",
+      "status": "completed",
+      "costUsd": 0.009187,
+      "found": 3,
+      "error": null,
+      "notes": null
+    },
+    {
+      "key": "target-rug",
+      "runId": "39300761-11ef-4312-bd29-ce3554edb4ea",
+      "status": "completed",
+      "costUsd": 0.010104,
+      "found": 3,
+      "error": null,
+      "notes": "Pile heights are listed as a category or range rather than a single thickness, so heightValue is null. The ivory rug showed shipping unavailable, but pickup and delivery were available for the selected Augusta location."
+    },
+    {
+      "key": "target-lamp",
+      "runId": "1735593a-622e-4d80-bbc1-d4d17166e179",
+      "status": "completed",
+      "costUsd": 0.043373,
+      "found": 3,
+      "error": null,
+      "notes": "Target's search page returned no matches, so I located listings through search results and verified each reported fact on its opened Target product page. The verification challenge cleared automatically."
+    }
+  ]
+}

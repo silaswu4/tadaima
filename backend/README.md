@@ -18,6 +18,8 @@ Owner: **Matthew**. This is the application and agent integration area. Work alo
 - [`fixtures/demo-room.ts`](fixtures/demo-room.ts): a synthetic 5.0 x 4.2 m living room. Owned sofa and desk are locked, five proposed purchases ($1,725 of a $2,000 cap), seats exactly 4, plus a 14-product synthetic catalog for swaps. Not a real home or real offers.
 - [`plan/rules.ts`](plan/rules.ts): pure `applyChanges`, `costOf` and `validate` (in room, clearance overlap, locked items kept, budget, seats, sizes known, product available). Unknown sizes or stock come back `unknown`, never `pass`.
 - `npm test` runs `plan/rules.test.ts`.
+- [`research/browserUse.ts`](research/browserUse.ts): server-only `researchProducts({ category, query, maxPriceUsd, maxWidthM?, merchant })` on Browser Use Cloud API v4 with structured output. Returns real `ProductCandidate`s plus evidence and run info (run id, live url for the activity feed; never persist the live url).
+- [`fixtures/real-catalog.json`](fixtures/real-catalog.json): real IKEA US and Target products built by `npx tsx backend/research/build-catalog.ts` (needs `BROWSER_USE_API_KEY` in `.env.local`) and spot-checked by `npx tsx backend/research/verify-catalog.ts`. Prices and stock drift; recheck before cart.
 
 Item `position` is the center of the footprint on the floor, `dimensions` are `[width, height, depth]` before rotation, `rotationY` is radians about +Y (three.js convention).
 
