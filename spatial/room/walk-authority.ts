@@ -2,7 +2,12 @@ import type { FloorSpot, PlacedItem, RoomPlan, Vector3Meters } from "../../backe
 
 const finiteVector = (value: readonly number[] | null, positive = false) => value === null ||
   (Array.isArray(value) && value.length === 3 && value.every((n) => Number.isFinite(n) && (!positive || n > 0)));
-const equal = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+// same data regardless of key order (the server's schema may order keys differently)
+const canonical = (value: unknown): unknown =>
+  Array.isArray(value) ? value.map(canonical)
+    : value && typeof value === "object" ? Object.fromEntries(Object.keys(value).sort().map((key) => [key, canonical((value as Record<string, unknown>)[key])]))
+      : value;
+const equal = (a: unknown, b: unknown) => JSON.stringify(canonical(a)) === JSON.stringify(canonical(b));
 
 /** A server project may have a new ID, but cannot silently replace the loaded room shell
  * or borrow a captured mesh for a different item. This is independent of source GLB binding. */
