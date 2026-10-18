@@ -48,7 +48,18 @@
 .room-x--vr .room-x__chips { flex-wrap: wrap; overflow: visible; }
 .room-x--vr .room-x__products,
 .room-x--vr .room-x__lines { min-height: 0; overflow-y: auto; scrollbar-width: none; }
-.room-x--vr .room-x__products { gap: 16px 12px; padding: 14px 20px 20px; }
+/* catalog: compact chips and one-column horizontal cards, so several products fit the 428px drawer */
+.room-x--vr .room-x__chips { gap: 5px; padding-bottom: 12px; }
+.room-x--vr .room-x__chip { height: 26px; padding: 0 10px; font-size: 11.5px; }
+.room-x--vr .room-x__products { grid-template-columns: 1fr; gap: 12px; padding: 12px 20px 16px; }
+.room-x--vr .room-product-card { flex-direction: row; gap: 12px; }
+.room-x--vr .room-product-card__image { flex: none; width: 84px; height: 84px; margin-bottom: 0; background: #fff; }
+.room-x--vr .room-product-card__action { min-height: 26px; padding: 4px 12px; }
+/* html2canvas draws neither backdrop blur nor blend modes: solid surfaces keep text legible over the room */
+.room-x--vr .room-voice .room-voice__btn { background: var(--paper-glass); border-color: var(--line); }
+/* the agent's line sits top-left, clear of the placement and selection cards, at most three lines */
+.room-x--vr .room-voice__caption { position: absolute; left: 14px; right: auto; top: 62px; bottom: auto; transform: none; width: max-content; max-width: 280px;
+  max-height: 64px; overflow: hidden; text-align: left; font-size: 12px; }
 .room-x--vr .room-x__basket-foot { flex-direction: row; flex-wrap: wrap; align-items: center; }
 .room-x--vr .room-x__basket-foot .room-x__total { flex: 1 0 100%; }
 
@@ -74,3 +85,7 @@
 .room-x--vr .room-x__tool:disabled,
 .room-x--vr .room-x__chip:disabled,
 .room-x--vr .room-x__slot:disabled { opacity: 0.42; }
+/* beside a drawer the tools row has ~300px: drop the key hint, and the Add pill while its drawer is open */
+.room-x--vr[data-side] .room-voice__key { display: none; }
+.room-x--vr[data-drawer="shop"] [data-xr-id="tab-shop"] { display: none; }
+.room-x--vr[data-side] .room-x__bottom { max-width: calc(100% - var(--drawer) - 24px); }

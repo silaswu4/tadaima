@@ -1,8 +1,11 @@
 import type { FurnitureCategory, ProductCandidate, ShopRequest, ShopResult } from "../../backend/contracts";
 
-/** Keep an active preview reachable even when it came from Fetch or a later result. */
+/**
+ * Pieces that can actually be added from VR (fit, within budget), keeping an active preview
+ * reachable even when it came from Fetch or a later result.
+ */
 export function roomXRProducts(results: readonly ShopResult[], pending: ProductCandidate | null): Array<{ product: ProductCandidate; source?: ShopResult["source"] }> {
-  const visible: Array<{ product: ProductCandidate; source?: ShopResult["source"] }> = results.filter((entry) => entry.fits).slice(0, 24).map(({ product, source }) => ({ product, source }));
+  const visible: Array<{ product: ProductCandidate; source?: ShopResult["source"] }> = results.filter((entry) => entry.fits && entry.withinBudget !== false).slice(0, 24).map(({ product, source }) => ({ product, source }));
   if (pending && !visible.some((entry) => entry.product.id === pending.id)) {
     if (visible.length === 24) visible.pop();
     visible.push({ product: pending, source: results.find((entry) => entry.product.id === pending.id)?.source });

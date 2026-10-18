@@ -171,7 +171,7 @@ export function createWorkspaceXR(options: WorkspaceXROptions) {
   let locomotion: WorkspaceXRLocomotion = options.locomotion ?? "walk";
   let resumeNeutral = false;
   // Push-to-talk on A/X: hold to speak, release to send, wherever the wearer is looking.
-  let talkButtonHeld = false, sendOnListen = false;
+  let talkButtonHeld = false, talkPressSent = false;
   const menu = createXRMenu({
     onPreviewOffer: (id) => options.onPreviewOffer?.(id), onConfirmOffer: () => options.onConfirmOffer?.(),
     onAction: (id) => options.onAction?.(id),
@@ -186,8 +186,10 @@ export function createWorkspaceXR(options: WorkspaceXROptions) {
   // This is the wearer's menu, rendered as an overlay so nearby room geometry
   // cannot cut holes through the controls. World selection remains occluded.
   menu.mesh.material.depthTest = false;
+  menu.setActive(false); // nothing to see outside an immersive session; don't stall the flat page
   hud.add(menu.mesh);
-  let hudYaw = 0, hudTurning = false;
+  let hudYaw = 0, hudTurning = false, hudMoving = false;
+  const hudAnchor = new THREE.Vector3();
   const menuPointers = controllers.map(() => {
     const dot = new THREE.Mesh(new THREE.CircleGeometry(.006, 16), new THREE.MeshBasicMaterial({ color: XR_MENU_INK, transparent: true, depthTest: false, depthWrite: false }));
     dot.visible = false; dot.renderOrder = 22; dot.raycast = () => {};
@@ -208,8 +210,9 @@ export function createWorkspaceXR(options: WorkspaceXROptions) {
     const direction = new THREE.Vector3(0, 0, -1).applyQuaternion(headOrientation());
     return Math.hypot(direction.x, direction.z) > 1e-5 ? Math.atan2(-direction.x, -direction.z) : hudYaw;
   }
+  /** Place the menu relative to `hudAnchor`, the head position it last settled on. */
   function positionHud() {
-    const head = headPosition();
+    const head = hudAnchor;
     hud.position.copy(head).add(new THREE.Vector3(-Math.sin(hudYaw) * XR_HUD_DISTANCE, -XR_HUD_DROP, -Math.cos(hudYaw) * XR_HUD_DISTANCE));
     // Face the eyes squarely: yaw toward the head, then tip the top back by the viewing angle.
     hud.lookAt(new THREE.Vector3(head.x, hud.position.y, head.z));
@@ -217,7 +220,7 @@ export function createWorkspaceXR(options: WorkspaceXROptions) {
     hud.updateWorldMatrix(true, true);
   }
   function placeHud() {
-    hudYaw = headYaw(); hudTurning = false; positionHud();
+    hudYaw = headYaw(); hudTurning = false; hudMoving = false; hudAnchor.copy(headPosition()); positionHud();
   }
   function followHud(deltaSeconds: number) {
     if (!hud.visible) return;
@@ -227,8 +230,15 @@ export function createWorkspaceXR(options: WorkspaceXROptions) {
       hudYaw += difference * (1 - Math.exp(-10 * Math.min(Math.max(deltaSeconds, 0), .05)));
       if (Math.abs(difference) < .01) hudTurning = false;
     }
-    // Translation follows immediately. A yaw dead zone keeps small aiming
-    // movements from dragging buttons away from the controller ray.
+    // Translation has a dead zone too: natural head sway while aiming must not slide buttons out
+    // from under the ray, and leaning in to read must not push the menu away. Beyond ~18 cm
+    // (walking, a step) it glides after the head and settles again.
+    const head = headPosition(), drift = head.distanceTo(hudAnchor);
+    if (drift > .18) hudMoving = true;
+    if (hudMoving) {
+      hudAnchor.lerp(head, 1 - Math.exp(-8 * Math.min(Math.max(deltaSeconds, 0), .05)));
+      if (hudAnchor.distanceTo(head) < .01) { hudAnchor.copy(head); hudMoving = false; }
+    }
     positionHud();
   }
 
@@ -261,17 +271,17 @@ export function createWorkspaceXR(options: WorkspaceXROptions) {
     menu.setHovered(hovered);
   }
 
+  /**
+   * The voice session's own hold-to-talk: press opens the mic (connecting first if needed and staying
+   * open through the connection), release sends. Only a press that was delivered gets a release.
+   */
   function pushToTalk(held: boolean) {
-    const toggle = shopping.actions?.find((action) => action.id === "voice-toggle");
-    const listening = Boolean(shopping.agent?.listening);
     if (held && !talkButtonHeld) {
-      sendOnListen = false;
-      if (toggle && !toggle.disabled && !listening) options.onAction?.("voice-toggle");
-    } else if (!held && talkButtonHeld) {
-      // Releasing sends. If the first press is still connecting, send as soon as listening starts.
-      if (listening) options.onAction?.("voice-toggle"); else sendOnListen = true;
-    } else if (!held && sendOnListen && listening) {
-      sendOnListen = false; options.onAction?.("voice-toggle");
+      const toggle = shopping.actions?.find((action) => action.id === "voice-toggle");
+      talkPressSent = Boolean(toggle && !toggle.disabled);
+      if (talkPressSent) options.onAction?.("voice-press");
+    } else if (!held && talkButtonHeld && talkPressSent) {
+      talkPressSent = false; options.onAction?.("voice-release");
     }
     talkButtonHeld = held;
   }
@@ -399,10 +409,11 @@ export function createWorkspaceXR(options: WorkspaceXROptions) {
       saved = null;
     }
     hud.visible = reticle.visible = false;
-    menu.setHovered([]); menuPointers.forEach((pointer) => { pointer.visible = false; });
+    menu.setHovered([]); menu.setActive(false); menuPointers.forEach((pointer) => { pointer.visible = false; });
     rig.position.set(0, 0, 0); rig.rotation.set(0, 0, 0);
     initialHeadPlaced = teleportHeld = snapLatched = false;
-    talkButtonHeld = sendOnListen = false;
+    if (talkPressSent) options.onAction?.("voice-release");
+    talkButtonHeld = talkPressSent = false;
     resumeNeutral = false;
     teleportTarget = null;
     for (const controller of controllers) for (const child of controller.children) child.visible = false;
@@ -444,7 +455,9 @@ export function createWorkspaceXR(options: WorkspaceXROptions) {
         selectedItemLabel: state.selectedItemLabel?.slice(0, 200), status: state.status?.slice(0, 300),
         pendingOfferId, canConfirm: !!pendingOfferId && state.canConfirm === true,
         basketLabel: state.basketLabel?.slice(0, 80), selectedItemLocked: state.selectedItemLocked === true, busy: state.busy === true,
-        agent: state.agent ? { available: state.agent.available === true, status: state.agent.status.slice(0, 120), caption: state.agent.caption?.slice(0, 600), listening: state.agent.listening === true, connected: state.agent.connected === true, error: state.agent.error?.slice(0, 300), activity: state.agent.activity?.slice(0, 160), transcript: state.agent.transcript?.slice(0, 300) } : undefined,
+        // Only what the panel draws: status and transcript change several times per voice turn and each
+        // change would cost a 60–120 ms capture on the Quest.
+        agent: state.agent ? { available: state.agent.available === true, status: "", caption: state.agent.caption?.slice(0, 600), listening: state.agent.listening === true, connected: state.agent.connected === true, error: state.agent.error?.slice(0, 300), activity: state.agent.activity?.slice(0, 160) } : undefined,
         actions: (state.actions ?? []).slice(0, 256).filter((action, i, list) => action.id && action.id.length <= 280 && list.findIndex((other) => other.id === action.id) === i)
           .map((action) => ({ id: action.id, label: action.label.slice(0, 80), detail: action.detail?.slice(0, 140), disabled: action.disabled === true })) };
       const key = JSON.stringify(next);
@@ -472,6 +485,7 @@ export function createWorkspaceXR(options: WorkspaceXROptions) {
         await renderer.xr.setSession(session);
         if (disposed || activeSession !== session) { await session.end().catch(() => {}); restore(); return; }
         presenting = true;
+        menu.setActive(true);
         menu.focusAgent();
         for (const controller of controllers) for (const child of controller.children) child.visible = true;
         options.onSessionChange?.(true);
@@ -489,6 +503,7 @@ export function createWorkspaceXR(options: WorkspaceXROptions) {
       if (!inputAvailable()) {
         teleportHeld = false; teleportTarget = null; reticle.visible = false;
         resumeNeutral = true;
+        pushToTalk(false); // a system prompt (e.g. microphone permission) took focus: end the hold cleanly
         updateMenuPointers();
         return;
       }
@@ -507,7 +522,7 @@ export function createWorkspaceXR(options: WorkspaceXROptions) {
       let panelScroll = 0;
       let menuStickHeld = false;
       let walk = { right: 0, forward: 0 };
-      let talkHeld = false;
+      let talkHeld = false, rawTurn = 0;
       for (const controller of controllers) {
         const source = sourceByController.get(controller);
         // xr-standard button 4 is A (right) / X (left) on Touch controllers.
@@ -528,10 +543,12 @@ export function createWorkspaceXR(options: WorkspaceXROptions) {
         if (source.handedness === "right") {
           // Aiming at the panel makes the right stick scroll it. Never turn the
           // room while the wearer is trying to browse; left-stick walking stays available.
-          if (menuHit(controller)) {
+          // Mostly-vertical pushes scroll a panel under the ray; sideways pushes still snap-turn.
+          if (menuHit(controller) && Math.abs(y) >= Math.abs(x)) {
             menuStickHeld = Math.hypot(x, y) > .3;
             if (Math.abs(y) > .2) panelScroll = y;
           } else turn = x;
+          rawTurn = x;
         }
       }
       pushToTalk(talkHeld);
@@ -551,7 +568,8 @@ export function createWorkspaceXR(options: WorkspaceXROptions) {
       // Walking/teleporting translated the rig. Snap-turn must pivot around the
       // resulting tracked head, rather than the position from before that move.
       renderer.xr.updateCamera(camera);
-      if (Math.abs(turn) < .3) snapLatched = false;
+      // Re-arm only when the stick itself returns to center, not when the ray crosses the menu.
+      if (Math.abs(rawTurn) < .3) snapLatched = false;
       if (Math.abs(turn) > .7 && !snapLatched) {
         snapTurnXR(rig, headPosition(), -Math.sign(turn) * Math.PI / 6);
         renderer.xr.updateCamera(camera); if (hud.visible) placeHud();

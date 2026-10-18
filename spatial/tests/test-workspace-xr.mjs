@@ -585,17 +585,21 @@ test("real ArrayCamera local tracking stays distinct from world pose through spa
   assert.ok(spawnHead.distanceTo(new THREE.Vector3(1, 1.72, 2)) < 1e-8);
   assert.ok(env.head.position.equals(localStart), "XR local position is not rewritten into world coordinates");
   const hud = assertMenuFollowsHead(env), beforeMenu = hud.position.clone();
-  env.head.position.add(new THREE.Vector3(.22, -.08, -.12));
-  xr.update(.05);
-  assert.ok(hud.position.clone().sub(beforeMenu).distanceTo(new THREE.Vector3(.22, -.08, -.12)) < 1e-8,
-    "menu follows physical tracking translation in the same frame");
+  // Natural sway while aiming must not slide buttons out from under the ray.
+  env.head.position.add(new THREE.Vector3(.05, -.02, .04)); xr.update(.05);
+  assert.ok(hud.position.distanceTo(beforeMenu) < 1e-8, "a few centimetres of head sway leaves the menu still");
+  // A real step moves it: it glides after the head and settles at the usual offset.
+  env.head.position.add(new THREE.Vector3(.17, -.06, -.16));
+  for (let frame = 0; frame < 60; frame++) xr.update(.05);
   assertMenuFollowsHead(env);
-  const beforeWalk = trackedWorldPosition(env.head), menuBeforeWalk = hud.position.clone();
+  const beforeWalk = trackedWorldPosition(env.head);
   env.controllers[0].dispatchEvent({ type: "connected", data: { handedness: "left", gamepad: { axes: [0, 0, 0, -1] } } });
   xr.update(.05);
   const afterWalk = trackedWorldPosition(env.head);
-  assert.ok(afterWalk.distanceTo(beforeWalk.clone().add(new THREE.Vector3(0, 0, -.065))) < 1e-8);
-  assert.ok(hud.position.clone().sub(menuBeforeWalk).distanceTo(afterWalk.clone().sub(beforeWalk)) < 1e-8);
+  assert.ok(afterWalk.distanceTo(beforeWalk.clone().add(new THREE.Vector3(0, 0, -.065))) < 1e-8, "walking still moves one step per frame");
+  for (let frame = 0; frame < 20; frame++) xr.update(.05);
+  env.controllers[0].dispatchEvent({ type: "connected", data: { handedness: "left", gamepad: { axes: [0, 0, 0, 0] } } });
+  for (let frame = 0; frame < 60; frame++) xr.update(.05);
   assertMenuFollowsHead(env); xr.dispose();
 });
 
@@ -758,21 +762,23 @@ test("browser focus recovery requires a neutral right stick before panel scrolli
 test("holding A or X talks to the agent and releasing sends, without aiming at the menu", async () => {
   const env = environment(); const actions = []; env.options.onAction = (id) => actions.push(id);
   const xr = createWorkspaceXR(env.options);
-  const voice = (listening, disabled = false) => xr.setShoppingState({ offers: [], actions: [{ id: "voice-toggle", label: "Talk", disabled }],
-    agent: { available: true, connected: listening, listening, status: listening ? "Listening" : "Ready" } });
-  voice(false); await xr.enter(); xr.update();
+  const voice = (disabled = false) => xr.setShoppingState({ offers: [], actions: [{ id: "voice-toggle", label: "Talk", disabled }],
+    agent: { available: true, connected: false, listening: false, status: "" } });
+  voice(); await xr.enter(); xr.update();
   const buttons = Array.from({ length: 6 }, () => ({ pressed: false })), source = { handedness: "right", gamepad: { axes: [0, 0, 0, 0], buttons } };
   env.controllers[1].dispatchEvent({ type: "connected", data: source });
+  // The voice session's own hold-to-talk: one press while held (it stays open through connecting), one release.
   buttons[4].pressed = true; xr.update(1 / 72); xr.update(1 / 72);
-  assert.deepEqual(actions, ["voice-toggle"], "press starts listening once, however long it is held");
-  voice(true); buttons[4].pressed = false; xr.update(1 / 72);
-  assert.deepEqual(actions, ["voice-toggle", "voice-toggle"], "release sends what was said");
-  // A quick tap released before the microphone connects still sends once listening begins.
-  voice(false); buttons[4].pressed = true; xr.update(1 / 72); buttons[4].pressed = false; xr.update(1 / 72);
-  assert.equal(actions.length, 3);
-  voice(true); xr.update(1 / 72); xr.update(1 / 72);
-  assert.equal(actions.length, 4, "the deferred send fires exactly once");
-  // Voice unavailable on this server: the button does nothing.
-  voice(false, true); buttons[4].pressed = true; xr.update(1 / 72);
+  assert.deepEqual(actions, ["voice-press"]);
+  buttons[4].pressed = false; xr.update(1 / 72); xr.update(1 / 72);
+  assert.deepEqual(actions, ["voice-press", "voice-release"]);
+  // A system prompt (microphone permission) taking focus mid-hold ends the hold cleanly, once.
+  buttons[4].pressed = true; xr.update(1 / 72);
+  env.getSession().visibilityState = "visible-blurred"; xr.update(1 / 72); xr.update(1 / 72);
+  assert.deepEqual(actions.slice(2), ["voice-press", "voice-release"]);
+  env.getSession().visibilityState = "visible"; buttons[4].pressed = false; xr.update(1 / 72);
+  assert.equal(actions.length, 4, "a release after the prompt is not sent twice");
+  // Voice unavailable on this server: the button does nothing, and no orphan release follows.
+  voice(true); buttons[4].pressed = true; xr.update(1 / 72); buttons[4].pressed = false; xr.update(1 / 72);
   assert.equal(actions.length, 4); xr.dispose();
 });
