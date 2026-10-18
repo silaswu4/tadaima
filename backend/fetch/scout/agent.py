@@ -239,7 +239,7 @@ PARSE_SYSTEM = """You turn a shopper's furniture request into a search for a liv
 - max_price_usd: their price cap in USD, or null.
 - max_width_m / max_depth_m: size caps converted to meters (1 in = 0.0254 m, 1 ft = 0.3048 m, 1 cm = 0.01 m), or null. "wide" is width, "deep" is depth; a single "max 2 m" for a sofa or table is width.
 - merchants: stores they named, from IKEA, Target, Walmart, Article, West Elm. Empty if they didn't name any.
-- question: null normally. If category is null, one short friendly question asking what piece they want."""
+- question: null normally. If category is null, one short, plain question asking what piece they want. No em dashes, no exclamation marks."""
 
 PARSE_SCHEMA = {
     "type": "object",
@@ -367,7 +367,8 @@ async def handle_turn(ctx: Context, sender: str, m: ChatMessage):
     parsed = await parse_ask(ask)
     if not parsed.get("category") and not url:
         ctx.storage.set(f"pending:{sender}", ask[:500])
-        return await ctx.send(sender, msg(parsed.get("question") or "What piece are you after: a sofa, chair, table, rug, lamp, something else?"))
+        question = re.sub(r"\s*[\u2014\u2013]\s*", ", ", parsed.get("question") or "") or "What piece are you after: a sofa, chair, table, rug, lamp, something else?"
+        return await ctx.send(sender, msg(question))
     ctx.storage.set(f"pending:{sender}", None)
 
     merchants = [merchant_of(url)] if url else (parsed.get("merchants") or ["IKEA", "Target"])
