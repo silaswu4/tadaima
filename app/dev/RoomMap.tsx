@@ -174,29 +174,45 @@ export function RoomMap({
               strokeDasharray={owned ? undefined : rug ? "0.05 0.03" : undefined}
             />
             {i.locked && <polygon points={pts(corners)} fill="url(#hatch)" pointerEvents="none" />}
-            <text
-              x={i.position[0]}
-              y={i.position[2]}
-              fontSize="0.1"
-              fill="#18181b"
-              textAnchor="middle"
-              dominantBaseline="middle"
-              pointerEvents="none"
-              fontWeight={sel ? 600 : 500}
-              dy={rug ? 0.28 : 0}
-            >
-              {short(i.label)}
-            </text>
-            {i.locked && !isNew && !isChanged && (
-              <text x={i.position[0]} y={i.position[2]} dy={0.14} fontSize="0.075" fill="#52525b" textAnchor="middle" dominantBaseline="middle" pointerEvents="none">
-                locked
-              </text>
-            )}
-            {(isNew || isChanged) && (
-              <text x={i.position[0]} y={i.position[2]} dy={rug ? 0.42 : 0.14} fontSize="0.08" fill="#7c3aed" textAnchor="middle" dominantBaseline="middle" pointerEvents="none">
-                {isNew ? "new" : "changed"}
-              </text>
-            )}
+            {(() => {
+              const sub = isNew ? "new" : isChanged ? "changed" : i.locked ? "locked" : null;
+              const { lines, fs } = fitLabel(short(i.label), corners);
+              const zs = corners.map((c) => c[1]);
+              const lh = fs * 1.15;
+              const block = lines.length * lh + (sub ? fs * 0.95 : 0);
+              // rugs sit under tables, so label them along their top edge
+              const top = rug ? Math.min(...zs) + 0.06 : i.position[2] - block / 2;
+              return (
+                <g pointerEvents="none">
+                  {lines.map((line, k) => (
+                    <text
+                      key={k}
+                      x={i.position[0]}
+                      y={top + lh * (k + 0.5)}
+                      fontSize={fs}
+                      fill="#18181b"
+                      textAnchor="middle"
+                      dominantBaseline="middle"
+                      fontWeight={sel ? 600 : 500}
+                    >
+                      {line}
+                    </text>
+                  ))}
+                  {sub && (
+                    <text
+                      x={i.position[0]}
+                      y={top + lines.length * lh + fs * 0.45}
+                      fontSize={fs * 0.75}
+                      fill={sub === "locked" ? "#52525b" : "#7c3aed"}
+                      textAnchor="middle"
+                      dominantBaseline="middle"
+                    >
+                      {sub}
+                    </text>
+                  )}
+                </g>
+              );
+            })()}
           </g>
         );
       })}
@@ -207,4 +223,22 @@ export function RoomMap({
 function short(label: string) {
   const s = label.split(",")[0];
   return s.length > 26 ? s.slice(0, 25) + "..." : s;
+}
+
+/** Wrap a label into lines that fit the footprint's on-screen width, shrinking the font if a word is too long. */
+function fitLabel(label: string, corners: Pt[]) {
+  const xs = corners.map((c) => c[0]);
+  const width = Math.max(...xs) - Math.min(...xs) - 0.06;
+  const charW = 0.56; // average glyph width as a fraction of font size
+  const words = label.split(/\s+/);
+  const longest = Math.max(...words.map((w) => w.length));
+  const fs = Math.max(0.055, Math.min(0.1, width / (longest * charW)));
+  const maxChars = Math.max(1, Math.floor(width / (fs * charW)));
+  const lines: string[] = [];
+  for (const w of words) {
+    const last = lines[lines.length - 1];
+    if (last && (last + " " + w).length <= maxChars) lines[lines.length - 1] = last + " " + w;
+    else lines.push(w);
+  }
+  return { lines: lines.slice(0, 3), fs };
 }

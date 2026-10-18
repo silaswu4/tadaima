@@ -452,7 +452,7 @@ function ItemCard({
       {inLive && (
         <>
           <div className="mb-1 text-xs font-medium text-zinc-500">Shopping brief</div>
-          <p className="mb-3 max-h-40 overflow-y-auto whitespace-pre-wrap rounded-md bg-zinc-50 p-2 text-xs leading-relaxed text-zinc-700">
+          <p className="mb-3 max-h-56 overflow-y-auto whitespace-pre-wrap rounded-md bg-zinc-50 p-2 text-xs leading-relaxed text-zinc-700">
             {brief == null ? "Loading..." : brief.data ? brief.data.text : `Brief failed: ${brief.error}`}
           </p>
 
@@ -711,14 +711,14 @@ function ActivityLog({ log, onClear }: { log: LogEntry[]; onClear: () => void })
         </button>
       </div>
       <div className="max-h-64 overflow-y-auto">
-        <table className="w-full text-left text-[13px] tabular-nums">
+        <table className="w-full table-fixed text-left text-[13px] tabular-nums">
           <thead className="sticky top-0 bg-white text-xs text-zinc-400">
             <tr>
-              <th className="py-1 pr-3 font-medium">Time</th>
-              <th className="py-1 pr-3 font-medium">Method</th>
+              <th className="w-28 py-1 pr-3 font-medium">Time</th>
+              <th className="w-20 py-1 pr-3 font-medium">Method</th>
               <th className="py-1 pr-3 font-medium">Path</th>
-              <th className="py-1 pr-3 font-medium">Status</th>
-              <th className="py-1 text-right font-medium">ms</th>
+              <th className="w-20 py-1 pr-3 font-medium">Status</th>
+              <th className="w-20 py-1 text-right font-medium">ms</th>
             </tr>
           </thead>
           <tbody>
@@ -726,7 +726,7 @@ function ActivityLog({ log, onClear }: { log: LogEntry[]; onClear: () => void })
               <tr key={e.id} className="border-t border-zinc-100">
                 <td className="py-1 pr-3 text-zinc-400">{e.at}</td>
                 <td className="py-1 pr-3 font-medium">{e.method}</td>
-                <td className="max-w-0 truncate py-1 pr-3 text-zinc-700">{e.path}</td>
+                <td className="truncate py-1 pr-3 text-zinc-700">{e.path}</td>
                 <td className={`py-1 pr-3 ${e.status === "ERR" || e.status >= 400 ? "text-red-600" : "text-emerald-700"}`}>{e.status}</td>
                 <td className="py-1 text-right text-zinc-500">{e.ms}</td>
               </tr>
