@@ -12,7 +12,7 @@ import { roomXRActions, roomXRProducts, roomXRSearch } from "../rooms/xr-actions
 import type { WalkCallbacks, WalkCarryStatus, WalkEnvironment, WalkItem, WalkMode, WalkOptions, WalkScene } from "../room/walk-api";
 import mark from "../assets/tadaima-mark.png";
 import { WipeLink, useWipeHold } from "./PageWipe";
-import { RoomOnboarding } from "../onboarding/RoomOnboarding";
+import { RoomOnboarding, TourHelpButton } from "../onboarding/RoomOnboarding";
 import "./RoomExperience.css";
 
 export type ExperienceRoom = { id: string; label: string; plan: RoomPlan; environment?: WalkEnvironment; reconstruction?: WalkOptions["reconstruction"]; sourceDescription?: string };
@@ -905,6 +905,7 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
             ) : null}
           </div>
 
+          <TourHelpButton />
           <button
             type="button"
             data-tour="basket"
