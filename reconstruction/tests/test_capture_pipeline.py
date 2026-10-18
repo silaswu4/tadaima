@@ -4,6 +4,7 @@ The small test image fixtures have readable dimensions but are not real camera
 photographs or photogrammetric inputs. Blender consumes only validated geometry.
 """
 
+from copy import deepcopy
 import hashlib
 import io
 import json
@@ -16,7 +17,8 @@ from unittest.mock import patch
 import zipfile
 
 from reconstruction.capture.bundle import BundleError
-from reconstruction.capture.pipeline import run
+from reconstruction.capture.pipeline import _has_four_views, run
+from reconstruction.address.schema import ResearchError
 
 
 NOW = "2026-10-18T04:00:00Z"
@@ -53,6 +55,36 @@ def capture_fixture(*, manual=False, walls="abcd", duplicate_images=False):
             "offset": measurement(0.6), "width": measurement(0.9),
             "height": measurement(2.1), "sillHeight": measurement(0)}]}
     return manifest, files
+
+
+def photo_fixture(**kwargs):
+    """Photos only: no measurements, scale, or rectangle confirmation supplied."""
+    manifest, files = capture_fixture(**kwargs)
+    manifest["captureMode"] = "photo_inference"
+    for field in ("clearWidth", "clearDepth", "height", "wallThickness", "confirmedRectangularAt"):
+        manifest["room"][field] = None
+    manifest["openings"] = []
+    return manifest, files
+
+
+def photo_proposal(manifest):
+    """Synthetic model output; dimensions differ from the measured-mode fixture."""
+    return {"summary": "Synthetic visual approximation for integration testing",
+        "room": {"clearWidth": 4.8, "clearDepth": 3.6, "height": 2.6,
+                 "photoIds": [photo["id"] for photo in manifest["photos"]]},
+        "openings": [{"id": "estimated-door", "wall": "a", "kind": "door",
+            "offset": 1, "width": 0.9, "height": 2.1, "sillHeight": 0,
+            "photoIds": [manifest["photos"][0]["id"]]}],
+        "assumptions": ["Synthetic uncalibrated dimensions, not measurements or an actual photo inspection."],
+        "captureRequests": []}
+
+
+def handoff(manifest, zip_body, proposal):
+    return {"schemaVersion": "capture-geometry-handoff/1.0", "producer": "synthetic-integration-test",
+        "projectId": manifest["projectId"], "jobId": manifest["jobId"],
+        "inputRevision": manifest["inputRevision"], "bundleSha256": hashlib.sha256(zip_body).hexdigest(),
+        "photoSha256": {photo["id"]: photo["sha256"] for photo in manifest["photos"]},
+        "proposal": proposal}
 
 
 def write_bundle(path, manifest, files):
@@ -211,6 +243,183 @@ class CapturePipelineTests(unittest.TestCase):
         self.assertIsNone(result["draftManifestPath"])
         self.assertTrue((self.output / "capture.json").is_file())
         self.assertTrue((self.output / "reconstruction.request.json").is_file())
+        for filename, body in files.items():
+            self.assertEqual((self.output / filename).read_bytes(), body)
+
+    def test_photo_only_without_provider_waits_for_reconstruction_not_measurements(self):
+        manifest, files = photo_fixture()
+        write_bundle(self.bundle, manifest, files)
+        with patch("reconstruction.capture.pipeline.generate") as generate:
+            result = run(self.bundle, self.output, render=True)
+        generate.assert_not_called()
+        self.assertEqual(result["status"], "needs_reconstruction")
+        self.assertEqual(result["photoUsage"], "pending_vision")
+        self.assertEqual(result["missingMeasurements"], [])
+        self.assertTrue(result["reviewRequired"])
+        self.assertIsNone(result["reconstructionRequestPath"])
+        self.assertIsNone(result["draftManifestPath"])
+        self.assertEqual(result["inferenceRequestPath"], "inference.request.json")
+        self.assertTrue((self.output / "inference.request.json").is_file())
+        inference = json.loads((self.output / "inference.request.json").read_text())
+        self.assertEqual(inference["projectId"], manifest["projectId"])
+        self.assertEqual(inference["photoSha256"], {photo["id"]: photo["sha256"] for photo in manifest["photos"]})
+        self.assertFalse((self.output / "reconstruction.request.json").exists())
+        saved = json.loads((self.output / "capture.json").read_text())
+        self.assertEqual(saved, manifest)
+        for field in ("clearWidth", "clearDepth", "height", "wallThickness", "confirmedRectangularAt"):
+            self.assertIsNone(saved["room"][field])
+        for filename, body in files.items():
+            self.assertEqual((self.output / filename).read_bytes(), body)
+
+    def test_wall_coverage_accepts_valid_alternatives_and_ignores_overview_order(self):
+        manifest, _ = photo_fixture()
+        photos = manifest["photos"]
+        overview = {**photos[0], "wall": "overview"}
+        manifest["photos"] = [overview, *photos]
+        self.assertTrue(_has_four_views(manifest))
+        # The first A image is also B's only image, but an alternate A allows
+        # four distinct wall assignments; greedy first-image selection fails.
+        manifest["photos"] = [{**photos[1], "wall": "a"}, *photos]
+        self.assertTrue(_has_four_views(manifest))
+        manifest["photos"] = [photos[0], {**photos[0], "wall": "b"}, *photos[2:]]
+        self.assertFalse(_has_four_views(manifest))
+
+    def test_photo_only_missing_views_does_not_invoke_provider(self):
+        manifest, files = photo_fixture(walls="abc")
+        write_bundle(self.bundle, manifest, files)
+        provider = unittest.mock.Mock()
+        with patch("reconstruction.capture.pipeline.generate") as generate:
+            result = run(self.bundle, self.output, geometry_provider=provider, render=True)
+        self.assertEqual(provider.mock_calls, [])
+        generate.assert_not_called()
+        self.assertEqual(result["status"], "needs_capture")
+        self.assertEqual(result["missingMeasurements"], [])
+        self.assertIsNone(result["reconstructionRequestPath"])
+        self.assertIsNone(result["draftManifestPath"])
+
+    def test_photo_only_duplicate_views_do_not_invoke_provider(self):
+        manifest, files = photo_fixture(duplicate_images=True)
+        write_bundle(self.bundle, manifest, files)
+        provider = unittest.mock.Mock()
+        with patch("reconstruction.capture.pipeline.generate") as generate:
+            result = run(self.bundle, self.output, geometry_provider=provider, render=True)
+        self.assertEqual(provider.mock_calls, [])
+        generate.assert_not_called()
+        self.assertEqual(result["status"], "needs_capture")
+        self.assertIsNone(result["reconstructionRequestPath"])
+
+    def test_photo_only_valid_proposal_uses_actual_bytes_and_estimated_geometry(self):
+        manifest, files = photo_fixture()
+        write_bundle(self.bundle, manifest, files)
+        provider = unittest.mock.Mock()
+        provider.extract.return_value = photo_proposal(manifest)
+        result = run(self.bundle, self.output, geometry_provider=provider)
+        provider.extract.assert_called_once()
+        _, supplied_assets, _ = provider.extract.call_args.args
+        expected = {photo["id"]: files[photo["fileName"]] for photo in manifest["photos"]}
+        self.assertEqual({asset["id"]: asset["body"] for asset in supplied_assets}, expected)
+        self.assertEqual(result["status"], "needs_review")
+        self.assertEqual(result["photoUsage"], "vision_input")
+        self.assertEqual(result["method"], "vision_estimated_rectangular_shell")
+        self.assertTrue(result["reviewRequired"])
+        self.assertEqual(result["missingMeasurements"], [])
+        self.assertEqual(result["proposalPath"], "vision.proposal.json")
+        self.assertEqual(result["citations"]["room"], [photo["id"] for photo in manifest["photos"]])
+        request = json.loads((self.output / "reconstruction.request.json").read_text())
+        floor = request["geometry"]["rooms"][0]["floorPolygon"]
+        self.assertAlmostEqual(max(point[0] for point in floor) - min(point[0] for point in floor) - 0.12, 4.8)
+        self.assertAlmostEqual(max(point[1] for point in floor) - min(point[1] for point in floor) - 0.12, 3.6)
+        self.assertEqual(request["geometry"]["rooms"][0]["height"], 2.6)
+        self.assertEqual(len(request["geometry"]["openings"]), 1)
+        self.assertTrue(all(evidence["dimensionStatus"] in {None, "inferred"} for evidence in request["evidence"]))
+        self.assertTrue(all(evidence["confirmedByUserAt"] is None for evidence in request["evidence"]))
+        raw = json.loads((self.output / "capture.json").read_text())
+        self.assertIsNone(raw["room"]["clearWidth"])
+        self.assertIsNone(raw["room"]["confirmedRectangularAt"])
+
+    def test_photo_only_estimated_request_reaches_blender_adapter(self):
+        manifest, files = photo_fixture()
+        write_bundle(self.bundle, manifest, files)
+        provider = unittest.mock.Mock()
+        provider.extract.return_value = photo_proposal(manifest)
+        def worker(request_path, output_path, **kwargs):
+            self.assertEqual(Path(request_path).name, "reconstruction.request.json")
+            self.assertEqual(json.loads(Path(request_path).read_text())["geometry"]["rooms"][0]["height"], 2.6)
+            Path(output_path).mkdir()
+            return {"warnings": [], "projectId": manifest["projectId"], "jobId": manifest["jobId"]}
+        with patch("reconstruction.capture.pipeline.generate", side_effect=worker) as generate:
+            result = run(self.bundle, self.output, geometry_provider=provider, render=True)
+        generate.assert_called_once()
+        self.assertEqual(result["status"], "needs_review")
+        self.assertEqual(result["draftManifestPath"], "draft/manifest.json")
+        draft = json.loads((self.output / "draft/manifest.json").read_text())
+        self.assertTrue(any("scale and dimensions are unverified" in warning for warning in draft["warnings"]))
+
+    def test_photo_only_inconclusive_model_requests_photos_without_measurement_gate(self):
+        manifest, files = photo_fixture()
+        write_bundle(self.bundle, manifest, files)
+        provider = unittest.mock.Mock()
+        provider.extract.return_value = {"summary": "Photos do not support a coherent rectangular layout",
+            "room": None, "openings": [], "assumptions": [],
+            "captureRequests": ["Retake wall B with its adjacent corners visible."]}
+        with patch("reconstruction.capture.pipeline.generate") as generate:
+            result = run(self.bundle, self.output, geometry_provider=provider, render=True)
+        generate.assert_not_called()
+        self.assertEqual(result["status"], "needs_capture")
+        self.assertIsNone(result["reconstructionRequestPath"])
+        self.assertNotEqual(result["status"], "needs_measurements")
+        self.assertTrue((self.output / "vision.proposal.json").is_file())
+
+    def test_photo_only_keyless_handoff_binds_exact_bundle_and_images(self):
+        manifest, files = photo_fixture()
+        body = write_bundle(self.bundle, manifest, files)
+        packet = handoff(manifest, body, photo_proposal(manifest))
+        proposal_file = self.root / "vision-handoff.json"
+        proposal_file.write_text(json.dumps(packet))
+        result = run(self.bundle, self.output, proposal_file=proposal_file)
+        self.assertEqual(result["status"], "needs_review")
+        self.assertEqual(result["photoUsage"], "vision_input")
+        self.assertTrue((self.output / "reconstruction.request.json").is_file())
+
+    def test_photo_only_handoff_identity_and_hash_mismatches_never_render(self):
+        manifest, files = photo_fixture()
+        body = write_bundle(self.bundle, manifest, files)
+        original = handoff(manifest, body, photo_proposal(manifest))
+        cases = []
+        for field, value in (("projectId", "wrong-project"), ("jobId", "wrong-job"),
+                             ("inputRevision", 999), ("bundleSha256", "0" * 64)):
+            packet = deepcopy(original)
+            packet[field] = value
+            cases.append((field, packet))
+        packet = deepcopy(original)
+        packet["photoSha256"][manifest["photos"][0]["id"]] = "0" * 64
+        cases.append(("photoSha256", packet))
+        for field, packet in cases:
+            with self.subTest(field=field):
+                proposal_file = self.root / f"bad-{field}.json"
+                proposal_file.write_text(json.dumps(packet))
+                output = self.root / f"rejected-{field}"
+                with patch("reconstruction.capture.pipeline.generate") as generate:
+                    with self.assertRaises(ResearchError):
+                        run(self.bundle, output, proposal_file=proposal_file, render=True)
+                generate.assert_not_called()
+                self.assertFalse((output / "reconstruction.request.json").exists())
+                self.assertEqual(json.loads((output / "capture.dossier.json").read_text())["status"], "failed")
+
+    def test_photo_only_provider_failure_preserves_photos_and_failed_dossier(self):
+        manifest, files = photo_fixture()
+        write_bundle(self.bundle, manifest, files)
+        provider = unittest.mock.Mock()
+        provider.extract.side_effect = RuntimeError("vision transport failed")
+        with patch("reconstruction.capture.pipeline.generate") as generate:
+            with self.assertRaisesRegex(RuntimeError, "vision transport failed"):
+                run(self.bundle, self.output, geometry_provider=provider, render=True)
+        provider.extract.assert_called_once()
+        generate.assert_not_called()
+        result = json.loads((self.output / "capture.dossier.json").read_text())
+        self.assertEqual(result["status"], "failed")
+        self.assertIsNone(result["reconstructionRequestPath"])
+        self.assertIsNone(result["draftManifestPath"])
         for filename, body in files.items():
             self.assertEqual((self.output / filename).read_bytes(), body)
 

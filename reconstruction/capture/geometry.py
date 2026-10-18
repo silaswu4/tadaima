@@ -1,4 +1,4 @@
-"""Compile explicit rectangular-room measurements, not photo-derived geometry.
+"""Compile explicit rectangular geometry with user or vision-estimated provenance.
 
 The frozen input wire schema lives in capture/contracts.ts. Public functions:
     validate_manifest(raw) -> normalized MobileCaptureManifest (no I/O).
@@ -106,14 +106,14 @@ def validate_manifest(raw: object) -> dict:
 
     Exactly one explicitly rectangular room is supported. Required but missing
     dimensions are represented by null and remain missing rather than defaulted.
-    JPEG dimensions are metadata until the capture worker decodes each file.
+    JPEG dimensions are metadata until the capture worker checks each file header.
     """
     item = _object(raw, "capture", {"schemaVersion", "jobId", "projectId", "inputRevision", "capturedAt",
                                     "captureMode", "room", "photos", "openings"})
     if item["schemaVersion"] != SCHEMA_VERSION:
         _fail("capture.schemaVersion", f"expected {SCHEMA_VERSION}")
-    if item["captureMode"] not in ("guided_photos", "manual"):
-        _fail("capture.captureMode", "expected guided_photos or manual")
+    if item["captureMode"] not in ("photo_inference", "guided_photos", "manual"):
+        _fail("capture.captureMode", "expected photo_inference, guided_photos or manual")
     room = _object(item["room"], "room", {"id", "label", "shape", "clearWidth", "clearDepth", "height",
                                          "wallThickness", "confirmedRectangularAt"})
     if room["shape"] != "rectangle":
@@ -191,24 +191,35 @@ def _stable_id(prefix: str, value: str):
     return prefix + "-" + hashlib.sha256(value.encode("utf-8")).hexdigest()[:24]
 
 
-def compile_capture(raw: object) -> dict:
-    """Produce a reviewable shell from explicit dimensions, never infer from photos.
+def compile_capture(raw: object, *, dimension_origin="user") -> dict:
+    """Compile supplied dimensions; vision estimation happens upstream, not here.
 
     All successful states require human review. An estimated measurement or
     inferred default thickness selects needs_review; all supplied measurements
     declared tape/laser select ready_for_review. Missing dimensions or an absent
-    rectangular confirmation select needs_measurements with request=None.
+    rectangular confirmation select needs_measurements with request=None in legacy
+    user mode. Vision mode always marks every dimension and room shape inferred
+    and never fabricates a user confirmation.
     """
+    if dimension_origin not in ("user", "vision"):
+        raise GeometryError("Unsupported capture dimension origin")
+    vision = dimension_origin == "vision"
     manifest = validate_manifest(raw)
     room = manifest["room"]
     missing = [f"room.{key}" for key in ("clearWidth", "clearDepth", "height") if room[key] is None]
-    if room["confirmedRectangularAt"] is None:
+    if room["confirmedRectangularAt"] is None and not vision:
         missing.append("room.confirmedRectangularAt")
     warnings = [
         "This is a measurement-driven rectangular shell; photos are references, not photogrammetry or a measured scan.",
         "Tape/laser methods are user declarations and have not been independently verified.",
     ]
-    if manifest["captureMode"] == "guided_photos":
+    if vision:
+        warnings = [
+            "Room layout, dimensions and openings are visual estimates, not a calibrated metric scan.",
+            "Absolute scale is unverified; do not rely on this draft for tight furniture clearances.",
+            "The rectangular shell is an inferred approximation, not a user-confirmed room shape.",
+        ]
+    if manifest["captureMode"] in ("photo_inference", "guided_photos"):
         coverage = {photo["wall"] for photo in manifest["photos"]}
         absent = [wall.upper() for wall in WALLS if wall not in coverage]
         if absent:
@@ -219,15 +230,17 @@ def compile_capture(raw: object) -> dict:
     prefix = f"capture:{manifest['projectId']}:{manifest['jobId']}:"
     evidence = []
     measurements = {}
-    inferred = False
+    inferred = vision
 
     def add_measurement(path, measurement, *, default=False):
         nonlocal inferred
         evidence_id = _stable_id("ev", prefix + path)
-        status = "inferred" if default or measurement["method"] == "estimate" else "measured"
+        status = "inferred" if vision or default or measurement["method"] == "estimate" else "measured"
         inferred = inferred or status == "inferred"
         if default:
             claim = "Wall thickness defaulted to 0.12 m; inferred by the compiler, not measured."
+        elif vision:
+            claim = f"{path}: {measurement['valueMeters']:g} m; uncalibrated vision estimate, not a measured dimension."
         else:
             claim = (f"{path}: {measurement['valueMeters']:g} m; user-declared "
                      f"{measurement['method']} measurement, not independently verified.")
@@ -246,15 +259,20 @@ def compile_capture(raw: object) -> dict:
         add_measurement("room.wallThickness", thickness, default=True)
     else:
         add_measurement("room.wallThickness", thickness)
-    shape_id = _stable_id("ev", prefix + "room.confirmedRectangularAt")
-    evidence.append({"id": shape_id, "sourceUrl": None, "privateAssetId": prefix + "room.confirmedRectangularAt",
-        "observedAt": room["confirmedRectangularAt"], "claim": "User confirmed the rectangular-room assumption.",
-        "dimensionStatus": None, "confirmedByUserAt": room["confirmedRectangularAt"]})
+    shape_path = "room.inferredShape" if vision else "room.confirmedRectangularAt"
+    shape_id = _stable_id("ev", prefix + shape_path)
+    evidence.append({"id": shape_id, "sourceUrl": None, "privateAssetId": prefix + shape_path,
+        "observedAt": manifest["capturedAt"] if vision else room["confirmedRectangularAt"],
+        "claim": "Vision proposed a rectangular-room approximation; not user confirmed." if vision else "User confirmed the rectangular-room assumption.",
+        "dimensionStatus": "inferred" if vision else None,
+        "confirmedByUserAt": None if vision else room["confirmedRectangularAt"]})
     photo_evidence = {}
     for photo in manifest["photos"]:
         ident = _stable_id("ev", prefix + "photo." + photo["id"])
         evidence.append({"id": ident, "sourceUrl": None, "privateAssetId": prefix + photo["fileName"],
-            "observedAt": photo["capturedAt"], "claim": f"Private {photo['wall']} reference photo; no dimensions derived from it.",
+            "observedAt": photo["capturedAt"], "claim": (
+                f"Private {photo['wall']} image supplied to unverified vision inference; no metric calibration."
+                if vision else f"Private {photo['wall']} reference photo; no dimensions derived from it."),
             "dimensionStatus": None, "confirmedByUserAt": None})
         photo_evidence[photo["id"]] = ident
     width, depth, height, t = (room["clearWidth"]["valueMeters"], room["clearDepth"]["valueMeters"],
@@ -286,6 +304,6 @@ def compile_capture(raw: object) -> dict:
             "walls": walls, "openings": openings}, "evidence": evidence,
     })
     if inferred:
-        warnings.append("One or more dimensions are inferred or estimated and need measurement review.")
+        warnings.append("One or more dimensions are inferred or estimated and require review.")
     return {"status": "needs_review" if inferred else "ready_for_review", "reviewRequired": True,
             "warnings": warnings, "missingMeasurements": [], "request": request}

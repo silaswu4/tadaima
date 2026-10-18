@@ -68,7 +68,7 @@
   margin: 16px 0 34px;
 }
 .capture-captureGrid,
-.capture-measureGrid {
+.capture-reviewGrid {
   display: grid;
   grid-template-columns: 1.1fr 1fr;
   gap: 64px;
@@ -161,21 +161,9 @@
 }
 .capture-page button:focus-visible,
 .capture-page input:focus-visible,
-.capture-page select:focus-visible {
+.capture-roomName input:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 4px;
-}
-.capture-textButton {
-  border: 0;
-  background: none;
-  padding: 10px 0;
-  color: var(--ink-soft);
-  text-decoration: underline;
-  text-underline-offset: 4px;
-  font: inherit;
-  font-size: 12px;
-  cursor: pointer;
-  min-height: 44px;
 }
 .capture-photoGrid {
   display: grid;
@@ -229,22 +217,15 @@
   color: var(--ink-soft);
   font-size: 11px;
 }
-.capture-fields {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 18px;
-  margin: 22px 0;
-}
-.capture-fields label {
+.capture-roomName {
   display: flex;
   flex-direction: column;
   gap: 9px;
   color: var(--ink-soft);
   font-size: 12px;
-  min-width: 0;
+  margin: 22px 0;
 }
-.capture-fields input,
-.capture-fields select {
+.capture-roomName input {
   width: 100%;
   min-width: 0;
   padding: 12px;
@@ -256,58 +237,9 @@
   border-radius: 0;
   min-height: 46px;
 }
-.capture-check {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-  font-size: 13px;
-  line-height: 1.6;
-  margin: 20px 0 36px;
-  min-height: 44px;
-}
-.capture-check input {
-  accent-color: var(--accent);
-  width: 18px;
-  height: 18px;
-  flex: 0 0 auto;
-}
-.capture-opening {
-  border: 1px solid var(--surface-deep);
-  padding: 14px;
-  margin-bottom: 16px;
-  min-width: 0;
-}
-.capture-opening legend {
-  font-size: 12px;
-  padding: 0 6px;
-}
-.capture-opening .capture-fields {
-  margin-top: 8px;
-}
-.capture-diagram {
-  background: var(--surface-soft);
-  width: 100%;
-  padding: 20px 0;
-}
-.capture-diagram svg {
-  display: block;
-  width: 100%;
-  height: auto;
-}
-.capture-diagram rect {
-  fill: var(--surface);
-  stroke: var(--ink);
-  stroke-width: 2;
-}
-.capture-diagram text {
-  fill: var(--ink-soft);
-  font-family: inherit;
-  font-size: 16px;
-}
-.capture-roomSize {
-  font-size: 24px;
-  margin: 18px 0 28px;
-  letter-spacing: -0.04em;
+.capture-reviewPhotos img {
+  height: 150px;
+  object-fit: contain;
 }
 .capture-summary {
   margin: 0 0 24px;
@@ -351,7 +283,7 @@
     margin-top: 44px;
   }
   .capture-captureGrid,
-  .capture-measureGrid {
+  .capture-reviewGrid {
     grid-template-columns: 1fr;
     gap: 36px;
   }
@@ -362,12 +294,6 @@
     display: block;
     margin-bottom: 6px;
   }
-  .capture-fields {
-    gap: 14px;
-  }
-  .capture-roomSize {
-    font-size: 21px;
-  }
 }
 @media (prefers-reduced-motion: no-preference) {
   .capture-actions button,
@@ -377,14 +303,4 @@
       border-color 0.15s ease,
       background 0.15s ease;
   }
-}
-
-.capture-doorMark {
-  stroke: var(--accent);
-  stroke-width: 7;
-}
-.capture-windowMark {
-  stroke: var(--ink-soft);
-  stroke-width: 7;
-  stroke-dasharray: 3 2;
 }

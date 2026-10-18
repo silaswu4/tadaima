@@ -12,8 +12,6 @@ import {
   stopCamera,
 } from "../browser";
 import type {
-  CaptureMeasurement,
-  CaptureOpening,
   CapturePhoto,
   CaptureWall,
   MobileCaptureManifest,
@@ -22,23 +20,11 @@ import type {
 import "./CaptureDemo.css";
 
 const walls: CaptureWall[] = ["a", "b", "c", "d"];
-const steps = ["Photographs", "Measurements", "Review"];
+const steps = ["Photographs", "Review"];
 type PhotoState = { photo: CapturePhoto; bytes: Uint8Array; preview: string };
-type OpeningDraft = {
-  id: string;
-  wall: CaptureWall;
-  kind: "door" | "window";
-  offset: string;
-  width: string;
-  height: string;
-  sillHeight: string;
-};
-const meters = (text: string) =>
-  text.trim() ? Number(text.replace(",", ".")) : NaN;
 
 export default function CaptureDemo() {
   const [step, setStep] = useState(0);
-  const [mode, setMode] = useState<"guided_photos" | "manual">("guided_photos");
   const [wall, setWall] = useState<CaptureWall>("a");
   const [photos, setPhotos] = useState<
     Partial<Record<CaptureWall, PhotoState>>
@@ -49,12 +35,6 @@ export default function CaptureDemo() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [label, setLabel] = useState("Living room");
-  const [width, setWidth] = useState("");
-  const [depth, setDepth] = useState("");
-  const [height, setHeight] = useState("");
-  const [method, setMethod] = useState<CaptureMeasurement["method"]>("tape");
-  const [confirmedAt, setConfirmedAt] = useState<string | null>(null);
-  const [openings, setOpenings] = useState<OpeningDraft[]>([]);
   const video = useRef<HTMLVideoElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const stream = useRef<MediaStream | null>(null);
@@ -104,12 +84,18 @@ export default function CaptureDemo() {
       }
       stream.current = acquired;
       acquired.getVideoTracks().forEach((track) => {
-        track.addEventListener("ended", () => {
-          if (alive.current && stream.current === acquired) {
-            closeCamera();
-            setNotice("The camera paused. Your saved photos are still here; reopen the camera to continue.");
-          }
-        }, { once: true });
+        track.addEventListener(
+          "ended",
+          () => {
+            if (alive.current && stream.current === acquired) {
+              closeCamera();
+              setNotice(
+                "The camera paused. Your saved photos are still here; reopen the camera to continue.",
+              );
+            }
+          },
+          { once: true },
+        );
       });
       setCameraOn(true);
     } catch (failure) {
@@ -201,117 +187,23 @@ export default function CaptureDemo() {
     }
   }
 
+  const photoCount = walls.filter((key) => photos[key]).length;
+
   function navigate(next: number) {
+    if (next === 1 && photoCount !== 4) return;
     closeCamera();
     setError("");
     setNotice("");
     setStep(next);
   }
-  const W = meters(width),
-    D = meters(depth),
-    H = meters(height);
-  const dimensionsValid =
-    Number.isFinite(W) &&
-    W >= 0.2 &&
-    W <= 100 &&
-    Number.isFinite(D) &&
-    D >= 0.2 &&
-    D <= 100 &&
-    Number.isFinite(H) &&
-    H >= 0.5 &&
-    H <= 20;
-  const photoCount = walls.filter((key) => photos[key]).length;
-
-  function addOpening(kind: "door" | "window") {
-    setOpenings((previous) => [
-      ...previous,
-      {
-        id: `opening-${crypto.randomUUID().slice(0, 8)}`,
-        wall: "a",
-        kind,
-        offset: "",
-        width: "",
-        height: "",
-        sillHeight: kind === "door" ? "0" : "",
-      },
-    ]);
-  }
-  function editOpening(id: string, patch: Partial<OpeningDraft>) {
-    setOpenings((previous) =>
-      previous.map((item) => (item.id === id ? { ...item, ...patch } : item)),
-    );
-  }
-  function openingError(item: OpeningDraft): string | null {
-    const values = [item.offset, item.width, item.height, item.sillHeight].map(
-      meters,
-    );
-    if (values.some((value) => !Number.isFinite(value)))
-      return "Complete every door/window measurement.";
-    const [offset, openingWidth, openingHeight, sill] = values;
-    const length = item.wall === "a" || item.wall === "c" ? W : D;
-    if (
-      offset < 0 ||
-      openingWidth < 0.01 ||
-      openingHeight < 0.01 ||
-      sill < 0 ||
-      offset + openingWidth > length ||
-      sill + openingHeight > H
-    )
-      return "A door or window falls outside its wall. Check its measurements.";
-    return null;
-  }
-  const overlappingOpenings = openings.some((item, index) =>
-    openings.slice(0, index).some((other) => {
-      if (item.wall !== other.wall) return false;
-      const horizontal =
-        Math.min(
-          meters(item.offset) + meters(item.width),
-          meters(other.offset) + meters(other.width),
-        ) - Math.max(meters(item.offset), meters(other.offset));
-      const vertical =
-        Math.min(
-          meters(item.sillHeight) + meters(item.height),
-          meters(other.sillHeight) + meters(other.height),
-        ) - Math.max(meters(item.sillHeight), meters(other.sillHeight));
-      return (
-        (horizontal > 0 && vertical > 0) ||
-        (Math.abs(horizontal) < 1e-8 && Math.abs(vertical) < 1e-8)
-      );
-    }),
-  );
-  const geometryError =
-    openings.map(openingError).find(Boolean) ||
-    (overlappingOpenings
-      ? "Two openings overlap or meet only at a corner. Check their positions."
-      : null);
 
   async function download() {
-    if (
-      !dimensionsValid ||
-      !confirmedAt ||
-      geometryError ||
-      (mode === "guided_photos" && photoCount !== 4)
-    )
-      return;
+    if (photoCount !== 4 || busy) return;
     setBusy(true);
     setError("");
     setNotice("");
     try {
       const now = new Date().toISOString();
-      const measurement = (value: string): CaptureMeasurement => ({
-        valueMeters: meters(value),
-        method,
-        observedAt: now,
-      });
-      const mappedOpenings: CaptureOpening[] = openings.map((item) => ({
-        id: item.id,
-        wall: item.wall,
-        kind: item.kind,
-        offset: measurement(item.offset),
-        width: measurement(item.width),
-        height: measurement(item.height),
-        sillHeight: measurement(item.sillHeight),
-      }));
       const items = walls.flatMap((key) => (photos[key] ? [photos[key]!] : []));
       const manifest: MobileCaptureManifest = {
         schemaVersion: "mobile-capture/1.0",
@@ -319,24 +211,25 @@ export default function CaptureDemo() {
         jobId: `capture-${crypto.randomUUID().slice(0, 16)}`,
         inputRevision: 0,
         capturedAt: now,
-        captureMode: mode,
+        captureMode: "photo_inference",
         room: {
           id: "room-1",
           label: label.trim() || "My room",
           shape: "rectangle",
-          clearWidth: measurement(width),
-          clearDepth: measurement(depth),
-          height: measurement(height),
+          clearWidth: null,
+          clearDepth: null,
+          height: null,
           wallThickness: null,
-          confirmedRectangularAt: confirmedAt,
+          confirmedRectangularAt: null,
         },
         photos: items.map((item) => item.photo),
-        openings: mappedOpenings,
+        openings: [],
       };
       const archive = await buildCaptureZip(
         manifest,
         new Map(items.map((item) => [item.photo.fileName, item.bytes])),
       );
+      if (!alive.current) return;
       const url = URL.createObjectURL(archive);
       const link = document.createElement("a");
       link.href = url;
@@ -344,14 +237,15 @@ export default function CaptureDemo() {
       link.click();
       setTimeout(() => URL.revokeObjectURL(url), 10_000);
       setNotice(
-        "Capture downloaded. Your photos and measurements are ready for reconstruction processing.",
+        "Capture downloaded. Your photos are ready for AI reconstruction processing.",
       );
     } catch (failure) {
-      setError(
-        failure instanceof Error
-          ? failure.message
-          : "Capture could not be exported.",
-      );
+      if (alive.current)
+        setError(
+          failure instanceof Error
+            ? failure.message
+            : "Capture could not be exported.",
+        );
     } finally {
       if (alive.current) setBusy(false);
     }
@@ -372,10 +266,7 @@ export default function CaptureDemo() {
           <br />
           you already have.
         </h1>
-        <p>
-          Photograph each wall. Add your measurements. Make a room plan with a
-          scale you can check.
-        </p>
+        <p>Capture four views for an AI room draft. No measurements needed.</p>
       </section>
       <nav className="capture-steps" aria-label="Capture steps">
         {steps.map((name, index) => (
@@ -384,7 +275,7 @@ export default function CaptureDemo() {
             type="button"
             aria-current={step === index ? "step" : undefined}
             onClick={() => navigate(index)}
-            disabled={busy}
+            disabled={busy || (index === 1 && photoCount !== 4)}
           >
             <span>0{index + 1}</span>
             {name}
@@ -403,8 +294,9 @@ export default function CaptureDemo() {
               <span>{photoCount}/4 views saved</span>
             </div>
             <p className="capture-help">
-              Start at wall A and work clockwise. Include both corners, the
-              floor, and the ceiling. Step back if you can.
+              Start at wall A and work clockwise. Step sideways between views.
+              Include both corners, the floor, ceiling, and any doors or
+              windows.
             </p>
             <div className="capture-camera">
               <video
@@ -509,274 +401,105 @@ export default function CaptureDemo() {
               ))}
             </div>
             <p className="capture-help">
-              Use sharp, well-lit views. Avoid mirrors and moving people. Photos
-              help document the room; measurements set its size.
+              Use sharp, well-lit views and move around the room rather than
+              only turning in place. This first capture supports one rectangular
+              room.
+            </p>
+            <p className="capture-help">
+              Four wall photos are the starting point for a vision draft. They
+              do not provide a measured scan.
             </p>
             <div className="capture-actions">
               <button
                 type="button"
                 className="capture-primary"
-                disabled={photoCount < 4 || busy}
-                onClick={() => {
-                  setMode("guided_photos");
-                  navigate(1);
-                }}
+                disabled={photoCount !== 4 || busy}
+                onClick={() => navigate(1)}
               >
-                Add measurements
+                Review capture
               </button>
             </div>
-            <button
-              type="button"
-              className="capture-textButton"
-              disabled={busy}
-              onClick={() => {
-                setMode("manual");
-                navigate(1);
-              }}
-            >
-              Use manual dimensions instead
-            </button>
           </aside>
         </section>
       ) : null}
       {step === 1 ? (
-        <section className="capture-measureGrid">
+        <section className="capture-reviewGrid">
           <div>
-            <h2>Measure the inside edges.</h2>
-            <p className="capture-help">
-              Enter meters, from finished wall to finished wall. Wall A is your
-              starting wall; B, C and D follow clockwise.
-            </p>
-            <div className="capture-fields">
-              <label>
-                Room name
-                <input
-                  value={label}
-                  maxLength={100}
-                  onChange={(event) => setLabel(event.target.value)}
-                />
-              </label>
-              <label>
-                Measured with
-                <select
-                  value={method}
-                  onChange={(event) =>
-                    setMethod(
-                      event.target.value as CaptureMeasurement["method"],
-                    )
-                  }
-                >
-                  <option value="tape">Tape measure</option>
-                  <option value="laser">Laser measure</option>
-                  <option value="estimate">Estimate — needs checking</option>
-                </select>
-              </label>
-              <label>
-                Width — walls A / C (m)
-                <input
-                  inputMode="decimal"
-                  placeholder="e.g. 4.20"
-                  value={width}
-                  onChange={(event) => setWidth(event.target.value)}
-                />
-              </label>
-              <label>
-                Depth — walls B / D (m)
-                <input
-                  inputMode="decimal"
-                  placeholder="e.g. 3.50"
-                  value={depth}
-                  onChange={(event) => setDepth(event.target.value)}
-                />
-              </label>
-              <label>
-                Floor to ceiling (m)
-                <input
-                  inputMode="decimal"
-                  placeholder="e.g. 2.70"
-                  value={height}
-                  onChange={(event) => setHeight(event.target.value)}
-                />
-              </label>
-            </div>
-            <label className="capture-check">
+            <h2>Your room, ready for a draft.</h2>
+            <label className="capture-roomName">
+              Room name
               <input
-                type="checkbox"
-                checked={!!confirmedAt}
-                onChange={(event) =>
-                  setConfirmedAt(
-                    event.target.checked ? new Date().toISOString() : null,
-                  )
-                }
+                value={label}
+                maxLength={100}
+                onChange={(event) => setLabel(event.target.value)}
               />
-              This is one rectangular room.
             </label>
-            <div className="capture-sectionTitle">
-              <h2>Doors &amp; windows</h2>
-              <span>optional</span>
-            </div>
-            <p className="capture-help">
-              Offsets start at the inside corner where that wall begins. Follow
-              the arrows on the plan.
-            </p>
-            {openings.map((item, index) => (
-              <fieldset key={item.id} className="capture-opening">
-                <legend>
-                  {item.kind === "door" ? "Door" : "Window"} {index + 1}
-                </legend>
-                <div className="capture-fields">
-                  <label>
-                    Wall
-                    <select
-                      value={item.wall}
-                      onChange={(event) =>
-                        editOpening(item.id, {
-                          wall: event.target.value as CaptureWall,
-                        })
-                      }
-                    >
-                      {walls.map((key) => (
-                        <option key={key} value={key}>
-                          {key.toUpperCase()}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  {(
-                    [
-                      ["offset", "Offset (m)"],
-                      ["width", "Width (m)"],
-                      ["height", "Height (m)"],
-                      ...(item.kind === "window"
-                        ? [["sillHeight", "Sill above floor (m)"]]
-                        : []),
-                    ] as const
-                  ).map(([field, title]) => (
-                    <label key={field}>
-                      {title}
-                      <input
-                        inputMode="decimal"
-                        value={item[field as keyof OpeningDraft]}
-                        onChange={(event) =>
-                          editOpening(item.id, { [field]: event.target.value })
-                        }
-                      />
-                    </label>
-                  ))}
-                </div>
-                <button
-                  type="button"
-                  className="capture-textButton"
-                  onClick={() =>
-                    setOpenings((previous) =>
-                      previous.filter((opening) => opening.id !== item.id),
-                    )
-                  }
-                >
-                  Remove {item.kind}
-                </button>
-              </fieldset>
-            ))}
-            <div className="capture-actions">
-              <button
-                type="button"
-                disabled={openings.length >= 32}
-                onClick={() => addOpening("door")}
-              >
-                Add door
-              </button>
-              <button
-                type="button"
-                disabled={openings.length >= 32}
-                onClick={() => addOpening("window")}
-              >
-                Add window
-              </button>
-            </div>
-            <div className="capture-actions">
-              <button
-                type="button"
-                className="capture-primary"
-                disabled={!dimensionsValid || !confirmedAt || !!geometryError}
-                onClick={() => navigate(2)}
-              >
-                Review room
-              </button>
-            </div>
-            {geometryError ? (
-              <p className="capture-error">{geometryError}</p>
-            ) : null}
-          </div>
-          <aside>
-            <RoomDiagram width={W} depth={D} openings={openings} />
-            <p className="capture-help">
-              The outline comes from your dimensions. It isn’t an automatic
-              depth scan.
-            </p>
-          </aside>
-        </section>
-      ) : null}
-      {step === 2 ? (
-        <section className="capture-measureGrid">
-          <div>
-            <h2>{label.trim() || "Your room"}</h2>
-            <p className="capture-roomSize">
-              {dimensionsValid
-                ? `${W.toFixed(2)} × ${D.toFixed(2)} × ${H.toFixed(2)} m`
-                : "Add your measurements first."}
-            </p>
             <dl className="capture-summary">
               <div>
                 <dt>Reference photos</dt>
                 <dd>{photoCount} / 4</dd>
               </div>
               <div>
+                <dt>Room baseline</dt>
+                <dd>One rectangular room</dd>
+              </div>
+              <div>
                 <dt>Dimensions</dt>
-                <dd>
-                  {method === "estimate"
-                    ? "Estimated"
-                    : `User-reported ${method} measurements`}
-                </dd>
-              </div>
-              <div>
-                <dt>Doors / windows</dt>
-                <dd>{openings.length}</dd>
-              </div>
-              <div>
-                <dt>Capture mode</dt>
-                <dd>{mode === "manual" ? "Manual room" : "Guided photos"}</dd>
+                <dd>AI estimate</dd>
               </div>
             </dl>
             <p className="capture-help">
-              Wall thickness is estimated. Review the resulting model before
-              relying on tight clearances.
+              AI will estimate layout and scale from these photos. Dimensions
+              will be approximate; review the resulting model.
             </p>
             <p className="capture-help">
-              Download a capture bundle for the reconstruction worker. It
-              contains the reference photos, dimensions and opening locations;
-              no automatic photo reconstruction is claimed.
+              This page prepares your capture. Download it to continue
+              reconstruction.
             </p>
             <div className="capture-actions">
               <button
                 type="button"
                 className="capture-primary"
-                disabled={
-                  busy ||
-                  !dimensionsValid ||
-                  !confirmedAt ||
-                  !!geometryError ||
-                  (mode === "guided_photos" && photoCount !== 4)
-                }
+                disabled={busy || photoCount !== 4}
                 onClick={download}
               >
                 {busy ? "Preparing…" : "Download capture"}
               </button>
-              <button type="button" disabled={busy} onClick={() => navigate(1)}>
-                Edit dimensions
+              <button type="button" disabled={busy} onClick={() => navigate(0)}>
+                Edit photos
               </button>
             </div>
           </div>
-          <RoomDiagram width={W} depth={D} openings={openings} />
+          <div>
+            <h2>Check all four views.</h2>
+            <div className="capture-photoGrid capture-reviewPhotos">
+              {walls.map((key) =>
+                photos[key] ? (
+                  <button
+                    type="button"
+                    key={key}
+                    className="capture-photo"
+                    aria-label={`Replace wall ${key.toUpperCase()} photo`}
+                    disabled={busy}
+                    onClick={() => {
+                      setWall(key);
+                      navigate(0);
+                    }}
+                  >
+                    <Image
+                      src={photos[key]!.preview}
+                      alt={`Your wall ${key.toUpperCase()}`}
+                      width={320}
+                      height={240}
+                      unoptimized
+                    />
+                    <strong>Wall {key.toUpperCase()}</strong>
+                    <small>tap to replace</small>
+                  </button>
+                ) : null,
+              )}
+            </div>
+          </div>
         </section>
       ) : null}
       {error ? (
@@ -790,97 +513,5 @@ export default function CaptureDemo() {
         </p>
       ) : null}
     </main>
-  );
-}
-
-function RoomDiagram({
-  width,
-  depth,
-  openings,
-}: {
-  width: number;
-  depth: number;
-  openings: OpeningDraft[];
-}) {
-  const valid =
-    Number.isFinite(width) && Number.isFinite(depth) && width > 0 && depth > 0;
-  const scale = valid ? Math.min(240 / width, 170 / depth) : 1;
-  const w = valid ? width * scale : 200,
-    d = valid ? depth * scale : 150;
-  const x = (360 - w) / 2,
-    y = (280 - d) / 2;
-  const marks = valid
-    ? openings.flatMap((item, index) => {
-        const offset = meters(item.offset),
-          length = meters(item.width);
-        const wallLength =
-          item.wall === "a" || item.wall === "c" ? width : depth;
-        if (
-          !Number.isFinite(offset) ||
-          !Number.isFinite(length) ||
-          offset < 0 ||
-          length <= 0 ||
-          offset + length > wallLength
-        )
-          return [];
-        const positions = {
-          a: [x + offset * scale, y, x + (offset + length) * scale, y],
-          b: [x + w, y + offset * scale, x + w, y + (offset + length) * scale],
-          c: [
-            x + w - offset * scale,
-            y + d,
-            x + w - (offset + length) * scale,
-            y + d,
-          ],
-          d: [x, y + d - offset * scale, x, y + d - (offset + length) * scale],
-        }[item.wall];
-        return [{ item, positions, index }];
-      })
-    : [];
-  return (
-    <div className="capture-diagram">
-      <svg
-        viewBox="0 0 360 280"
-        role="img"
-        aria-label={
-          valid
-            ? `Rectangular room ${width} by ${depth} meters. Wall A at top, B right, C bottom, D left.`
-            : "Rectangular room diagram. Add dimensions to set its proportions."
-        }
-      >
-        <rect x={x} y={y} width={w} height={d} />
-        {marks.map(({ item, positions, index }) => (
-          <g key={item.id}>
-            <title>
-              {item.kind} {index + 1} on wall {item.wall.toUpperCase()}
-            </title>
-            <line
-              x1={positions[0]}
-              y1={positions[1]}
-              x2={positions[2]}
-              y2={positions[3]}
-              className={
-                item.kind === "door" ? "capture-doorMark" : "capture-windowMark"
-              }
-            />
-          </g>
-        ))}
-        <text x={180} y={y - 15} textAnchor="middle">
-          A →
-        </text>
-        <text x={x + w + 16} y={140} textAnchor="middle">
-          B ↓
-        </text>
-        <text x={180} y={y + d + 25} textAnchor="middle">
-          ← C
-        </text>
-        <text x={x - 16} y={140} textAnchor="middle">
-          D ↑
-        </text>
-        <text x={180} y={140} textAnchor="middle">
-          {valid ? `${width.toFixed(2)} × ${depth.toFixed(2)} m` : "your room"}
-        </text>
-      </svg>
-    </div>
   );
 }

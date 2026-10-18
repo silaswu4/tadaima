@@ -33,7 +33,7 @@ export interface MobileCaptureManifest
   extends Pick<ReconstructionRequest, "jobId" | "projectId" | "inputRevision"> {
   schemaVersion: "mobile-capture/1.0";
   capturedAt: string;
-  captureMode: "guided_photos" | "manual";
+  captureMode: "photo_inference" | "guided_photos" | "manual";
   room: {
     id: string;
     label: string;
