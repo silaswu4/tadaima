@@ -19,6 +19,15 @@ describe("shopping a spot", () => {
     assert.equal(top.assetUrl, "/models/sofa_02.glb");
   });
 
+  test("a merchant filter only returns that retailer's observed catalog", () => {
+    for (const merchant of ["IKEA", "Target"] as const) {
+      const request: ShopRequest = { category: "chair", spot: backWall, merchant };
+      const candidates = catalogCandidates(demoPlan, request);
+      assert.ok(candidates.length > 0);
+      assert.ok(candidates.every((product) => product.merchant === merchant));
+    }
+  });
+
   test("the cap is inclusive and exact", () => {
     assert.ok(catalogCandidates(demoPlan, couch({ maxPriceUsd: 299 })).some((p) => p.id === saltmyran.id));
     assert.ok(!catalogCandidates(demoPlan, couch({ maxPriceUsd: 298.99 })).some((p) => p.id === saltmyran.id));
@@ -45,8 +54,27 @@ describe("shopping a spot", () => {
     assert.equal(evaluate(demoPlan, gone, couch(), "live").fits, false);
     assert.equal(evaluate(demoPlan, unsized, couch(), "live").fits, false);
     const u = evaluate(demoPlan, unpriced, couch(), "live");
+    assert.equal(u.fits, false);
     assert.ok(u.problems.some((p) => p.includes("No price")));
     assert.equal(u.withinBudget, null);
+  });
+
+  test("unknown stock, fixture data, invalid dimensions and foreign currency cannot be called fitting", () => {
+    for (const bad of [
+      { ...saltmyran, availability: "unknown" as const },
+      { ...saltmyran, fixture: true },
+      { ...saltmyran, dimensions: [0, 1, 1] as const },
+      { ...saltmyran, price: { amountMinor: 29900, currency: "EUR" } },
+      { ...saltmyran, price: { amountMinor: NaN, currency: "USD" } },
+    ]) {
+      const result = evaluate(demoPlan, bad, couch(), "live");
+      assert.equal(result.fits, false);
+      assert.ok(result.problems.length > 0);
+    }
+    const euroPlan = structuredClone(demoPlan);
+    euroPlan.constraints.budget!.currency = "EUR";
+    const euroProduct = { ...saltmyran, price: { amountMinor: 29900, currency: "EUR" } };
+    assert.equal(evaluate(euroPlan, euroProduct, couch(), "live").fits, true);
   });
 
   test("ranking: fits first, then within budget, then the shopper's words, then price", () => {

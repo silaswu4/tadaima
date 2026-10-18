@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { handle } from "@/backend/http";
+import { handleProject } from "@/backend/http";
 import { startResearch } from "@/backend/shopping/research";
 
 const Body = z.object({
@@ -11,5 +11,5 @@ const Body = z.object({
 /** Starts room-aware product research for one item. Poll /jobs/{id} for results. */
 export async function POST(req: Request, ctx: RouteContext<"/api/projects/[projectId]/research">) {
   const { projectId } = await ctx.params;
-  return handle(async () => startResearch(projectId, Body.parse(await req.json())));
+  return handleProject(req, projectId, async () => startResearch(projectId, Body.parse(await req.json())));
 }

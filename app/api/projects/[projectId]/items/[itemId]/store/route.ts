@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { handle } from "@/backend/http";
+import { handleProject } from "@/backend/http";
 import { storeItem } from "@/backend/shopping/shop";
 
 const Body = z.object({
@@ -11,5 +11,5 @@ const Body = z.object({
 /** Put a piece away in inventory. Bring it back with move-to. */
 export async function POST(req: Request, ctx: RouteContext<"/api/projects/[projectId]/items/[itemId]/store">) {
   const { projectId, itemId } = await ctx.params;
-  return handle(async () => storeItem(projectId, { itemId, ...Body.parse(await req.json().catch(() => ({}))) }));
+  return handleProject(req, projectId, async () => storeItem(projectId, { itemId, ...Body.parse(await req.json().catch(() => ({}))) }));
 }

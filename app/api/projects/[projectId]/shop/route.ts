@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { FloorSpotSchema, handle } from "@/backend/http";
+import { FloorSpotSchema, handleProject } from "@/backend/http";
 import { startShopping } from "@/backend/shopping/shop";
 
 const Body = z.object({
@@ -18,5 +18,5 @@ const Body = z.object({
  */
 export async function POST(req: Request, ctx: RouteContext<"/api/projects/[projectId]/shop">) {
   const { projectId } = await ctx.params;
-  return handle(async () => startShopping(projectId, Body.parse(await req.json())));
+  return handleProject(req, projectId, async () => startShopping(projectId, Body.parse(await req.json())));
 }

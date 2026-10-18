@@ -6,7 +6,7 @@ Documentation updated October 18, 2026. This document distinguishes the user's r
 
 Tadaima is a web furniture shopping agent that understands a person's room, finds real products that fit, and revises a complete shopping plan around their budget and existing furniture.
 
-The repository is named `tadaima`. The current UI, package metadata, and older `HANDOFF.md` call the project **Michael**, explicitly a working name. A final naming decision is still open. Use Tadaima as the repository identifier without silently renaming the existing interface.
+The product is named **tadaima** across the repository, UI, and package metadata. It was first called Michael, a working name, which the older `HANDOFF.md` notes.
 
 ## The problem to solve
 

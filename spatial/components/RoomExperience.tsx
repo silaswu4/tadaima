@@ -2,8 +2,11 @@
 
 import Image from "next/image";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import type { FloorSpot, FurnitureCategory, ProductCandidate, RoomPlan, Vector3Meters } from "../../backend/contracts";
-import catalogJson from "../../backend/fixtures/real-catalog.json";
+import type { FloorSpot, FurnitureCategory, ProductCandidate, RoomPlan, ShopResult, Vector3Meters } from "../../backend/contracts";
+import dynamic from "next/dynamic";
+import { placeAt } from "../../backend/shopping/placement";
+import { evaluate } from "../../backend/shopping/spot";
+import { useRoomShopping } from "../rooms/use-room-shopping";
 import type { WalkCallbacks, WalkEnvironment, WalkItem, WalkMode, WalkOptions, WalkScene } from "../room/walk-api";
 import mark from "../assets/tadaima-mark.png";
 import { WipeLink, useWipeHold } from "./PageWipe";
@@ -14,8 +17,7 @@ type Props = { room: ExperienceRoom; backHref?: string; onPlanChange?: (plan: Ro
 type Panel = "catalog" | "basket" | "inventory" | null;
 type Anchor = { x: number; y: number } | null;
 
-// The JSON import widens tuples to number[], so narrow it once here.
-const CATALOG = (catalogJson as unknown as { products: ProductCandidate[] }).products;
+const RoomCheckout = dynamic(() => import("./RoomCheckout").then((module) => module.RoomCheckout), { loading: () => <p role="status">Loading checkout…</p> });
 
 const CATEGORY_LABEL: Record<FurnitureCategory, string> = {
   sofa: "Sofas",
@@ -33,7 +35,7 @@ const CATEGORY_LABEL: Record<FurnitureCategory, string> = {
 const LOADING_STEPS = ["Laying the floor", "Raising the walls", "Placing your furniture", "Letting the light in"];
 
 /** Keys the engine listens for; held back while a panel is open so they do not act on the room. */
-const ENGINE_KEYS = new Set(["g", "r", "w", "a", "s", "d", "delete", "backspace", "z"]);
+const ENGINE_KEYS = new Set(["g", "r", "q", "e", "w", "a", "s", "d", "delete", "backspace", "z", "enter", "arrowup", "arrowdown", "arrowleft", "arrowright"]);
 const HINT_KEY = "tadaima.walkHintSeen";
 const ROTATE_STEP = Math.PI / 4;
 
@@ -167,9 +169,23 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
   const confirmRef = useRef<() => void>(() => {});
   const [panel, setPanel] = useState<Panel>(null);
   const [swapTarget, setSwapTarget] = useState<WalkItem | null>(null);
-  const [category, setCategory] = useState<FurnitureCategory | "all">("all");
+  const [category, setCategory] = useState<FurnitureCategory>("chair");
   const [hintSeen, setHintSeen] = useState(readHintSeen);
   const [notice, setNotice] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const [maxPrice, setMaxPrice] = useState("300");
+  const [merchant, setMerchant] = useState<"IKEA" | "Target">("IKEA");
+  const [liveSearch, setLiveSearch] = useState(true);
+  const [searchSpot, setSearchSpot] = useState<FloorSpot | null>(null);
+  const [pendingPlacement, setPendingPlacement] = useState<{ spot: FloorSpot; revision: number; jobId?: string; swapId?: string } | null>(null);
+  const shopping = useRoomShopping({ roomId: room.id, sourceProjectId: room.plan.projectId, persist: onPlanChange, notice: setNotice });
+  const shoppingRef = useRef(shopping);
+  useLayoutEffect(() => { shoppingRef.current = shopping; });
+  const searchRef = useRef<(spot?: FloorSpot, live?: boolean) => void>(() => {});
+  const autoSearch = useRef<string | null>(null);
+  const resultsRef = useRef<ShopResult[]>([]);
+  const blocked = shopping.busy || shopping.connecting;
+
 
   const coarse = useMedia("(pointer: coarse)");
   const coarseRef = useRef(coarse);
@@ -229,9 +245,10 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
 
   // Esc closes the open panel before the engine sees it; engine keys are held back too.
   useEffect(() => {
-    if (!panel) return;
+    if (blocked) walkRef.current?.setMoveInput({ forward: 0, right: 0 });
+    if (!panel && !blocked) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
+      if (e.key === "Escape" && panel && !blocked) {
         e.preventDefault();
         e.stopImmediatePropagation();
         closePanel();
@@ -241,7 +258,7 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
     };
     window.addEventListener("keydown", onKey, { capture: true });
     return () => window.removeEventListener("keydown", onKey, { capture: true });
-  }, [panel, closePanel]);
+  }, [panel, blocked, closePanel]);
 
   /* --- engine --- */
   useEffect(() => {
@@ -273,14 +290,21 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
         if (walkRef.current) {
           const snapshot = walkRef.current.getPlan();
           retainedPlan.current = snapshot;
-          saveRef.current?.(snapshot).catch((cause) => { if (!cancelled) setNotice(cause instanceof Error ? cause.message : "Could not save this edit. Keep this room open and try again."); });
+          if (shoppingRef.current.session) void shoppingRef.current.sync(snapshot).catch(() => undefined);
+          else saveRef.current?.(snapshot).catch((cause) => { if (!cancelled) setNotice(cause instanceof Error ? cause.message : "Could not save this edit."); });
         }
+      },
+      onPlanApplied(next) {
+        if (cancelled) return;
+        setItems(next); setSelected((previous) => previous ? next.find((item) => item.id === previous.id) ?? null : null);
+        setMoving(false); refreshUndo();
+        if (walkRef.current) retainedPlan.current = walkRef.current.getPlan();
       },
       onMoveChange(value) { if (!cancelled) setMoving(value); },
       onProductPreviewChange(preview) { if (!cancelled && !preview) setPending(null); },
       onExplodeChange(value) { if (!cancelled) { setExploded(value); setPending(null); } },
-      onShoppingFloor(spot) { if (!cancelled) { setFloorSpot(spot); setNotice("Shopping spot selected. Choose a piece to preview here."); } },
-      onPreviewOffer(id) { const product = CATALOG.find((p) => p.id === id); if (product) previewRef.current(product); },
+      onShoppingFloor(spot) { if (!cancelled) { setFloorSpot(spot); setNotice("Shopping spot selected. Checking pieces that fit here."); searchRef.current(spot, false); } },
+      onPreviewOffer(id) { const product = resultsRef.current.find((result) => result.product.id === id)?.product; if (product) previewRef.current(product); },
       onConfirmOffer() { confirmRef.current(); },
       onXRChange(value) { if (!cancelled) setPresenting(value); },
       onSelect(selection) {
@@ -335,6 +359,7 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
         statusRef.current = "ready";
         setStatus("ready");
         refreshUndo();
+        void shoppingRef.current.connect(scene);
         scene
           .xrSupported()
           .then((ok) => !cancelled && setXr(ok))
@@ -348,6 +373,7 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
 
     return () => {
       cancelled = true;
+      shoppingRef.current.disconnect();
       if (walk) { walk.cancelMove(); walk.cancelProductPreview(); retainedPlan.current = walk.getPlan(); }
       walk?.dispose();
       walkRef.current = null;
@@ -427,41 +453,60 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
   };
 
   const startSwap = (item: WalkItem) => {
-    setCategory(CATALOG.some((p) => p.category === item.category) ? item.category : "all");
+    setCategory(item.category);
+    setSearchSpot(null);
+    shopping.stopSearch();
     openPanel("catalog");
     setSwapTarget(item);
   };
 
-  const addProduct = (product: ProductCandidate) => {
-    const w = api();
-    if (!w || !product.dimensions) return;
+  const runSearch = (overrideSpot?: FloorSpot, browseLive = liveSearch) => {
+    const engine = api();
+    if (!engine || !shopping.session || blocked) return;
+    const cap = maxPrice.trim() ? Number(maxPrice) : undefined;
+    if (cap !== undefined && (!Number.isFinite(cap) || cap <= 0 || cap > 100000)) { setNotice("Choose a price cap between $0.01 and $100,000."); return; }
     try {
-      w.cancelProductPreview();
-      setPending(null);
-      w.previewProduct(product, { swapId: swapTarget?.id, at: floorSpot ? [floorSpot.position[0], floorSpot.position[2]] : undefined });
+      const target = swapTarget ? engine.getPlan().items.find((item) => item.id === swapTarget.id && !item.stored) : null;
+      if (swapTarget && !target) throw new Error("The piece to replace is no longer in the room.");
+      const spot: FloorSpot = target ? { roomId: target.roomId, position: [...target.position], rotationY: target.rotationY }
+        : overrideSpot ?? floorSpot ?? engine.getShoppingSpot();
+      setSearchSpot(spot);
+      void shopping.search({ category, spot, maxPriceUsd: cap, merchant, request: query.trim() || undefined, live: browseLive }).catch(() => undefined);
+    } catch (cause) { setNotice(cause instanceof Error ? cause.message : "Pick a floor spot inside the room."); }
+  };
+  useLayoutEffect(() => { searchRef.current = runSearch; });
+
+  const addProduct = (candidate: ProductCandidate) => {
+    const engine = api(), session = shopping.session;
+    if (!engine || !session || blocked) return;
+    const result = resultsRef.current.find((entry) => entry.product.id === candidate.id);
+    if (!result?.fits || !result.placement || !searchSpot) { setNotice("Search this room for a fitting piece first."); return; }
+    const product = result.product;
+    try {
+      engine.cancelProductPreview(); setPending(null);
+      engine.previewProduct(product, { swapId: swapTarget?.id, placement: result.placement });
+      setPendingPlacement({ spot: swapTarget ? { roomId: result.placement.roomId, position: [...result.placement.position], rotationY: result.placement.rotationY } : searchSpot,
+        revision: session.plan.revision, jobId: shopping.job?.id, swapId: swapTarget?.id });
       setPending(product);
       setNotice(`Previewing ${product.label}. Confirm placement to add it to this room.`);
-      setPanel(null);
-      openerRef.current = null;
-    } catch (err) {
-      setNotice(err instanceof Error ? err.message : "That piece could not be placed.");
-    }
+      setPanel(null); openerRef.current = null;
+    } catch (cause) { setNotice(cause instanceof Error ? cause.message : "That piece could not be previewed."); }
   };
   useLayoutEffect(() => { previewRef.current = addProduct; });
 
   const confirmProduct = () => {
-    try {
-      const id = api()?.confirmProductPreview();
-      if (!id) return;
-      api()?.select(id);
-      setPending(null);
-      setSwapTarget(null);
-      setNotice("Added to your room and preview basket. Nothing purchased.");
-    } catch (err) { setNotice(err instanceof Error ? err.message : "Placement could not be confirmed."); }
+    if (!pending || !pendingPlacement || blocked) return;
+    const engine = api();
+    void shopping.place(pending.id, pendingPlacement.spot, pendingPlacement.revision, pendingPlacement.jobId, pendingPlacement.swapId).then(() => {
+      if (!engine || api() !== engine) return;
+      setPending(null); setPendingPlacement(null); setSwapTarget(null);
+      setNotice("Added to this room and its server basket. Nothing purchased.");
+    }).catch(() => { if (engine && api() === engine) { engine.cancelProductPreview(); setPending(null); setPendingPlacement(null); } });
   };
   useLayoutEffect(() => { confirmRef.current = confirmProduct; });
-  const cancelProduct = () => { api()?.cancelProductPreview(); setPending(null); setSwapTarget(null); };
+  const cancelProduct = () => { api()?.cancelProductPreview(); setPending(null); setPendingPlacement(null); setSwapTarget(null); };
   const safely = (action: () => void) => {
+    if (blocked) return;
     try { action(); } catch (err) { setNotice(err instanceof Error ? err.message : "That change could not be made."); }
   };
   /* --- derived --- */
@@ -474,26 +519,44 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
 
   const exportBasket = () => {
     const url = URL.createObjectURL(new Blob([JSON.stringify({ roomId: room.id, room: room.label, previewOnly: true,
-      exportedAt: new Date().toISOString(), items: basket.map((item) => ({ ...item, sourceUrl: CATALOG.find((p) => p.id === item.productId)?.sourceUrl ?? null })) }, null, 2)], { type: "application/json" }));
+      exportedAt: new Date().toISOString(), items: basket.map((item) => ({ ...item, sourceUrl: shopping.session?.plan.products.find((p) => p.id === item.productId)?.sourceUrl ?? null })) }, null, 2)], { type: "application/json" }));
     const link = document.createElement("a"); link.href = url; link.download = `tadaima-basket-${room.id}.json`; link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
 
-  const categories = useMemo(() => {
-    const seen = new Set(CATALOG.map((p) => p.category));
-    return (Object.keys(CATEGORY_LABEL) as FurnitureCategory[]).filter((c) => seen.has(c));
-  }, []);
-  const products = useMemo(() => category === "all" ? CATALOG : CATALOG.filter((p) => p.category === category), [category]);
+  const categories = Object.keys(CATEGORY_LABEL) as FurnitureCategory[];
+  const results = useMemo(() => {
+    const output = shopping.job?.output, plan = shopping.session?.plan;
+    if (!output || !plan) return [];
+    const target = swapTarget ? plan.items.find((item) => item.id === swapTarget.id && !item.stored) : null;
+    const searchPlan = target ? { ...plan, items: plan.items.filter((item) => item.id !== target.id) } : plan;
+    return output.results.map((entry) => {
+      const product = plan.products.find((known) => known.id === entry.product.id) ?? entry.product;
+      const result = evaluate(searchPlan, product, output.request, entry.source);
+      if (!target) return result;
+      const exact = placeAt(searchPlan, product, { roomId: target.roomId, position: [...target.position], rotationY: target.rotationY }, { maxShiftM: 0, fallback: false });
+      return { ...result, fits: result.fits && exact.ok && !target.locked,
+        placement: exact.ok ? exact.placement : null,
+        problems: target.locked ? ["Unlock this piece before replacing it."] : exact.ok ? result.problems : [...result.problems, exact.message] };
+    });
+  }, [shopping.job, shopping.session, swapTarget]);
+  useLayoutEffect(() => { resultsRef.current = results; }, [results]);
+  const connectedProject = shopping.session?.plan.projectId;
+
+  useEffect(() => {
+    if (panel !== "catalog" || !connectedProject) { autoSearch.current = null; return; }
+    if (connectedProject && !shopping.job && !blocked && autoSearch.current !== connectedProject) { autoSearch.current = connectedProject; searchRef.current(); }
+  }, [panel, connectedProject, shopping.job, blocked]);
 
   useEffect(() => {
     if (status !== "ready") return;
     walkRef.current?.setXRShopping({
-      offers: products.filter((p) => p.dimensions && p.price && p.availability !== "unavailable").slice(0, 3).map((p) => ({ id: p.id, label: p.label, detail: p.price ? `${formatMoney(p.price.amountMinor, p.price.currency)} · ${p.merchant} · saved observation` : p.merchant })),
-      selectedItemLabel: selected?.label, pendingOfferId: pending?.id, canConfirm: Boolean(pending),
-      status: notice ?? "Trigger: select furniture or floor. Left stick: teleport. Right stick: snap turn. Preview basket only.",
+      offers: results.filter((entry) => entry.fits).slice(0, 3).map(({ product: p, source }) => ({ id: p.id, label: p.label, detail: p.price ? `${formatMoney(p.price.amountMinor, p.price.currency)} · ${p.merchant} · ${source === "live" ? "live search" : "catalog"}` : p.merchant })),
+      selectedItemLabel: selected?.label, pendingOfferId: pending?.id, canConfirm: Boolean(pending) && !blocked,
+      status: blocked ? "Saving with room service…" : notice ?? shopping.job?.stage ?? "Search on the page, then preview and confirm furniture here. Trigger selects a spot; left stick teleports.",
     });
-  }, [status, products, selected, pending, notice]);
+  }, [status, results, selected, pending, notice, blocked, shopping.job]);
 
   const ready = status === "ready";
   const showHint = ready && mode === "walk" && !hintSeen && !panel;
@@ -505,6 +568,7 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
       data-mode={mode}
       data-locked={locked || undefined}
       data-touch={coarse || undefined}
+      data-syncing={blocked || undefined}
     >
       <canvas
         ref={canvasRef}
@@ -515,6 +579,9 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
         onPointerDown={onCanvasPointerDown}
       />
 
+      <div className="room-x__connection" role="status">
+        {shopping.connecting ? "Connecting room shopping…" : shopping.error ? <>{shopping.error} <button type="button" onClick={() => { const engine = api(); if (engine) void shopping.connect(engine); }}>Retry connection</button></> : shopping.session ? `Shopping connected · ${shopping.session.capabilities.persistence === "memory" ? "local server session" : "saved server room"}` : "Room shopping is offline"}
+      </div>
       {/* ---------- top bar ---------- */}
       <header className="room-x__bar">
         <div className="room-x__start">
@@ -532,10 +599,10 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
         <div className="room-x__bar-end">
           <div className="room-x__modes">
             <div className="room-x__toggle" role="group" aria-label="View" data-mode={mode}>
-              <button type="button" aria-pressed={mode === "walk"} onClick={() => setMode("walk")} disabled={!ready}>
+              <button type="button" aria-pressed={mode === "walk"} onClick={() => setMode("walk")} disabled={!ready || blocked}>
                 Walk
               </button>
-              <button type="button" aria-pressed={mode === "orbit"} onClick={() => setMode("orbit")} disabled={!ready}>
+              <button type="button" aria-pressed={mode === "orbit"} onClick={() => setMode("orbit")} disabled={!ready || blocked}>
                 Dollhouse
               </button>
             </div>
@@ -555,7 +622,7 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
               aria-haspopup="dialog"
               aria-expanded={panel === "inventory"}
               aria-label={`Inventory, ${inventory.length} ${inventory.length === 1 ? "piece" : "pieces"} put away`}
-              disabled={!ready}
+              disabled={!ready || blocked}
             >
               <span>Inventory</span>
               <span className="room-x__count">{inventory.length}</span>
@@ -568,7 +635,7 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
             aria-haspopup="dialog"
             aria-expanded={panel === "basket"}
             aria-label={`Basket, ${basket.length} ${basket.length === 1 ? "piece" : "pieces"}, ${basketTotal}`}
-            disabled={!ready}
+            disabled={!ready || blocked}
           >
             <span>Basket</span>
             {basket.length > 0 ? (
@@ -628,7 +695,7 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
             type="button"
             className="room-x__pill"
             onClick={() => safely(() => api()?.undo())}
-            disabled={!canUndo}
+            disabled={!canUndo || blocked}
             aria-label="Undo last change"
           >
             {Icon.undo}
@@ -638,6 +705,7 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
             type="button"
             className="room-x__pill room-x__pill--ink"
             onClick={openCatalog}
+            disabled={blocked || !shopping.session}
             aria-haspopup="dialog"
             aria-expanded={panel === "catalog" && !swapTarget}
           >
@@ -649,7 +717,7 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
 
       {pending && ready ? <div className="room-x__placement" role="region" aria-label="Confirm furniture placement">
         <strong>{pending.label}</strong><p>{pending.price ? formatMoney(pending.price.amountMinor, pending.price.currency) : "Price unknown"} · approximate display model, listed product dimensions</p>
-        <div><button type="button" className="room-x__chip-btn" onClick={cancelProduct}>Cancel preview</button><button type="button" className="room-x__chip-btn room-x__chip-btn--ink" onClick={confirmProduct}>Confirm placement</button></div>
+        <div><button type="button" className="room-x__chip-btn" onClick={cancelProduct}>Cancel preview</button><button type="button" className="room-x__chip-btn room-x__chip-btn--ink" onClick={confirmProduct} disabled={blocked}>Confirm placement</button></div>
       </div> : null}
       {/* ---------- selection card ---------- */}
       {selected && ready && !pending ? (
@@ -739,7 +807,7 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
             <p className="room-x__panel-sub">
               {swapTarget
                 ? `Replacing ${swapTarget.label}. The new piece takes its spot.`
-                : "Listed dimensions, approximate display models. Prices and stock are saved observations."}
+                : "Search real retailers for pieces that fit this floor spot. Display models are approximate."}
             </p>
           </div>
           <button ref={catalogCloseRef} type="button" className="room-x__icon-btn" onClick={closePanel} aria-label="Close">
@@ -747,22 +815,34 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
           </button>
         </div>
 
+        <form className="room-x__search" onSubmit={(event) => { event.preventDefault(); runSearch(); }}>
+          <label>What are you looking for?<input value={query} maxLength={300} placeholder="e.g. walnut chair, modern, easy to clean" onChange={(event) => setQuery(event.target.value)} /></label>
+          <div className="room-x__search-row"><label>Under $<input type="number" min="0.01" max="100000" step="0.01" value={maxPrice} onChange={(event) => setMaxPrice(event.target.value)} /></label>
+          <label>Store<select value={merchant} onChange={(event) => setMerchant(event.target.value as "IKEA" | "Target")}><option>IKEA</option><option>Target</option></select></label></div>
+          <label className="room-x__live"><input type="checkbox" checked={liveSearch && Boolean(shopping.session?.capabilities.liveSearch)} disabled={!shopping.session?.capabilities.liveSearch} onChange={(event) => setLiveSearch(event.target.checked)} /> Browse store live</label>
+          {!shopping.session?.capabilities.liveSearch ? <p>Live browsing needs Browser Use configured on the server. Catalog search works now.</p> : null}
+          <p>{swapTarget ? "Shopping at the selected piece’s spot." : floorSpot ? "Shopping at your selected floor spot." : "Shopping where you’re looking. Tap a clear floor spot in Dollhouse to change it."}</p>
+          <button type="submit" className="room-x__chip-btn room-x__chip-btn--ink" disabled={blocked || !shopping.session}>Search furniture</button>
+        </form>
+        {shopping.job ? <p className="room-x__search-status" role="status">{shopping.job.output ? `${CATEGORY_LABEL[shopping.job.output.request.category]} · ${shopping.job.output.request.merchant ?? "IKEA"} · ` : ""}{shopping.job.stage}{shopping.job.output?.live === "failed" ? " · live search unavailable; catalog results remain usable." : ""}</p> : null}
         <div className="room-x__chips" role="group" aria-label="Filter by category">
-          {(["all", ...categories] as const).map((c) => (
+          {categories.map((c) => (
             <button
               key={c}
               type="button"
               className="room-x__chip"
               aria-pressed={category === c}
-              onClick={() => setCategory(c)}
+              onClick={() => { setCategory(c); }}
             >
-              {c === "all" ? "All" : CATEGORY_LABEL[c]}
+              {CATEGORY_LABEL[c]}
             </button>
           ))}
         </div>
 
+        {shopping.job && !results.length ? <p className="room-x__empty">No matches yet. Try another category, price cap or floor spot.</p> : null}
         <ul className="room-x__products">
-          {products.map((p) => {
+          {results.map((result) => {
+            const p = result.product;
             const known = p.dimensions != null;
             return (
               <li key={p.id} className="room-x__product" data-unknown={!known || undefined}>
@@ -779,11 +859,13 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
                   {p.price ? <span className="room-x__product-price">{formatMoney(p.price.amountMinor, p.price.currency)}</span> : null}
                 </p>
                 <p className="room-x__product-dims">{p.dimensions ? formatDimensions(p.dimensions) : "Size not listed"}</p>
+                <p className="room-x__product-dims">{result.source === "live" ? "Found by live search" : "Catalog observation"} · {result.fits ? result.withinBudget === false ? "Fits this spot, exceeds room budget" : "Fits this spot" : result.problems.join(" ") || "Does not fit"}</p>
+                <a className="room-x__text-btn" href={/^https:\/\//i.test(p.sourceUrl) ? p.sourceUrl : undefined} target="_blank" rel="noreferrer">View at {p.merchant}</a>
                 <button
                   type="button"
                   className="room-x__chip-btn room-x__chip-btn--ink room-x__product-add"
                   onClick={() => addProduct(p)}
-                  disabled={!known || !p.price || p.availability === "unavailable" || !ready}
+                  disabled={!known || !p.price || !result.fits || result.withinBudget === false || blocked || !ready}
                   aria-label={`Preview ${p.label}`}
                 >
                   {p.availability === "unavailable" ? "Unavailable" : "Preview"}
@@ -839,7 +921,7 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
             <span>{basketTotal}</span>
           </p>
           <button type="button" className="room-x__pill room-x__pill--ink room-x__checkout" disabled={!basket.length} onClick={exportBasket}>Export basket</button>
-          <p className="room-x__note">Preview only. Prices and stock need rechecking; tax and delivery are unknown. No payment or order is placed.</p>
+          {connectedProject && panel === "basket" ? <RoomCheckout projectId={connectedProject} planRevision={shopping.session!.plan.revision} onPlanRefresh={shopping.refresh} testPaymentsAvailable={shopping.session!.capabilities.testPayments} /> : <p className="room-x__note">Connect room shopping to review checkout.</p>}
         </div>
       </div>
 

@@ -1213,3 +1213,16 @@
   .room-x__source { bottom: 6px; left: 8px; font-size: 9px; }
   .room-x__placement { bottom: 106px; padding: 14px; }
 }
+
+.room-x__connection { position: absolute; top: 80px; left: 24px; z-index: 5; max-width: min(600px, calc(100% - 48px)); padding: 7px 10px; background: #f5f2ebeb; border-radius: 8px; color: var(--muted); font-size: 11px; }
+.room-x__connection button { padding: 2px 5px; text-decoration: underline; color: var(--ink); cursor: pointer; }
+.room-x[data-syncing] .room-x__canvas, .room-x[data-syncing] .room-x__card { pointer-events: none; }
+.room-x__search { display: grid; gap: 12px; padding: 0 24px 20px; font-size: 12px; }
+.room-x__search label { display: grid; gap: 6px; }
+.room-x__search input:not([type="checkbox"]), .room-x__search select { width: 100%; min-width: 0; padding: 10px; background: #fff8; border: 1px solid var(--line); border-radius: 8px; color: var(--ink); font: inherit; }
+.room-x__search-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.room-x__search .room-x__live { display: flex; align-items: center; gap: 8px; }
+.room-x__search p, .room-x__search-status { font-size: 11px; line-height: 1.5; color: var(--muted); }
+.room-x__search-status { padding: 0 24px 12px; }
+.room-x__basket-foot { overflow-y: auto; max-height: 65svh; flex-shrink: 1; }
+@media (max-width: 767px) { .room-x__connection { top: 112px; left: 12px; max-width: calc(100% - 24px); font-size: 10px; } }

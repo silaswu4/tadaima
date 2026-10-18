@@ -1,6 +1,7 @@
 import "server-only";
 
-import type { Money, ProductCandidate, RecheckLine } from "@/backend/contracts";
+import type { ProductCandidate, RecheckLine } from "@/backend/contracts";
+import { observeProductPage } from "@/backend/checkout/observation";
 
 /**
  * Re-read price and stock from the live product page right before checkout.
@@ -17,23 +18,12 @@ export async function recheckProduct(p: ProductCandidate): Promise<RecheckLine &
     return { ...base, status: "unverified", observedPrice: null, note: `live recheck isn't supported for ${p.merchant} yet`, observed: null };
   }
   try {
-    const res = await fetch(p.sourceUrl, { headers: { "User-Agent": UA, "Accept-Language": "en-US" }, cache: "no-store", signal: AbortSignal.timeout(10_000) });
+    const url = new URL(p.sourceUrl);
+    if (url.protocol !== "https:" || !["www.ikea.com", "ikea.com"].includes(url.hostname) || url.username || url.password || (url.port && url.port !== "443")) return { ...base, status: "unverified", observedPrice: null, note: "unsupported product page URL", observed: null };
+    const res = await fetch(url, { headers: { "User-Agent": UA, "Accept-Language": "en-US" }, cache: "no-store", redirect: "error", signal: AbortSignal.timeout(10_000) });
     if (!res.ok) return { ...base, status: "unverified", observedPrice: null, note: `product page returned ${res.status}`, observed: null };
     const html = await res.text();
-    const offer = html.match(/"@type":"Offer"[^}]*/)?.[0] ?? "";
-    const price = offer.match(/"price":"?([\d.]+)"?/)?.[1];
-    const currency = offer.match(/"priceCurrency":"([A-Z]{3})"/)?.[1] ?? "USD";
-    const stock = offer.match(/"availability":"https?:\/\/schema\.org\/(\w+)"/)?.[1];
-    if (!price) return { ...base, status: "unverified", observedPrice: null, note: "no price on the page", observed: null };
-
-    const observedPrice: Money = { amountMinor: Math.round(Number(price) * 100), currency };
-    const availability = stock === "InStock" || stock === "LimitedAvailability" ? "available" : stock ? "unavailable" : "unknown";
-    const observed: ProductCandidate = { ...p, price: observedPrice, availability, observedAt: new Date().toISOString() };
-    if (availability === "unavailable") return { ...base, status: "unavailable", observedPrice, note: `page says ${stock}`, observed };
-    if (!p.price || p.price.amountMinor !== observedPrice.amountMinor || p.price.currency !== currency) {
-      return { ...base, status: "price_changed", observedPrice, note: null, observed };
-    }
-    return { ...base, status: "ok", observedPrice, note: availability === "unknown" ? "stock not stated" : null, observed };
+    return observeProductPage(p, html);
   } catch (e) {
     return { ...base, status: "unverified", observedPrice: null, note: e instanceof Error ? e.message : "fetch failed", observed: null };
   }

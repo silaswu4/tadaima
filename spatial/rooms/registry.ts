@@ -28,7 +28,14 @@ type StoredRoom = Omit<RoomRecord, "model"> & { version: 1; modelBlob?: Blob };
 
 function fail(message: string): never { throw new Error(`Private room: ${message}`); }
 function clone<T>(value: T): T { return structuredClone(value); }
-function jsonEqual(a: unknown, b: unknown) { return JSON.stringify(a) === JSON.stringify(b); }
+function orderedJson(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(orderedJson);
+  if (value && typeof value === "object") return Object.fromEntries(Object.entries(value)
+    .filter(([, entry]) => entry !== undefined).sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, entry]) => [key, orderedJson(entry)]));
+  return value;
+}
+function jsonEqual(a: unknown, b: unknown) { return JSON.stringify(orderedJson(a)) === JSON.stringify(orderedJson(b)); }
 
 export async function roomSourceIdentity(sourceJson: string): Promise<{ id: string; plan: RoomPlan; binding: CapturedRoomBinding }> {
   const plan = parseRoomImport(sourceJson);

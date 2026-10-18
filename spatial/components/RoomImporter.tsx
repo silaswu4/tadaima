@@ -46,7 +46,7 @@ export function RoomImporter({ onImported, onCancel }: Props) {
       <input id={`${id}-model`} type="file" accept=".glb,model/gltf-binary" disabled={busy} onChange={(event) => { setModel(event.target.files?.[0] ?? null); setError(""); }} />
       <small>Choose the matching clean or photo-textured GLB, up to 64 MiB. Without it, furniture uses measured stand-ins.</small>
     </label>
-    <p className={styles.privacy}>Saved in this browser on this device. Your scan and photos are not uploaded. Clearing site data removes saved rooms.</p>
+    <p className={styles.privacy}>The model and photos stay in this browser. Entering the room shares its layout with the shopping service. Clearing site data removes saved imports.</p>
     {error ? <p className={styles.error} role="alert">{error}</p> : null}
     <button className={styles.submit} type="submit" disabled={!source || busy}>{busy ? "Checking and saving room…" : "Save and enter room"}</button>
     <p className={styles.status} role="status">{busy ? "Verifying the room and model match. Large models can take a moment." : ""}</p>

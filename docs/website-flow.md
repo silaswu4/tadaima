@@ -8,7 +8,7 @@ Updated October 18, 2026. The product entry point is `/` → `/rooms` → `/room
 2. On **Your rooms**, choose a demo or select **Open scan**. Import a processed reconstruction JSON and, optionally, its matching clean/photo-textured GLB. Importing a scan saves it privately in this browser and opens that room.
 3. Choose **Step inside** on a gallery room. **Walk** provides first-person exploration; **Dollhouse** provides orbit controls; **Explode** lays out the furniture separately without changing its accepted placement.
 4. Select furniture to inspect it. Unlocked pieces support moving, rotating, putting away and replacement. **Inventory** brings stored pieces back; **Undo** reverses edits during the current visit.
-5. Use **Add furniture**, choose a saved catalog product, inspect its placement preview, then explicitly **Confirm placement**. Only confirmation adds it to the room and preview basket.
+5. Use **Add furniture**, search a category, retailer and price cap at the selected floor spot. Catalog matches arrive first; configured live research continues in the background. Inspect its placement preview, then explicitly **Confirm placement** to add it through the backend to this room and basket.
 6. Return to **Rooms** or refresh. Saved room edits and basket lines remain associated with that room. The gallery remembers the last selected room for the current browser session.
 7. On a supported Quest browser, open the same selected room and choose **Enter VR**. See [Quest setup](quest-setup.md) for USB forwarding and private scan transfer.
 
@@ -52,9 +52,9 @@ A private room retains:
 
 Source geometry, appearance observations, original furniture dimensions and evidence identities remain immutable. Edited plans may move/rotate furniture, change locks/storage and introduce shopping proposals; they are validated before saving. The room route queues saves and surfaces storage failures instead of claiming an edit was saved. Saved browser drafts survive route changes and refresh; camera pose, hover, pending previews, explode animation and undo history are transient.
 
-Catalog drafts use their own catalog room IDs and cannot alias private `local-scan-…` records. Cross-tab change notifications update the room list. Clearing site data or using a different browser, device, hostname or port does not preserve these private rooms: storage is scoped to the browser origin. There is no account sync in this integration.
+Catalog drafts use their own catalog room IDs and cannot alias private `local-scan-…` records. Cross-tab change notifications update the room list. Clearing site data or using a different browser, device, hostname or port does not preserve these private rooms: storage is scoped to the browser origin. The shopping plan resumes through its HttpOnly browser session cookie; this is not an account-based cross-device scan sync.
 
-Room inputs are not uploaded by the importer or copied into `public/`. Private model bytes pass directly to Three.js. The registry is local persistence, not encrypted cloud storage; other code with access to this browser origin has the same browser-storage boundary.
+The importer saves locally and does not copy scans into `public/`. On room entry, the accepted metric layout and furniture plan register with the shopping backend under a private browser session. Original source JSON, private model bytes and photos stay in the browser; models pass directly to Three.js. The registry is local persistence, not encrypted cloud storage; other code with access to this browser origin has the same browser-storage boundary.
 
 ## One detailed model across gallery and room
 
@@ -76,7 +76,7 @@ Catalog products retain listed dimensions and saved retailer observations. A cat
 
 The catalog is the saved retailer data in `backend/fixtures/real-catalog.json`. Preview and confirmation recheck price/dimensions, recorded availability, fit, budget and locked replacement rules. A product that cannot fit is rejected; the engine does not place it at an overlapping room center. Confirmed proposed purchases become basket lines; owned furniture does not become a purchase charge.
 
-**Export basket** downloads a JSON preview with room/item details and available retailer links. No order or payment is submitted by this flow. Prices and stock still need rechecking; tax, delivery and installation costs are unknown. Sponsor checkout/payment adapters in the backend development console remain separate until a room-specific, reviewed handoff is deliberately wired.
+**Export basket** downloads room/item details and available retailer links. The same room now has in-place backend checkout: price/stock recheck, exact-cart review, explicitly connected Stripe test Visa, approval and a separate test payment. Retailer orders remain simulated; no furniture is ordered. Tax, delivery and installation costs remain unknown. See [in-room shopping integration](shopping-integration.md) for key setup, private sessions, server revisions, provider status, and verification.
 
 ## Quest integration and verification
 

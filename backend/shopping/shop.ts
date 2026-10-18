@@ -6,7 +6,7 @@ import { applyPlanChanges, getProject, NotFound, Unprocessable } from "@/backend
 import { getJob, saveJob } from "@/backend/plan/store";
 import { researchProducts } from "@/backend/research/browserUse";
 import { placeAt } from "@/backend/shopping/placement";
-import { catalogCandidates, evaluateAll, itemFor, onFloor, SEARCH_TERM, spotBrief, underCap } from "@/backend/shopping/spot";
+import { catalogCandidates, evaluateAll, itemFor, onFloor, purchaseProblems, SEARCH_TERM, spotBrief, underCap } from "@/backend/shopping/spot";
 
 /**
  * "I want a couch under $300 that fits here." The shopper points at a floor
@@ -158,7 +158,7 @@ export async function getShopJob(projectId: string, jobId: string) {
  */
 export async function placeProduct(
   projectId: string,
-  body: { productId: string; spot: FloorSpot; jobId?: string | null; expectedRevision?: number | null },
+  body: { productId: string; spot: FloorSpot; jobId?: string | null; expectedRevision?: number | null; replaceItemId?: string | null },
 ): Promise<PlaceResult> {
   // a live find that didn't fit when it was found isn't in the catalog yet; the search that found it still has it
   const job = body.jobId ? await getJob<ShopJobOutput>(projectId, body.jobId) : null;
@@ -169,7 +169,15 @@ export async function placeProduct(
     const known = plan.products.find((p) => p.id === body.productId);
     const product = known ?? job?.output?.results.find((r) => r.product.id === body.productId)?.product;
     if (!product) throw new NotFound(`no product ${body.productId} in this room's catalog`);
-    const fit = placeAt(plan, product, body.spot);
+    if (product.dimensions === null) return { ok: false, reason: "no_fit", message: "No size listed, so this piece cannot be fit-checked.", nearest: null };
+    const missingFacts = purchaseProblems(plan, product);
+    if (missingFacts.length) return { ok: false, reason: "validation_failed", validations: [{ rule: "product_known", status: "fail", itemIds: [], message: missingFacts.join(" ") }] };
+    const replacing = body.replaceItemId ? plan.items.find((item) => item.id === body.replaceItemId) : null;
+    if (body.replaceItemId && !replacing) throw new NotFound(`no item ${body.replaceItemId}`);
+    if (replacing?.locked) return { ok: false, reason: "locked", message: `${replacing.label} is locked. Unlock it to replace it.` };
+    if (replacing?.stored) throw new Unprocessable("Bring a stored piece into the room before replacing it.");
+    const replacementSpot = replacing ? { position: replacing.position, rotationY: replacing.rotationY, roomId: replacing.roomId } : body.spot;
+    const fit = placeAt(plan, product, replacementSpot, replacing ? { ignoreItemId: replacing.id, maxShiftM: 0, fallback: false } : undefined);
     if (!fit.ok) {
       if (fit.reason === "off_floor") throw new Unprocessable(fit.message);
       return { ok: false, reason: "no_fit", message: fit.message, nearest: fit.nearest };
@@ -177,6 +185,7 @@ export async function placeProduct(
     const itemId = `item_${product.category}_${crypto.randomUUID().slice(0, 6)}`;
     const r = await applyPlanChanges(projectId, plan.revision, [
       ...(known ? [] : [{ kind: "add_products" as const, products: [product], evidence: [] }]),
+      ...(replacing ? [{ kind: replacing.origin === "existing_owned" ? "store" as const : "remove" as const, itemId: replacing.id }] : []),
       { kind: "add", item: itemFor(product, fit.placement, itemId) },
     ]);
     if (r.ok) return { ok: true, plan: r.plan, itemId, placement: fit.placement };
