@@ -84,7 +84,8 @@ Locked pieces (the shopper's own, marked keep) refuse to move or store unless th
 | Command | What it checks | Cost |
 | --- | --- | --- |
 | `npm test` | Rules, room brief, placement solver (including a property test that every placement passes the validator), spot ranking, 3D library | free |
-| `npm run e2e` | Every API route against a running server (`npm run dev -- -p 3009`): reads, edits, races, shop, place, move, checkout, plus the 16-case planner exam | ~$1 Claude |
+| `npm run e2e` | Every API route against a running server (`npm run dev -- -p 3009`): reads, edits, races, shop, place, move, inventory, room sessions, checkout | ~$0.10 Claude |
+| `E2E_PLANNER=1 npm run e2e` | Also the 16-case planner exam | +~$1 Claude |
 | `E2E_LIVE=1 npm run e2e` | Also live Browser Use searches on IKEA | +~$0.05 |
 | `npm run e2e:voice` | ElevenLabs agent behavior via its conversation simulator, including spot shopping | ElevenLabs credits |
 
