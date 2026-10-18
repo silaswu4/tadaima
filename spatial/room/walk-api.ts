@@ -30,6 +30,13 @@ export type WalkSelection = { item: WalkItem; /** Screen position of the piece's
 
 export type WalkMode = "walk" | "orbit";
 
+/**
+ * Fit of a carried piece, from the shared backend rules (dragCheck).
+ * "fits": drops exactly here (green). "snap": drops at the nearest clear pose (amber).
+ * "blocked": cannot drop here (red); `problems` says why in plain words.
+ */
+export type WalkCarryStatus = { level: "fits" | "snap" | "blocked"; droppable: boolean; problems: string[] };
+
 export type WalkCallbacks = {
   onReady(items: WalkItem[]): void;
   /** Fired whenever pieces are added, removed, moved or rotated (including undo). */
@@ -43,6 +50,8 @@ export type WalkCallbacks = {
   onExplodeChange?(exploded: boolean): void;
   onWindowBlindsChange?(raised: boolean): void;
   onMoveChange?(moving: boolean): void;
+  /** While carrying: whether the piece fits where it is held. Null when the carry ends. Fired only on change. */
+  onCarryStatus?(status: WalkCarryStatus | null): void;
   onProductPreviewChange?(preview: WalkProductPreview | null): void;
   onShoppingFloor?(spot: FloorSpot): void;
   onPreviewOffer?(id: string): void;
@@ -86,15 +95,25 @@ export type WalkScene = {
   store(id: string): void;
   /** Bring a stored piece back to a free spot in front of the viewer. Returns its id, or null when it is not stored. */
   takeOut(id: string): string | null;
+  /**
+   * Take a stored piece straight into the shopper's hands at the crosshair (or mouse) point, in carry mode.
+   * No free spot is chosen or checked up front; the fit is checked only on drop (confirmMove).
+   * cancelMove (Esc) or undo puts it back in the inventory. Returns its id, or null when it is not stored.
+   */
+  takeOutAndCarry(id: string): string | null;
   add(request: AddRequest): string;
   /** Replace a piece with a product, keeping its spot and facing. */
   swap(id: string, product: ProductCandidate): string;
   /** Change protection only in the editable draft, including stored furniture. Undoable. */
   setLocked(id: string, locked: boolean): void;
   rotate(id: string, radians: number): void;
-  /** Start moving a piece: it follows the view (desktop) or controller (headset) until confirmed or cancelled. */
+  /**
+   * Start moving a piece: it lifts and eases after the view (desktop) or controller (headset) until confirmed
+   * or cancelled. R turns it 90 degrees, Shift+R, Q/E and the scroll wheel 15 degrees. Wall pieces back onto
+   * a nearby wall until turned by hand. A green/amber/red footprint shows where it lands.
+   */
   beginMove(id: string): void;
-  /** True only when a valid move was committed. */
+  /** True only when a valid move was committed (it lands at the checked, possibly snapped, pose). A refused drop shakes and stays in hand. */
   confirmMove(): boolean;
   cancelMove(): void;
   undo(): void;
