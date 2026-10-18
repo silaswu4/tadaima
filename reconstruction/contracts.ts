@@ -5,7 +5,7 @@ export interface ReconstructionRequest {
   jobId: string;
   projectId: string;
   inputRevision: number;
-  /** Only confirmed/validated geometry should reach scene generation. */
+  /** Structurally validated geometry; source accuracy/review status remains upstream. */
   geometry: RoomGeometry;
   evidence: Evidence[];
 }

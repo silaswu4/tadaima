@@ -1,6 +1,6 @@
 # Reconstruction · Project lead
 
-Owner: **you, the project lead**. Implemented stage: validated metric room geometry → editable Blender scene → standalone GLB and a revision-bound manifest. Address discovery, camera upload, and photo reconstruction remain upstream work. Read [technical research and primary sources](RESEARCH.md) for modeling/export decisions.
+Owner: **you, the project lead**. Implemented stages: address research → private source/image bundle → vision-based geometry proposal → validated metric room geometry → editable Blender scene → standalone GLB and a revision-bound manifest. The address stage needs configured provider credentials; camera upload, calibrated photo reconstruction, and application integration remain separate work. Read [address pipeline setup and limitations](address/README.md) and [technical research and primary sources](RESEARCH.md).
 
 ## Requirements and quick start
 
