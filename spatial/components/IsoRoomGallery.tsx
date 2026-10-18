@@ -1,8 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { GalleryRoom } from "../fixtures/galleryRooms";
-import type { IsoGallery } from "../room/iso-gallery";
+import type { RoomPlan } from "../../backend/contracts";
+import type { BakedRoom, IsoGallery } from "../room/iso-gallery";
+
+export type GalleryRoom = { id: string; label: string; plan?: RoomPlan; baked?: BakedRoom };
 import "./IsoRoomGallery.css";
 
 type Props = {
@@ -69,13 +71,16 @@ export function IsoRoomGallery({ rooms, initial = 0, hrefFor = () => "/room", cl
         if (cancelled || !canvas.current) return;
         const g = createIsoGallery(
           canvas.current,
-          rooms.map((r) => r.plan),
+          rooms.map((r) => ({ plan: r.plan, baked: r.baked })),
           { initial, reducedMotion, lite: window.innerWidth < 768 },
         );
         engine.current = g;
         return g.ready.then(() => !cancelled && setReady(true));
       })
-      .catch(() => !cancelled && setFailed(true));
+      .catch((err) => {
+        console.error("iso gallery failed to load", err);
+        if (!cancelled) setFailed(true);
+      });
     return () => {
       cancelled = true;
       engine.current?.dispose();

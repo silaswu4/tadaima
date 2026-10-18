@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Inter, Inter_Tight, Klee_One, Reenie_Beanie } from "next/font/google";
 import { toDataURL } from "qrcode";
@@ -248,6 +249,15 @@ export default function Home() {
                 </div>
               </form>
             )}
+          </div>
+          <div className="hero-or" aria-hidden="true">
+            or
+          </div>
+          <div className="hero-choice">
+            <Link className="hero-tile" href="/rooms" tabIndex={day ? 0 : -1} style={{ textDecoration: "none", color: "inherit" }}>
+              <span className="t">Walk through a demo room</span>
+              <span className="d">Step into rooms we already built and try them with real furniture.</span>
+            </Link>
           </div>
         </div>
       </DappledLight>

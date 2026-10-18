@@ -1,11 +1,13 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { dracoLoader } from "./draco";
 import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
 import type { RoomPlan } from "../../backend/contracts";
 import { block } from "./parts";
 import { createRoomLighting, setMetricSurfaceUVs } from "./lighting";
 import { createFurnitureProxy, placeFurnitureModel } from "./furniture-model";
 import { galleryPart } from "./gallery-parts";
+import { LIBRARY, assetTransform, type LibraryModel } from "../../backend/shopping/assets";
 
 export type IsoGallery = {
   ready: Promise<void>;
@@ -15,6 +17,18 @@ export type IsoGallery = {
 };
 
 type Options = { initial?: number; reducedMotion?: boolean; lite?: boolean };
+
+/** A pre-built room: one node of a GLB whose surfaces use baked color textures. */
+export type BakedRoom = {
+  glbUrl: string;
+  node: string;
+  /** Material-name substring to baked texture URL; the first match wins. */
+  textures: { match: string; url: string }[];
+  fallbackTexture: string;
+  /** Longest floor side in meters after scaling, so baked rooms sit at the same size as plan rooms. */
+  footprint?: number;
+};
+export type GallerySource = { plan?: RoomPlan; baked?: BakedRoom };
 
 const BACKGROUND = "#f5f2eb";
 const CLAY = "#e4ddd1";
@@ -66,6 +80,9 @@ outgoingLight = mix(uClay, outgoingLight, isoMask);
   material.needsUpdate = true;
 }
 
+const libraryModels = Object.values(LIBRARY).flat();
+const libraryByUrl = (url: string) => libraryModels.find((m) => m.url === url) ?? null;
+
 function release(root: THREE.Object3D) {
   root.traverse((node) => {
     if (!(node instanceof THREE.Mesh)) return;
@@ -86,7 +103,7 @@ type RoomView = {
   bounds: THREE.Box3;
 };
 
-export function createIsoGallery(canvas: HTMLCanvasElement, plans: RoomPlan[], options: Options = {}): IsoGallery {
+export function createIsoGallery(canvas: HTMLCanvasElement, sources: GallerySource[], options: Options = {}): IsoGallery {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, options.lite ? 1.5 : 2));
   renderer.setClearColor(BACKGROUND);
@@ -116,7 +133,7 @@ export function createIsoGallery(canvas: HTMLCanvasElement, plans: RoomPlan[], o
   // Every room sits centered on the origin inside its own pivot; the stage tilts under the cursor.
   const stage = new THREE.Group();
   scene.add(stage);
-  const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
+  const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).setDRACOLoader(dracoLoader());
   let disposed = false;
 
   function buildRoom(plan: RoomPlan): { view: RoomView; loaded: Promise<void> } {
@@ -195,19 +212,41 @@ export function createIsoGallery(canvas: HTMLCanvasElement, plans: RoomPlan[], o
     const furniture: RoomView["furniture"] = [];
     const loaded = Promise.all(
       plan.items.map(async (item) => {
-        let model: THREE.Object3D | null = galleryPart(item.id, item.dimensions);
+        const size = item.dimensions;
+        let model: THREE.Object3D | null = galleryPart(item.id, size, { category: item.category, assetUrl: item.assetUrl });
+        let library: LibraryModel | null = null;
         if (!model) {
           try {
             if (!item.assetUrl) throw new Error("No asset");
+            library = libraryByUrl(item.assetUrl);
             model = (await loader.loadAsync(item.assetUrl)).scene;
           } catch {
-            model = createFurnitureProxy(item.dimensions ?? [0.8, 0.8, 0.8]);
+            library = null;
+            model = createFurnitureProxy(size ?? [0.8, 0.8, 0.8]);
           }
         }
         if (disposed) {
           release(model);
           return;
         }
+        // Draw every piece at its listed real-world size, in the shared width-on-X frame.
+        const turn = new THREE.Group();
+        if (library && (size || item.productId)) turn.rotation.y = library.yaw;
+        turn.add(model);
+        const scaler = new THREE.Group();
+        scaler.add(turn);
+        if (size) {
+          if (library) scaler.scale.fromArray(assetTransform(library, size).scale);
+          else {
+            const measured = new THREE.Box3().setFromObject(scaler, true).getSize(new THREE.Vector3());
+            scaler.scale.set(
+              measured.x > 1e-4 ? size[0] / measured.x : 1,
+              measured.y > 1e-4 ? size[1] / measured.y : 1,
+              measured.z > 1e-4 ? size[2] / measured.z : 1,
+            );
+          }
+        }
+        model = scaler;
         const { root } = placeFurnitureModel(item, model);
         root.traverse((node) => {
           if (node instanceof THREE.Mesh) {
@@ -229,7 +268,113 @@ export function createIsoGallery(canvas: HTMLCanvasElement, plans: RoomPlan[], o
     return { view, loaded };
   }
 
-  const built = plans.map(buildRoom);
+  const bakedFragment = `varying vec2 vUv;
+varying vec3 vIsoLocal;
+uniform sampler2D uMap;
+uniform float uReveal;
+uniform vec3 uClay;
+uniform vec2 uOrigin;
+uniform float uSpan;
+float isoHash(vec2 p) { return fract(sin(dot(p, vec2(41.3, 289.1))) * 15731.743); }
+float isoNoise(vec2 p) {
+  vec2 i = floor(p), f = fract(p);
+  vec2 u = f * f * (3.0 - 2.0 * f);
+  return mix(mix(isoHash(i), isoHash(i + vec2(1, 0)), u.x), mix(isoHash(i + vec2(0, 1)), isoHash(i + vec2(1, 1)), u.x), u.y);
+}
+void main() {
+  float isoDist = length(vIsoLocal.xz - uOrigin) / uSpan + vIsoLocal.y * 0.08;
+  float isoMask = smoothstep(0.0, 0.18, uReveal * 1.35 - isoDist - isoNoise(vIsoLocal.xz * 2.2) * 0.22);
+  gl_FragColor = vec4(mix(uClay, texture2D(uMap, vUv).rgb, isoMask), 1.0);
+}`;
+  const bakedVertex = `varying vec2 vUv;
+varying vec3 vIsoLocal;
+void main() {
+  vUv = uv;
+  vIsoLocal = (modelMatrix * vec4(position, 1.0)).xyz;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+}`;
+  const textureLoader = new THREE.TextureLoader();
+  const textureCache = new Map<string, Promise<THREE.Texture>>();
+  const bakedTexture = (url: string) => {
+    if (!textureCache.has(url))
+      textureCache.set(
+        url,
+        textureLoader.loadAsync(url).then((t) => {
+          t.colorSpace = THREE.LinearSRGBColorSpace;
+          return t;
+        }),
+      );
+    return textureCache.get(url)!;
+  };
+
+  // Baked rooms already carry their lighting in the textures, so they render unlit.
+  function buildBaked(spec: BakedRoom): { view: RoomView; loaded: Promise<void> } {
+    const pivot = new THREE.Group();
+    const content = new THREE.Group();
+    pivot.add(content);
+    pivot.visible = false;
+    stage.add(pivot);
+    const floor = new THREE.Group();
+    content.add(floor);
+    const uniforms: Uniforms = { uReveal: { value: 0 }, uClay: { value: new THREE.Color(CLAY) }, uOrigin: { value: new THREE.Vector2() }, uSpan: { value: 3 } };
+    const furniture: RoomView["furniture"] = [];
+    const view: RoomView = { pivot, floor, walls: [], furniture, uniforms, bounds: new THREE.Box3() };
+    const loaded = loader.loadAsync(spec.glbUrl).then(async (gltf) => {
+      const node = gltf.scene.getObjectByName(spec.node);
+      if (!node || disposed) return;
+      const room = node.clone(true);
+      room.position.set(0, 0, 0);
+      room.rotation.set(0, 0, 0);
+      // The baked ground plane is far wider than the building; drop it so the fit
+      // and the reveal frame the room itself.
+      const ground: THREE.Mesh[] = [];
+      room.traverse((n) => {
+        if (!(n instanceof THREE.Mesh)) return;
+        const name = (Array.isArray(n.material) ? n.material[0] : n.material)?.name ?? "";
+        if (!spec.textures.some((t) => name.includes(t.match))) ground.push(n);
+      });
+      for (const mesh of ground) mesh.removeFromParent();
+      room.updateMatrixWorld(true);
+      const box = new THREE.Box3().setFromObject(room);
+      const size = box.getSize(new THREE.Vector3());
+      const scale = (spec.footprint ?? 6) / Math.max(size.x, size.z);
+      room.scale.setScalar(scale);
+      room.position.set(-((box.min.x + box.max.x) / 2) * scale, -box.min.y * scale, -((box.min.z + box.max.z) / 2) * scale);
+      floor.add(room);
+      uniforms.uSpan.value = (Math.hypot(size.x, size.z) * scale) / 2;
+      const meshes: THREE.Mesh[] = [];
+      room.traverse((n) => {
+        if (n instanceof THREE.Mesh) meshes.push(n);
+      });
+      await Promise.all(
+        meshes.map(async (mesh) => {
+          const name = (Array.isArray(mesh.material) ? mesh.material[0] : mesh.material)?.name ?? "";
+          const url = spec.textures.find((t) => name.includes(t.match))?.url ?? spec.fallbackTexture;
+          const map = await bakedTexture(url);
+          mesh.material = new THREE.ShaderMaterial({
+            uniforms: { ...uniforms, uMap: { value: map } },
+            vertexShader: bakedVertex,
+            fragmentShader: bakedFragment,
+          });
+          mesh.castShadow = true;
+        }),
+      );
+      // Top-level parts drop in like furniture, nearest the center first.
+      for (const child of [...room.children]) {
+        const g = new THREE.Group();
+        g.position.copy(child.position);
+        room.add(g);
+        g.add(child);
+        child.position.set(0, 0, 0);
+        furniture.push({ root: g, rest: g.position.clone(), order: Math.hypot(g.position.x, g.position.z) });
+      }
+      furniture.sort((a, b) => a.order - b.order);
+      view.bounds.setFromObject(pivot);
+    });
+    return { view, loaded };
+  }
+
+  const built = sources.map((src) => (src.baked ? buildBaked(src.baked) : buildRoom(src.plan!)));
   const rooms = built.map((b) => b.view);
   let current = Math.min(Math.max(options.initial ?? 0, 0), Math.max(0, rooms.length - 1));
   let step = 12;
