@@ -20,6 +20,12 @@ type Options = {
   proposal(): PlanProposal | null;
   /** Set the room's budget for new purchases, in cents. */
   setBudget(amountMinor: number): Promise<void>;
+  /** Take a piece out of the room: a proposed purchase is gone (and leaves the basket), the shopper's own goes to inventory. */
+  remove(itemId: string): Promise<void>;
+  /** Put a search result where an existing piece stands, taking that piece out the same way as remove. */
+  replace(result: ShopResult, job: Job<ShopJobOutput>, itemId: string): Promise<void>;
+  /** Undo the last change in the room. */
+  undo(): Promise<boolean>;
   liveSearch: boolean;
 };
 const categories = new Set<FurnitureCategory>(["sofa", "chair", "table", "storage", "desk", "bed", "rug", "lamp", "decor", "other"]);
@@ -95,7 +101,15 @@ export function createRoomAgentTools(options: Options): Record<string, (params: 
     get_room: guard(async () => {
       await options.refresh();
       const { plan, selectedId } = context();
-      return `Current room revision ${plan.revision}. ${plan.items.slice(0, 80).map((item) => `${item.label} [id ${item.id}]${item.id === selectedId ? " selected" : ""}${item.locked ? " locked" : ""}${item.stored ? " stored" : ""}${item.origin === "existing_owned" ? " owned" : ""}`).join("; ")}. Budget: ${plan.constraints.budget ? money(plan.constraints.budget.amountMinor, plan.constraints.budget.currency) : "not set"}.`;
+      const added = plan.items.filter((item) => item.origin === "proposed_purchase" && !item.stored);
+      const newest = added.at(-1)?.id;
+      const line = (item: (typeof plan.items)[number]) => {
+        const price = plan.products.find((p) => p.id === item.productId)?.price;
+        return `${item.label} [id ${item.id}]${item.id === selectedId ? " (selected)" : ""}${item.id === newest ? " (added most recently)" : ""}${item.origin === "existing_owned" ? " (theirs)" : price ? ` (${dollars(price.amountMinor)}, in the basket)` : " (in the basket)"}`;
+      };
+      const inRoom = plan.items.filter((item) => !item.stored);
+      const stored = plan.items.filter((item) => item.stored);
+      return `In the room: ${inRoom.slice(0, 80).map(line).join("; ")}. ${stored.length ? `In inventory: ${stored.map((item) => `${item.label} [id ${item.id}]`).join("; ")}. ` : ""}Budget: ${plan.constraints.budget ? money(plan.constraints.budget.amountMinor, plan.constraints.budget.currency) : "not set"}. When the shopper says "this one" use the selected piece; "the one you added" or "that sofa" after a placement means the piece added most recently.`;
     }),
     propose_change: guard(async ({ request }) => {
       if (typeof request !== "string") throw new Error("Describe the room change first.");
@@ -177,6 +191,31 @@ export function createRoomAgentTools(options: Options): Record<string, (params: 
       await options.store(item.id, unlock === true);
       return `ok: ${item.label} is put away in inventory${item.origin === "proposed_purchase" ? " and out of the basket" : ""}.`;
     }),
+    remove_item: guard(async ({ item_id }) => {
+      const item = context().plan.items.find((entry) => entry.id === item_id && !entry.stored);
+      if (!item) throw new Error("That piece isn't in the room. Call get_room for current ids.");
+      await options.remove(item.id);
+      return item.origin === "proposed_purchase" ? `ok: ${item.label} is out of the room and the basket.` : `ok: ${item.label} is put away in their inventory.`;
+    }),
+    swap_with: guard(async ({ item_id, choice, product_id, job_id }) => {
+      if (placementPending) throw new Error("A placement is already being saved.");
+      const value = searchContext(job_id);
+      const item = value.plan.items.find((entry) => entry.id === item_id && !entry.stored);
+      if (!item) throw new Error("That piece isn't in the room. Call get_room for current ids.");
+      const result = choose(value, choice, product_id);
+      if (result.product.dimensions === null) throw new Error(`${result.product.label} has no size listed, so it can't be fit-checked.`);
+      const budget = value.plan.constraints.budget;
+      const outgoing = item.origin === "proposed_purchase" ? value.plan.products.find((p) => p.id === item.productId)?.price?.amountMinor ?? 0 : 0;
+      const spent = value.plan.items.filter((i) => i.origin === "proposed_purchase" && !i.stored).reduce((n, i) => n + (value.plan.products.find((p) => p.id === i.productId)?.price?.amountMinor ?? 0), 0);
+      const after = spent - outgoing + (result.product.price?.amountMinor ?? 0);
+      if (budget && after > budget.amountMinor) return `Not swapped: with ${result.product.label} new purchases would be ${dollars(after)}, ${dollars(after - budget.amountMinor)} over the ${dollars(budget.amountMinor)} budget. Ask about a cheaper option or a new budget.`;
+      placementPending = true;
+      try { await options.replace(result, value.job, item.id); }
+      finally { placementPending = false; }
+      previewPin = null;
+      return `ok: ${item.label} is ${item.origin === "proposed_purchase" ? "out" : "in their inventory"}, and ${result.product.label} (${result.product.price ? dollars(result.product.price.amountMinor) : "price unknown"}) is in its place and in the basket. New purchases now ${dollars(after)}.`;
+    }),
+    undo_last: guard(async () => (await options.undo()) ? "ok: undid the last change." : "Nothing to undo."),
     get_cart: guard(() => {
       const { plan } = context();
       const items = plan.items.filter((item) => item.origin === "proposed_purchase" && !item.stored);

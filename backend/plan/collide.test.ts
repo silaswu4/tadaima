@@ -54,3 +54,29 @@ describe("realistic collisions", () => {
     assert.match(bad.problems[0], /^Bumps into (a|b)( and (a|b))?\.$/);
   });
 });
+
+describe("collisions from model-derived parts", () => {
+  // a dining table: a 4 cm top at 71 to 75 cm and a central pedestal
+  const table = { ...diningTable, collision: [[0, 0.73, 0, 1.4, 0.04, 0.8], [0, 0.355, 0, 0.12, 0.71, 0.12]] as [number, number, number, number, number, number][] };
+  // a chair facing +Z: seat 42 to 46 cm, four legs, a backrest up to 78 cm at its rear
+  const parts = (w: number, d: number): [number, number, number, number, number, number][] => [
+    [0, 0.44, 0, w, 0.04, d],
+    [-w / 2 + 0.02, 0.21, -d / 2 + 0.02, 0.03, 0.42, 0.03], [w / 2 - 0.02, 0.21, -d / 2 + 0.02, 0.03, 0.42, 0.03],
+    [-w / 2 + 0.02, 0.21, d / 2 - 0.02, 0.03, 0.42, 0.03], [w / 2 - 0.02, 0.21, d / 2 - 0.02, 0.03, 0.42, 0.03],
+    [0, 0.62, -d / 2 + 0.02, w, 0.32, 0.03],
+  ];
+  const seat = (z: number) => ({ ...chair, position: [2.5, 0, z] as Vector3Meters, rotationY: Math.PI, collision: parts(0.5, 0.5) });
+
+  test("a chair slides under the tabletop until its backrest reaches the edge", () => {
+    // table spans z 1.6 to 2.4; facing -Z, the chair's backrest sits at its +Z side
+    assert.equal(collides(seat(2.6), table), false, "pulled out");
+    assert.equal(collides(seat(2.35), table), false, "seat tucked under, clear of the pedestal, backrest still outside the edge");
+    assert.equal(collides(seat(2.1), table), true, "backrest would go through the tabletop");
+  });
+  test("the pedestal still blocks the seat legs", () => {
+    assert.equal(collides({ ...seat(2.0), position: [2.5, 0, 2.0] as Vector3Meters, rotationY: 0, collision: [[0, 0.21, 0, 0.5, 0.42, 0.5]] }, table), true);
+  });
+  test("without model parts on both sides the earlier rules apply", () => {
+    assert.equal(collides(seat(2.0), diningTable), false, "chair under a tall table (canShare)");
+  });
+});

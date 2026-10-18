@@ -1,6 +1,6 @@
 import { isDeepStrictEqual } from "node:util";
 import type { PlanChange, PlacedItem, RoomPlan, ValidationResult } from "@/backend/contracts";
-import { blocking, canShare, collisionFootprint, footprint, inside, NO_FOOTPRINT, overlaps, validateChanges } from "@/backend/plan/rules";
+import { blocking, collides, collisionFootprint, footprint, inside, NO_FOOTPRINT, validateChanges } from "@/backend/plan/rules";
 import { itemFor, purchaseProblems } from "@/backend/shopping/spot";
 
 const equal = isDeepStrictEqual;
@@ -57,9 +57,8 @@ export function reconcileRoomSnapshot(base: RoomPlan, snapshot: RoomPlan): { pla
     const pairs = new Map<string, number>();
     const solid = plan.items.filter((item) => !item.stored && item.dimensions && !NO_FOOTPRINT.has(item.category));
     for (let a = 0; a < solid.length; a++) for (let b = a + 1; b < solid.length; b++) {
-      if (solid[a].roomId !== solid[b].roomId || canShare(solid[a], solid[b])) continue;
+      if (solid[a].roomId !== solid[b].roomId || !collides(solid[a], solid[b], plan.constraints.clearance / 2)) continue;
       const first = collisionFootprint(solid[a], plan.constraints.clearance / 2)!, second = collisionFootprint(solid[b], plan.constraints.clearance / 2)!;
-      if (!overlaps(first, second)) continue;
       let penetration = Infinity;
       for (const quad of [first, second]) for (let edge = 0; edge < quad.length; edge++) {
         const p = quad[edge], q = quad[(edge + 1) % quad.length];

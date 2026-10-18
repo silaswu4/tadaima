@@ -8,7 +8,8 @@ test("voice agent configuration and canonical room tool handlers stay in sync", 
   const unused = (): never => { throw new Error("Configuration inspection must not execute a room action."); };
   const handlers = createRoomAgentTools({ projectId: "configuration-test", active: () => false, context: unused,
     refresh: unused, propose: unused, apply: unused, proposal: unused, setBudget: unused,
-    search: unused, preview: unused, place: unused, spot: unused, move: unused, store: unused, liveSearch: false });
+    search: unused, preview: unused, place: unused, spot: unused, move: unused, store: unused,
+    remove: unused, replace: unused, undo: unused, liveSearch: false });
   const tools = voiceAgentConfig.conversation_config.agent.prompt.tools;
   assert.equal(new Set(tools.map((tool) => tool.name)).size, tools.length);
   assert.deepEqual(tools.map((tool) => tool.name).sort(), Object.keys(handlers).sort());

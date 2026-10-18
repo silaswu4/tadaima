@@ -128,7 +128,18 @@ export interface PlacedItem {
   stored?: boolean;
   /** Source evidence for captured dimensions/placement; absent on legacy demos. */
   evidenceIds?: string[];
+  /**
+   * The piece's real solid parts (legs, seat, top...), derived from its 3D model,
+   * so pieces only collide where they truly touch. Missing means "use the footprint".
+   */
+  collision?: CollisionBox[] | null;
 }
+
+/**
+ * One solid part of a piece in the piece's own frame, meters, before rotation:
+ * [centerX, centerY, centerZ, width, height, depth], centerY measured up from the floor.
+ */
+export type CollisionBox = [number, number, number, number, number, number];
 
 export interface RoomPlan {
   schemaVersion: "0.2";

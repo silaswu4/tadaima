@@ -1,4 +1,5 @@
 import type {
+  CollisionBox,
   CostSummary,
   PlacedItem,
   PlanChange,
@@ -139,8 +140,29 @@ export function collisionFootprint(item: Pick<PlacedItem, "category" | "position
   return footprint({ ...item, dimensions: [Math.min(w, LAMP_BASE), h, Math.min(d, LAMP_BASE)] }, grow);
 }
 
+type Solid = Pick<PlacedItem, "category" | "position" | "rotationY" | "dimensions"> & { collision?: CollisionBox[] | null };
+
+/** A part's footprint on the floor and its height span, in room coordinates. */
+function partOf(item: Solid, box: CollisionBox, gap: number) {
+  const [cx, cy, cz, w, h, d] = box;
+  const c = Math.cos(item.rotationY);
+  const s = Math.sin(item.rotationY);
+  // the part's center, turned with the piece (same rotation as footprint)
+  const x = item.position[0] + cx * c + cz * s;
+  const z = item.position[2] - cx * s + cz * c;
+  const y = item.position[1] + cy;
+  return { quad: footprint({ position: [x, 0, z], rotationY: item.rotationY, dimensions: [w, h, d] }, gap)!, low: y - h / 2, high: y + h / 2 };
+}
+
 /** Do two pieces really get in each other's way, keeping `gap` around each? */
-export function collides(a: Pick<PlacedItem, "category" | "position" | "rotationY" | "dimensions">, b: Pick<PlacedItem, "category" | "position" | "rotationY" | "dimensions">, gap = 0) {
+export function collides(a: Solid, b: Solid, gap = 0) {
+  if (NO_FOOTPRINT.has(a.category) || NO_FOOTPRINT.has(b.category)) return false;
+  // both shaped from their 3D models: solid parts must meet in space, not just on the floor plan
+  if (a.collision?.length && b.collision?.length) {
+    const pa = a.collision.map((box) => partOf(a, box, gap));
+    const pb = b.collision.map((box) => partOf(b, box, gap));
+    return pa.some((p) => pb.some((q) => Math.min(p.high, q.high) - Math.max(p.low, q.low) > 0.005 && overlaps(p.quad, q.quad)));
+  }
   if (canShare(a, b)) return false;
   const fa = collisionFootprint(a, gap);
   const fb = collisionFootprint(b, gap);

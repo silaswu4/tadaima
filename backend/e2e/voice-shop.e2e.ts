@@ -41,7 +41,7 @@ async function shoppingFixture({ cap = 300, budget = 2000, clearance = 0.3, live
       assert.ok(result.placement);
       plan.items.push(itemFor(result.product, result.placement, "item_simulator_approved")); plan.revision++;
     },
-    spot: () => req.spot, move: unused, store: unused, liveSearch: true,
+    spot: () => req.spot, move: unused, store: unused, remove: unused, replace: unused, undo: unused, liveSearch: true,
   });
   const room = await tools.get_room({});
   const shop = await tools.shop_here({ category: "sofa", max_price_usd: cap });
