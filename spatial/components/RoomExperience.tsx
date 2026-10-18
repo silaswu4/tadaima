@@ -9,7 +9,7 @@ import { evaluate } from "../../backend/shopping/spot";
 import { useRoomShopping } from "../rooms/use-room-shopping";
 import { useRoomFetch } from "../rooms/use-room-fetch";
 import { roomXRActions, roomXRSearch } from "../rooms/xr-actions";
-import type { WalkCallbacks, WalkEnvironment, WalkItem, WalkMode, WalkOptions, WalkScene } from "../room/walk-api";
+import type { WalkCallbacks, WalkCarryStatus, WalkEnvironment, WalkItem, WalkMode, WalkOptions, WalkScene } from "../room/walk-api";
 import mark from "../assets/tadaima-mark.png";
 import { WipeLink, useWipeHold } from "./PageWipe";
 import "./RoomExperience.css";
@@ -226,6 +226,8 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
   const [agentProposal, setAgentProposal] = useState<PlanProposal | null>(null);
   /** Search results shown beside the room without leaving first person (voice searches land here). */
   const [showResults, setShowResults] = useState(false);
+  /** While carrying: does the piece fit where it's held (from the engine, live). */
+  const [carry, setCarry] = useState<WalkCarryStatus | null>(null);
   const [swapTarget, setSwapTarget] = useState<WalkItem | null>(null);
   const [category, setCategory] = useState<FurnitureCategory>("chair");
   const [hintSeen, setHintSeen] = useState(readHintSeen);
@@ -411,6 +413,7 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
       onProductPreviewChange(preview) { if (!cancelled && !preview) setPending(null); },
       onExplodeChange(value) { if (!cancelled) { setExploded(value); setPending(null); } },
       onWindowBlindsChange(value) { if (!cancelled) setBlindsRaised(value); },
+      onCarryStatus(status) { if (!cancelled) setCarry(status); },
       onShoppingFloor(spot) { if (!cancelled) { setFloorSpot(spot); setNotice("Shopping spot selected. Checking pieces that fit here."); searchRef.current(spot, false); } },
       onPreviewOffer(id) { const product = resultsRef.current.find((result) => result.product.id === id)?.product; if (product) previewRef.current(product); },
       onConfirmOffer() { confirmRef.current(); },
@@ -557,12 +560,11 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
   };
 
   const carryOut = (item: WalkItem) => {
-    const engine = api() as (WalkScene & { takeOutAndCarry?: (id: string) => string | null }) | null;
+    const engine = api();
     if (!engine) return;
-    // newer engines put it straight in your hands and only check the fit on drop
-    const id = engine.takeOutAndCarry ? engine.takeOutAndCarry(item.id) : engine.takeOut(item.id);
-    if (!id) return;
-    if (!engine.takeOutAndCarry) { engine.select(id); engine.beginMove(id); }
+    unlockFor(item);
+    // straight into your hands; the fit is checked when you set it down
+    if (!engine.takeOutAndCarry(item.id)) return;
     setMoving(true);
     if (mode === "walk" && !coarse) engine.lockPointer();
   };
@@ -1015,6 +1017,7 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
             {formatDimensions(selected.dimensions)}
             {selected.priceMinor != null && selected.currency ? ` · ${formatMoney(selected.priceMinor, selected.currency)}` : ""}
           </span>
+          {carry ? <span className="room-x__carry-fit" data-level={carry.level}>{carry.level === "fits" ? "Fits here" : carry.level === "snap" ? "Will snap into place" : carry.problems[0] ?? "Doesn't fit here"}</span> : null}
           <span className="room-x__carry-hint">{coarse ? "Drag to place it" : "Click to set it down"} · R to rotate · Esc to cancel</span>
           {coarse ? (
             <div>

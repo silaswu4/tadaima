@@ -1320,3 +1320,6 @@
 .room-x__key { right: auto; bottom: -18px; left: 50%; padding: 0 6px; border: 1px solid rgba(255, 255, 255, 0.6); background: rgba(43, 26, 16, 0.7); color: var(--paper); line-height: 15px; transform: translateX(-50%); }
 .room-x__info { padding: 10px 18px; }
 .room-x__toolbar { grid-template-columns: repeat(3, auto); }
+.room-x__carry .room-x__carry-fit { margin-top: 2px; color: #2f6b3f; font-size: 12px; }
+.room-x__carry .room-x__carry-fit[data-level="snap"] { color: #8a6416; }
+.room-x__carry .room-x__carry-fit[data-level="blocked"] { color: #9b3a24; }
