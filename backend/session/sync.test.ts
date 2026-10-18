@@ -81,6 +81,42 @@ test("preexisting capture overlaps do not freeze a no-op, but do not license new
   snapshot.items[2].position = [1, 0, 1];
   assert.equal(reconcileRoomSnapshot(plan, snapshot).blocked, true);
 });
+test("model-derived collision parts are derived data: they may arrive or change on owned pieces", () => {
+  const plan = base();
+  const snapshot = structuredClone(plan);
+  const owned = snapshot.items.find((item) => item.origin === "existing_owned")!;
+  owned.collision = [[0, 0.2, 0, 0.5, 0.4, 0.5]];
+  const first = reconcileRoomSnapshot(plan, snapshot);
+  assert.equal(first.blocked, false);
+  assert.deepEqual(first.plan.items.find((item) => item.id === owned.id)!.collision, owned.collision);
+  const again = structuredClone(first.plan);
+  again.items.find((item) => item.id === owned.id)!.collision = [[0, 0.3, 0, 0.4, 0.6, 0.4], [0, 0.05, 0, 0.1, 0.1, 0.1]];
+  assert.equal(reconcileRoomSnapshot(first.plan, again).blocked, false);
+  const cleared = structuredClone(first.plan);
+  delete cleared.items.find((item) => item.id === owned.id)!.collision;
+  assert.equal(reconcileRoomSnapshot(first.plan, cleared).blocked, false);
+  assert.equal(RoomPlanSchema.safeParse(snapshot).success, true);
+});
+test("new collision parts on unmoved pieces never block, but moving deeper into them does", () => {
+  const plan = base();
+  plan.constraints.minimumSeats = null;
+  plan.items.forEach((item) => { item.locked = false; });
+  plan.items = plan.items.slice(0, 2).map((item) => ({ ...item, dimensions: [0.5, 0.8, 0.5] as [number, number, number] }));
+  plan.items[0].category = "chair";
+  plan.items[1].category = "table";
+  // the chair is tucked under the table (fine by footprint rules)...
+  plan.items[0].position = [2, 0, 2];
+  plan.items[1].position = [2, 0, 2.1];
+  // ...but its newly known backrest pokes through the tabletop: a no-op sync stays accepted
+  const shaped = structuredClone(plan);
+  shaped.items[0].collision = [[0, 0.4, 0, 0.5, 0.8, 0.5]];
+  shaped.items[1].collision = [[0, 0.75, 0, 0.5, 0.05, 0.5]];
+  assert.equal(reconcileRoomSnapshot(plan, shaped).blocked, false);
+  // pushing the table further onto the chair is refused
+  const crowded = structuredClone(shaped);
+  crowded.items[1].position = [2, 0, 2.05];
+  assert.equal(reconcileRoomSnapshot(plan, crowded).blocked, true);
+});
 test("HTTP schemas reject excessive arrays, infinite geometry, foreign room ids and arbitrary assets", () => {
   for (const mutate of [
     (draft: typeof demoPlan) => { draft.items[0].position = [Infinity, 0, 1]; },
