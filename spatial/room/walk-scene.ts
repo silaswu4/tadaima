@@ -6,9 +6,12 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { dracoLoader } from "./draco";
 import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
 import { RectAreaLightUniformsLib } from "three/addons/lights/RectAreaLightUniformsLib.js";
-import type { FloorSpot, PlacedItem, PointXZ, ProductCandidate, RoomPlan, Vector3Meters } from "../../backend/contracts";
+import type { CollisionBox, FloorSpot, PlacedItem, ProductCandidate, RoomPlan, Vector3Meters } from "../../backend/contracts";
 import { LIBRARY, assetFor, assetTransform, itemAsset, type LibraryModel } from "../../backend/shopping/assets";
-import { canShare } from "../../backend/plan/rules";
+import { collides } from "../../backend/plan/rules";
+import { cachedMeshColliders } from "./mesh-collider";
+import { releaseSpin, startSpin, stepSpin, SPIN, snapToward, wheelTurn, type Spin } from "./spin";
+import { createSilhouette, partsFloorGeometry } from "./silhouette";
 import type { AddRequest, WalkCallbacks, WalkItem, WalkMode, WalkOptions, WalkProductPreview, WalkProductPreviewOptions, WalkScene } from "./walk-api";
 import { block, rug, standingLamp, surface } from "./parts";
 import { createRoomLighting, setMetricSurfaceUVs } from "./lighting";
@@ -55,8 +58,8 @@ const DRAG_LOOK_SPEED = 0.004;
 const WALK_FOV = 70;
 const ORBIT_FOV = 42;
 const FLAT_HEIGHT = 0.05;
-const TURN_STEP = THREE.MathUtils.degToRad(15);
-const CARRY_QUARTER = Math.PI / 2;
+/** Extra lift for a piece held straight out of the inventory, so it reads as "in hand", not placed. */
+const STORAGE_LIFT = 0.16;
 const SNAPPING = "#c98a2b";
 /** A wall-backed piece snaps its back to a wall when carried within this of it, meters. */
 const WALL_SNAP = 0.3;
@@ -71,6 +74,10 @@ type Entry = {
   flat: boolean;
   cos: number;
   sin: number;
+  /** Solid parts from the loaded model, in the piece's frame; null for proxies and while loading. */
+  parts: CollisionBox[] | null;
+  /** Bumped whenever the drawn model is replaced. */
+  version: number;
 };
 
 type UndoOp =
@@ -155,32 +162,6 @@ const inches = (m: number) => {
   const v = Math.round((m / 0.0254) * 10) / 10;
   return Number.isInteger(v) ? String(v) : v.toFixed(1);
 };
-
-/** SAT overlap of two convex footprints; touching edges do not count. */
-function footprintsOverlap(a: readonly PointXZ[], b: readonly PointXZ[]) {
-  for (const poly of [a, b]) {
-    for (let i = 0; i < poly.length; i++) {
-      const p = poly[i];
-      const q = poly[(i + 1) % poly.length];
-      const nx = -(q[1] - p[1]);
-      const nz = q[0] - p[0];
-      const len = Math.hypot(nx, nz) || 1;
-      let minA = Infinity, maxA = -Infinity, minB = Infinity, maxB = -Infinity;
-      for (const [x, z] of a) {
-        const d = (x * nx + z * nz) / len;
-        minA = Math.min(minA, d);
-        maxA = Math.max(maxA, d);
-      }
-      for (const [x, z] of b) {
-        const d = (x * nx + z * nz) / len;
-        minB = Math.min(minB, d);
-        maxB = Math.max(maxB, d);
-      }
-      if (maxA <= minB + 0.005 || maxB <= minA + 0.005) return false;
-    }
-  }
-  return true;
-}
 
 function isEditable(target: EventTarget | null) {
   if (!(target instanceof HTMLElement)) return false;
@@ -389,19 +370,14 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
   }
 
   // ------------------------------------------------------------ overlays
-  const outlineGeometry = new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0));
-  const makeOutline = (color: string, opacity: number) => {
-    const line = new THREE.LineSegments(outlineGeometry, new THREE.LineBasicMaterial({ color, transparent: true, opacity, depthTest: false, depthWrite: false }));
-    line.renderOrder = 12;
-    line.visible = false;
-    line.raycast = () => {};
-    scene.add(line);
-    return line;
-  };
-  const selectionOutline = makeOutline(ACCENT, 0.95);
-  const hoverOutline = makeOutline(INK, 0.35);
-  const footprintMaterial = new THREE.MeshBasicMaterial({ color: VALID, transparent: true, opacity: 0.3, depthWrite: false });
-  const footprintMesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), footprintMaterial);
+  // Soft silhouettes that follow the real mesh, not a bounding box.
+  const selectionOutline = createSilhouette({ color: ACCENT, line: 0.0032, glow: 0.009, lineOpacity: 0.95, glowOpacity: 0.28 });
+  const hoverOutline = createSilhouette({ color: INK, line: 0.0022, glow: 0.006, lineOpacity: 0.35, glowOpacity: 0.1 });
+  // Depth-tested and depth-writing so overlapping part quads blend once, not twice.
+  const footprintMaterial = new THREE.MeshBasicMaterial({ color: VALID, transparent: true, opacity: 0.3, depthWrite: true, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+  const footprintBox = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
+  let footprintParts: { parts: CollisionBox[]; geometry: THREE.BufferGeometry } | null = null;
+  const footprintMesh = new THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>(footprintBox, footprintMaterial);
   footprintMesh.renderOrder = 11;
   footprintMesh.visible = false;
   footprintMesh.raycast = () => {};
@@ -644,21 +620,29 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
   }
 
   /** Builds the drawn model, base-centered at the origin, scaled per axis to the real size. */
-  async function buildModel(item: PlacedItem, size: Size | null): Promise<{ object: THREE.Object3D; dims: Size }> {
+  /**
+   * Builds the drawn model, base-centered at the origin, scaled per axis to the real size.
+   * `shape` names the model and its fit for the collider cache; null for size proxies
+   * (they have no real shape, so the footprint rules apply to them).
+   */
+  async function buildModel(item: PlacedItem, size: Size | null): Promise<{ object: THREE.Object3D; dims: Size; shape: string | null }> {
     await sourceLoad;
     const captured = sourceTemplates.get(item.id);
     if (captured) {
       const object = captured.clone(true);
       ownBakedIndirectMaterials(object);
-      return { object, dims: size ?? [...source!.plan.items.find((entry) => entry.id === item.id)!.dimensions!] as Size };
+      const dims = size ?? [...source!.plan.items.find((entry) => entry.id === item.id)!.dimensions!] as Size;
+      return { object, dims, shape: `captured|${source!.plan.projectId}|${item.id}|${dims.join(",")}` };
     }
     let base: THREE.Object3D | null = galleryPart(item.id, size);
     let library: LibraryModel | null = null;
+    let shape: string | null = base ? `gallery|${item.id}` : null;
     if (!base) {
       try {
         if (item.assetUrl) {
           library = libraryByUrl(item.assetUrl);
           base = await loadGlb(item.assetUrl);
+          shape = item.assetUrl;
         } else if (item.origin === "existing_owned" && item.evidenceIds?.length) {
           // A captured piece is an honest size proxy, not a guessed library model.
           base = createFurnitureProxy(size ?? [0.8, 0.8, 0.8]);
@@ -667,12 +651,14 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
           if (asset.kind === "model") {
             library = asset;
             base = await loadGlb(asset.url);
+            shape = asset.url;
           } else if (asset.shape === "rug") base = rug(size?.[0] ?? 1.6, size?.[2] ?? 1, "#cfc2ad");
-          else if (asset.shape === "lamp") base = standingLamp();
+          else if (asset.shape === "lamp") { base = standingLamp(); shape = "procedural-lamp"; }
           else base = createFurnitureProxy(size ?? [0.8, 0.8, 0.8]);
         }
       } catch {
         library = null;
+        shape = null;
         base = createFurnitureProxy(size ?? [0.8, 0.8, 0.8]);
       }
     }
@@ -680,6 +666,7 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
     // Library yaw maps a model into the width-on-X frame its sizes are given in.
     // Legacy items with no size or product were placed in the model's native frame.
     if (library && (size || item.productId)) turn.rotation.y = library.yaw;
+    if (shape) shape += `|${turn.rotation.y.toFixed(4)}`;
     turn.add(base);
     const scaler = new THREE.Group();
     scaler.add(turn);
@@ -701,7 +688,14 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
         node.receiveShadow = true;
       }
     });
-    return { object: placed.root, dims: size ?? placed.size };
+    const dims = size ?? placed.size;
+    return { object: placed.root, dims, shape: shape && `${shape}|${dims.map((v) => v.toFixed(3)).join(",")}` };
+  }
+
+  /** The engine's plan item carries the model's solid parts once known; proxies and loading pieces carry none. */
+  function applyParts(entry: Entry) {
+    if (entry.parts?.length) entry.item.collision = entry.parts.map((box) => [...box] as CollisionBox);
+    else if (entry.loaded) delete entry.item.collision;
   }
 
   function createEntry(item: PlacedItem): { entry: Entry; loaded: Promise<void> } {
@@ -718,6 +712,8 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
       flat: false,
       cos: 1,
       sin: 0,
+      parts: null,
+      version: 0,
     };
     if (known && item.productId && known.source === "product") item.dimensions = [...known.dims];
     syncEntry(entry);
@@ -725,10 +721,16 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
     const placeholder = createFurnitureProxy(entry.dims);
     placeholder.castShadow = true;
     root.add(placeholder);
-    const loaded = buildModel(item, known?.dims ?? null).then(({ object, dims }) => {
+    const loaded = buildModel(item, known?.dims ?? null).then(({ object, dims, shape }) => {
       if (disposed) {
         releaseAll([object]);
         return;
+      }
+      // Solid parts from the fitted model's real triangles, before it joins the scene.
+      let parts: CollisionBox[] | null = null;
+      if (shape) {
+        try { parts = cachedMeshColliders(shape, object); }
+        catch { parts = null; }
       }
       root.remove(placeholder);
       releaseAll([placeholder]);
@@ -736,6 +738,10 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
       if (object.userData.visualLabel) root.userData.visualLabel = object.userData.visualLabel;
       entry.dims = dims;
       entry.loaded = true;
+      entry.parts = parts?.length ? parts : null;
+      entry.version += 1;
+      applyParts(entry);
+      if (moving?.id === entry.item.id && moving.fromStorage) setGhost(entry, true);
       syncEntry(entry);
       pickDirty = true;
       if (moving) { moving.checkedKey = ""; moving.plan = null; }
@@ -798,22 +804,18 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
     return rooms.some((r) => footprintInside(corners, r.floorPolygon));
   }
 
-  // a floor lamp only blocks the floor its base stands on (same rule as backend collisionFootprint)
-  const base = (category: string, w: number, d: number): [number, number] => (category === "lamp" ? [Math.min(w, 0.32), Math.min(d, 0.32)] : [w, d]);
-
+  /**
+   * The same rule as dragCheck and the server (backend/plan/rules.ts collides), with the plan's
+   * clearance: solid model parts when both pieces have them, else footprints plus canShare.
+   */
   function overlapsOthers(id: string, x: number, y: number, z: number, rotation: number, dims: Size) {
     if (dims[1] < FLAT_HEIGHT) return false;
     const me = entries.get(id)?.item ?? storedItems.get(id);
-    const [mw, md] = base(me?.category ?? "other", dims[0], dims[2]);
-    const mine = footprint([x, 0, z], rotation, mw, md);
+    const held = { category: me?.category ?? "other", position: [x, y, z] as Vector3Meters, rotationY: rotation, dimensions: dims, collision: me?.collision ?? null };
+    const gap = working.constraints.clearance / 2;
     for (const [otherId, other] of entries) {
       if (otherId === id || other.flat) continue;
-      // chairs tuck under tables and desks, decor sits on surfaces: realistic, not solid boxes
-      if (me && canShare(me, other.item)) continue;
-      const oy = other.item.position[1];
-      if (y >= oy + other.dims[1] - 0.01 || oy >= y + dims[1] - 0.01) continue;
-      const [ow, od] = base(other.item.category, other.dims[0], other.dims[2]);
-      if (footprintsOverlap(mine, footprint(other.item.position, other.item.rotationY, ow, od))) return true;
+      if (collides(held, { ...other.item, dimensions: other.dims }, gap)) return true;
     }
     return false;
   }
@@ -935,6 +937,7 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
           existing.item = item;
           const known = knownSize(item);
           if (known) { existing.dims = known.dims; existing.source = known.source; }
+          applyParts(existing);
           syncEntry(existing); attach(existing);
         } else {
           const built = createEntry(item);
@@ -1317,8 +1320,20 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
     return id;
   }
 
-  /** Delete key means stash: every piece, owned or proposed, goes to the inventory (undoable, never lost). */
+  /**
+   * Delete key: a proposed purchase leaves the room and the basket outright (undoable);
+   * the shopper's own furniture goes to the inventory, never lost.
+   */
   function discard(id: string) {
+    if (moving?.id === id && moving.fromStorage) { cancelMove(); return; }
+    const entry = entries.get(id);
+    if (!entry) return;
+    if (entry.item.origin === "proposed_purchase") {
+      handsOn(id);
+      if (moving?.id === id) cancelMove();
+      remove(id);
+      return;
+    }
     store(id);
   }
 
@@ -1378,11 +1393,112 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
     emitItems();
   }
 
+  /** A piece held straight out of the inventory draws see-through until it is set down. */
+  function setGhost(entry: Entry, on: boolean) {
+    entry.root.traverse((node) => {
+      const mesh = node as THREE.Mesh;
+      if (!mesh.isMesh || node.userData.silhouette) return;
+      const original = node.userData.ghostOriginal as THREE.Material | THREE.Material[] | undefined;
+      if (on && !original) {
+        node.userData.ghostOriginal = mesh.material;
+        const ghost = (material: THREE.Material) => {
+          const copy = material.clone();
+          copy.transparent = true;
+          copy.opacity = 0.55 * material.opacity;
+          return copy;
+        };
+        mesh.material = Array.isArray(mesh.material) ? mesh.material.map(ghost) : ghost(mesh.material);
+      } else if (!on && original) {
+        for (const copy of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) copy.dispose();
+        mesh.material = original;
+        delete node.userData.ghostOriginal;
+      }
+    });
+  }
+
+  // ------------------------------------------------------------ free turning
+  type ActiveSpin = Spin & { id: string; key: string | null; shift: boolean; undo: boolean; carry: boolean };
+  let spin: ActiveSpin | null = null;
+
+  const facingOf = (id: string) => (moving?.id === id ? moving.rotation : entries.get(id)?.item.rotationY ?? 0);
+
+  /** Start turning a piece (the carried one, or one standing in the room) until endSpin. */
+  function beginSpin(id: string, direction: number, key: string | null = null, shift = false) {
+    if (disposed) return;
+    if (spin) finishSpin();
+    restoreCanonical();
+    const entry = entries.get(id);
+    if (!entry) return;
+    const carry = moving?.id === id;
+    if (!carry) {
+      if (moving) return;
+      handsOn(id);
+      if (entry.item.locked) return;
+    }
+    spin = { ...startSpin(direction < 0 ? -1 : 1), id, key, shift, undo: false, carry };
+  }
+
+  /** Let go: a quick press turns 15 degrees, a hold coasts to a stop; Shift lands on a multiple of 45. */
+  function endSpin(snap = false) {
+    if (spin) releaseSpin(spin, facingOf(spin.id), snap || spin.shift);
+  }
+
+  /** Turn by an exact angle, eased, with one undo step. */
+  function rotateBy(id: string, radians: number) {
+    if (!Number.isFinite(radians) || Math.abs(radians) < 1e-6) return;
+    beginSpin(id, Math.sign(radians));
+    if (spin?.id !== id) return;
+    spin.held = false;
+    spin.target = radians;
+  }
+
+  function finishSpin() {
+    const done = spin;
+    spin = null;
+    if (done && !done.carry && done.undo) emitItems();
+  }
+
+  /** Applies one frame of turning; false when the piece can't turn further (wall or neighbour) or is gone. */
+  function turnBy(active: ActiveSpin, delta: number): boolean {
+    if (active.carry) {
+      if (moving?.id !== active.id) return false;
+      moving.rotation += delta;
+      moving.userRotated = true;
+      return true;
+    }
+    const entry = entries.get(active.id);
+    if (!entry || entry.item.locked || moving?.id === active.id) return false;
+    const [x, y, z] = entry.item.position;
+    const now = entry.item.rotationY, next = now + delta;
+    const before = placementValid(active.id, x, y, z, now, entry.dims);
+    // Never turn a piece into a wall or into a neighbour it was clear of.
+    if (before && !placementValid(active.id, x, y, z, next, entry.dims)) return false;
+    if (!before && !insideRoom(x, z, next, entry.dims) && insideRoom(x, z, now, entry.dims)) return false;
+    if (!active.undo) {
+      pushUndo({ kind: "transform", id: active.id, position: [...entry.item.position] as Vector3Meters, rotationY: now });
+      active.undo = true;
+    }
+    if (poseAnims.delete(active.id)) entry.root.scale.set(1, 1, 1);
+    setTransform(entry, entry.item.position, next);
+    return true;
+  }
+
+  function updateSpin(dt: number) {
+    const active = spin;
+    if (!active) return;
+    const { delta, done } = stepSpin(active, dt, reduced);
+    if (delta && !turnBy(active, delta)) { finishSpin(); return; }
+    if (done) finishSpin();
+  }
+
   function beginMove(id: string, fromStorage = false) {
     restoreCanonical();
     const entry = entries.get(id);
     if (!entry || entry.item.locked) return;
     if (moving) cancelMove();
+    if (spin) finishSpin();
+    // A click (or key) already in progress when the carry starts never drops it.
+    press = null;
     select(id);
     const { position, rotationY } = entry.item;
     moving = {
@@ -1412,6 +1528,8 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
     carryStatusKey = "";
     wheelRest = 0;
     if (fromStorage) {
+      // Straight out of the inventory it floats see-through in hand; nothing is placed until a click.
+      setGhost(entry, true);
       // Out of the inventory it appears right under the crosshair, growing in, not flying across the room.
       updateMove(true);
       springSet(moving.shown.x, moving.pose.x);
@@ -1426,6 +1544,9 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
   function endCarry() {
     const state = moving!;
     moving = null;
+    if (spin?.carry) finishSpin();
+    const held = entries.get(state.id);
+    if (held) setGhost(held, false);
     footprintMesh.visible = false;
     carryStatusKey = "";
     callbacks.onMoveChange?.(false);
@@ -1641,12 +1762,12 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
     const { shown, pose } = moving;
     if (reduced) {
       springSet(shown.x, pose.x); springSet(shown.z, pose.z); springSet(shown.rotation, pose.rotation);
-      springSet(shown.lift, 0); springSet(shown.scale, 1);
+      springSet(shown.lift, moving.fromStorage ? STORAGE_LIFT : 0); springSet(shown.scale, 1);
     } else {
       springStep(shown.x, pose.x, CARRY.followOmega, dt);
       springStep(shown.z, pose.z, CARRY.followOmega, dt);
       angleSpringStep(shown.rotation, pose.rotation, CARRY.turnOmega, dt);
-      springStep(shown.lift, CARRY.lift, CARRY.liftOmega, dt);
+      springStep(shown.lift, moving.fromStorage ? STORAGE_LIFT : CARRY.lift, CARRY.liftOmega, dt);
       springStep(shown.scale, 1, CARRY.liftOmega, dt);
     }
     let sx = 0, sz = 0;
@@ -1663,7 +1784,18 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
     footprintMesh.visible = true;
     footprintMesh.position.set(pose.x, 0.006, pose.z);
     footprintMesh.rotation.y = pose.rotation;
-    footprintMesh.scale.set(entry.dims[0], 1, entry.dims[2]);
+    // The floor shape of the real solid parts when known, else the plain footprint.
+    if (entry.parts) {
+      if (footprintParts?.parts !== entry.parts) {
+        footprintParts?.geometry.dispose();
+        footprintParts = { parts: entry.parts, geometry: partsFloorGeometry(entry.parts) };
+      }
+      footprintMesh.geometry = footprintParts.geometry;
+      footprintMesh.scale.set(1, 1, 1);
+    } else {
+      footprintMesh.geometry = footprintBox;
+      footprintMesh.scale.set(entry.dims[0], 1, entry.dims[2]);
+    }
     footprintMaterial.color.set(moving.level === "fits" ? VALID : moving.level === "snap" ? SNAPPING : INVALID);
     footprintMaterial.opacity = moving.level === "blocked" ? 0.38 : 0.3;
   }
@@ -1870,15 +2002,11 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
     const target = moving?.id ?? selectedId;
     switch (event.code) {
       case "KeyQ":
-        if (target) rotate(target, -TURN_STEP);
-        break;
       case "KeyE":
-        if (target) rotate(target, TURN_STEP);
-        break;
       case "KeyR":
-        // Carrying: a quarter turn, Shift for a fine 15 degree step. In place: the toolbar's 45 degrees.
-        if (moving) rotate(moving.id, event.shiftKey ? TURN_STEP : CARRY_QUARTER);
-        else if (target) { handsOn(target); rotate(target, Math.PI / 4); }
+        // Free turning: hold to spin (about 120 degrees a second), tap for 15, Shift lands on 45.
+        if (event.repeat) break;
+        if (target) beginSpin(target, event.code === "KeyQ" ? -1 : 1, event.code, event.shiftKey);
         break;
       case "KeyG":
         if (!event.repeat && selectedId && !moving) { handsOn(selectedId); beginMove(selectedId); }
@@ -1906,15 +2034,26 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
   }
   function onKeyUp(event: KeyboardEvent) {
     keys.delete(event.code);
+    if (spin && spin.key === event.code) endSpin(event.shiftKey);
   }
-  /** Scroll turns the carried piece in 15 degree steps (and never zooms the overview meanwhile). */
+  /** Scroll turns the carried piece smoothly, about 5 degrees a notch; Shift steps between multiples of 45. Never zooms meanwhile. */
   function onWheel(event: WheelEvent) {
     if (!moving || disposed) return;
     event.preventDefault();
     event.stopImmediatePropagation();
-    const { steps, rest } = wheelSteps(wheelRest, event.deltaY, event.deltaMode);
-    wheelRest = rest;
-    if (steps) rotate(moving.id, steps * TURN_STEP);
+    if (event.shiftKey) {
+      // browsers turn Shift+wheel into a horizontal scroll
+      const { steps, rest } = wheelSteps(wheelRest, event.deltaY || event.deltaX, event.deltaMode, SPIN.notchPixels);
+      wheelRest = rest;
+      if (!steps) return;
+      const from = moving.rotation;
+      let to = from;
+      for (let i = 0; i < Math.min(8, Math.abs(steps)); i++) to = snapToward(to, steps > 0 ? 1 : -1, SPIN.snap);
+      rotate(moving.id, to - from);
+      return;
+    }
+    const turn = wheelTurn(event.deltaY, event.deltaMode);
+    if (turn) rotate(moving.id, turn);
   }
   function setMoveInput(input: { forward: number; right: number }) {
     const next = normalizeWalkInput(input);
@@ -1923,6 +2062,7 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
   }
   function onBlur() {
     setMoveInput({ forward: 0, right: 0 });
+    endSpin();
   }
 
   canvas.addEventListener("pointerdown", onPointerDown);
@@ -2074,14 +2214,6 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
     }
   }
 
-  function placeOutline(line: THREE.LineSegments, entry: Entry) {
-    line.visible = true;
-    line.position.copy(entry.root.position);
-    line.position.y -= 0.01;
-    line.rotation.y = entry.root.rotation.y;
-    line.scale.set(entry.dims[0] + 0.04, entry.dims[1] + 0.02, entry.dims[2] + 0.04);
-  }
-
   function drawHeadsetLabel(selected: Entry) {
     const [w, h, d] = selected.dims;
     const displayLabel = toWalkItem(selected).label;
@@ -2111,17 +2243,15 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
       crosshairMaterial.color.set(hoverId ? ACCENT : INK);
     }
     const hovered = hoverId && hoverId !== selectedId ? entries.get(hoverId) : null;
-    if (hovered) placeOutline(hoverOutline, hovered);
-    else hoverOutline.visible = false;
+    hoverOutline.show(hovered ? hovered.root : null, hovered?.version ?? 0);
 
     const selected = selectedId ? entries.get(selectedId) : null;
     if (!selected) {
-      selectionOutline.visible = false;
+      selectionOutline.show(null);
       panel.mesh.visible = false;
       return;
     }
-    placeOutline(selectionOutline, selected);
-    (selectionOutline.material as THREE.LineBasicMaterial).color.set(moving && !moving.valid ? INVALID : ACCENT);
+    selectionOutline.show(selected.root, selected.version, moving && !moving.valid ? INVALID : ACCENT);
 
     // On screen the HTML toolbar over the piece names and sizes it; the in-world label is for the headset only.
     if (presenting) drawHeadsetLabel(selected);
@@ -2154,6 +2284,7 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
       if (time - lastXRErrorAt > 5000) { lastXRErrorAt = time; console.error("[walk-scene] XR update failed", error); }
     }
     exploder?.update(time);
+    if (spin) updateSpin(dt);
     if (moving) updateMove(false, dt);
     if (poseAnims.size) updatePoseAnims(dt);
     if (flights.length) updateFlights(dt);
@@ -2178,6 +2309,9 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
       moving: moving ? { id: moving.id, level: moving.level, pose: moving.pose, lift: moving.shown.lift.value } : null,
       flights: flights.length,
       anims: poseAnims.size,
+      spin: spin ? { id: spin.id, held: spin.held, turned: spin.turned } : null,
+      rotation: selectedId ? facingOf(selectedId) : null,
+      parts: Object.fromEntries([...entries].map(([id, entry]) => [id, entry.parts?.length ?? null])),
     });
   }
 
@@ -2238,7 +2372,10 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
       if (op.kind === "swap") roots.push(op.old.root);
     }
     releaseAll(roots);
-    outlineGeometry.dispose();
+    selectionOutline.dispose();
+    hoverOutline.dispose();
+    footprintBox.dispose();
+    footprintParts?.geometry.dispose();
     sun.shadow.dispose();
     renderer.xr.dispose?.();
     renderer.dispose();
@@ -2248,7 +2385,7 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
     undoStack.length = 0;
   }
 
-  return {
+  const api: WalkScene = {
     ready,
     getPlan: currentPlan,
     setPlan,
@@ -2265,6 +2402,9 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
     swap,
     setLocked,
     rotate,
+    rotateBy,
+    beginSpin: (id: string, direction: number) => beginSpin(id, direction),
+    endSpin: () => endSpin(),
     beginMove: (id: string) => beginMove(id),
     confirmMove,
     cancelMove,
@@ -2278,4 +2418,16 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
     enterXR,
     dispose,
   };
+  // Development-only handle for browser checks: the API plus world-to-screen projection.
+  if (process.env.NODE_ENV !== "production") {
+    (canvas as HTMLCanvasElement & { __walkDev?: unknown }).__walkDev = {
+      api,
+      project(x: number, y: number, z: number) {
+        const p = new THREE.Vector3(x, y, z).project(camera);
+        const rect = canvas.getBoundingClientRect();
+        return { x: rect.left + ((p.x + 1) / 2) * rect.width, y: rect.top + ((1 - p.y) / 2) * rect.height };
+      },
+    };
+  }
+  return api;
 }

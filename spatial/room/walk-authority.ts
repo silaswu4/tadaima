@@ -57,6 +57,8 @@ function ordered(value: unknown): unknown {
 export function canPreserveWalkUndo(current: RoomPlan, incoming: RoomPlan): boolean {
   const items = (plan: RoomPlan) => ordered(plan.items.map((item) => ({ ...item,
     stored: item.stored ?? false, evidenceIds: item.evidenceIds ?? [],
+    // model-derived parts: an ack with or without them is still the same edit
+    collision: undefined,
   })).sort((a, b) => a.id.localeCompare(b.id)));
   if (!equal(items(current), items(incoming)) || !equal(ordered(current.constraints), ordered(incoming.constraints))) return false;
   const products = new Map(incoming.products.map((product) => [product.id, product]));
