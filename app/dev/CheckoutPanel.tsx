@@ -452,7 +452,7 @@ function MandateBox({
         <dt className="text-zinc-500">Mandate</dt>
         <dd className="text-zinc-600">{m.id}</dd>
       </dl>
-      {drifted && <Note msg={{ kind: "warn", text: "The cart changed after this approval. The agent will be refused until you approve again." }} />}
+      {drifted && <Note msg={{ kind: "warn", text: "The cart changed after this approval. The agent will be refused. Revoke it, then approve the new cart." }} />}
     </div>
   );
 }
