@@ -47,7 +47,8 @@ const wrap = (a: number) => {
   let r = a % (2 * Math.PI);
   if (r > Math.PI) r -= 2 * Math.PI;
   if (r <= -Math.PI) r += 2 * Math.PI;
-  return round(r, 6) === round(-Math.PI, 6) ? Math.PI : r;
+  // no -0, and one name for a half turn
+  return round(r, 6) === round(-Math.PI, 6) ? Math.PI : r + 0;
 };
 
 interface Edge {
