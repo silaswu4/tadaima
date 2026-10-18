@@ -4,7 +4,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import type { PlanChange, RoomPlan, ValidationResult } from "@/backend/contracts";
-import { applyChanges, costOf, PlanChangeError, passes, validateChanges } from "@/backend/plan/rules";
+import { applyChanges, blocking, costOf, PlanChangeError, validateChanges } from "@/backend/plan/rules";
 
 /**
  * Turns "make it $300 cheaper, keep the sofa, seat 4" into PlanChange[].
@@ -85,6 +85,7 @@ function describe(plan: RoomPlan) {
       category: i.category,
       owned: i.origin === "existing_owned",
       locked: i.locked,
+      putAway: !!i.stored,
       productId: i.productId,
       priceDollars: i.origin === "proposed_purchase" ? priceOf(i.productId) : 0,
       seats: i.seats,
@@ -114,6 +115,7 @@ const SYSTEM = `You plan furniture changes for one room. You get the current pla
 
 Hard rules, checked by code after you answer:
 - Locked items never change: no replace, remove, move, or unlock unless the shopper explicitly asks to unlock that item.
+- Items with putAway: true are in the shopper's inventory, not in the room: they take no space, seat nobody and aren't being bought. Only touch them if asked.
 - Every item stays fully inside the room polygon, with at least clearanceMeters between any two non-rug items' footprints.
 - Total seats (sum of item seats) stays at or above minimumSeats.
 - New purchases (priceDollars of non-owned items) stay within budgetDollars.
@@ -173,7 +175,7 @@ export async function planChanges(plan: RoomPlan, intent: string, selectedItemId
     last = { changes, result, validations, summary: out.summary, feasible: out.feasible, attempts: attempt };
 
     const failures = validations.filter((v) => v.status === "fail");
-    if (!problem && (passes(validations) || (!out.feasible && changes.length === 0))) return last;
+    if (!problem && (blocking(plan, changes, result, validations).length === 0 || (!out.feasible && changes.length === 0))) return last;
 
     // hand the failures back and let it fix its own answer
     messages.push({ role: "assistant", content: response.content });

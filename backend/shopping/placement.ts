@@ -36,6 +36,8 @@ export interface PlaceOptions {
   stepM?: number;
   /** On a miss, also search the whole room for the nearest pose that fits. Default true. */
   fallback?: boolean;
+  /** Only slide, never turn: for a piece held in the shopper's hand. */
+  keepFacing?: boolean;
 }
 
 export const WALL_BACKED = new Set<FurnitureCategory>(["sofa", "storage", "desk", "bed"]);
@@ -140,7 +142,7 @@ export function placeAt(
   const gap = plan.constraints.clearance / 2;
   const obstacles = solid
     ? plan.items
-        .filter((i) => i.id !== opts.ignoreItemId && i.roomId === room.id && i.dimensions && !NO_FOOTPRINT.has(i.category))
+        .filter((i) => i.id !== opts.ignoreItemId && !i.stored && i.roomId === room.id && i.dimensions && !NO_FOOTPRINT.has(i.category))
         .map((i) => footprint(i, gap)!)
     : [];
 
@@ -159,6 +161,8 @@ export function placeAt(
     { r: wrap(base - Math.PI / 2), penalty: wallBacked ? 0.6 : 0.15, depth: w },
     { r: wrap(base + Math.PI), penalty: wallBacked ? 1.5 : 0.3, depth: d },
   ];
+
+  if (opts.keepFacing) turns.splice(1);
 
   const step = opts.stepM ?? 0.05;
   const maxShift = opts.maxShiftM ?? 1.2;

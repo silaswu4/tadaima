@@ -35,6 +35,8 @@ export const PlanChangeSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("replace"), itemId: z.string(), productId: z.string() }),
   z.object({ kind: z.literal("move"), itemId: z.string(), position: vec3, rotationY: z.number() }),
   z.object({ kind: z.literal("lock"), itemId: z.string(), locked: z.boolean() }),
+  z.object({ kind: z.literal("store"), itemId: z.string() }),
+  z.object({ kind: z.literal("take_out"), itemId: z.string(), position: vec3, rotationY: z.number() }),
   z.object({
     kind: z.literal("set_constraints"),
     constraints: z.object({ budget: money.nullable(), minimumSeats: z.number().int().nullable(), clearance: z.number().min(0) }).partial(),

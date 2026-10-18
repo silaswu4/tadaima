@@ -27,7 +27,10 @@ import type {
   ValidationResult,
 } from "@/backend/contracts";
 
+import { dropChange, type DragCheck } from "@/backend/shopping/drag";
+
 export { assetFor, assetTransform, itemAsset } from "@/backend/shopping/assets";
+export { dragCheck, dropChange, inventory, turned } from "@/backend/shopping/drag";
 
 export class ApiError extends Error {
   constructor(
@@ -63,7 +66,13 @@ export function roomClient(projectId: string, opts: { baseUrl?: string; pollMs?:
     /** Move to an exact pose, e.g. at the end of a drag. */
     move: (expectedRevision: number, itemId: string, position: [number, number, number], rotationY: number) =>
       call<ApplyResult>("POST", `${base}/changes`, { expectedRevision, changes: [{ kind: "move", itemId, position, rotationY }] }),
-    /** Move to a spot, adjusted so it fits (snaps to walls, slides clear of other pieces). */
+    /** Let go of a carried piece at the pose `dragCheck` gave; a stored piece comes out of inventory. */
+    drop: (expectedRevision: number, item: { id: string; stored?: boolean }, pose: DragCheck["pose"]) =>
+      call<ApplyResult>("POST", `${base}/changes`, { expectedRevision, changes: [dropChange(item, pose)] }),
+    /** Put a piece away in inventory (locked pieces need unlock). Bring it back with moveTo or drop. */
+    store: (itemId: string, unlock = false) =>
+      call<ApplyResult | { ok: false; reason: "locked"; message: string }>("POST", `${base}/items/${encodeURIComponent(itemId)}/store`, { unlock }),
+    /** Move to a spot, adjusted so it fits (snaps to walls, slides clear of other pieces). Also takes a piece out of inventory. */
     moveTo: (itemId: string, spot: FloorSpot, unlock = false) => call<PlaceResult>("POST", `${base}/items/${encodeURIComponent(itemId)}/move-to`, { spot, unlock }),
 
     /** Natural-language change ("make it $300 cheaper"). Nothing changes until `apply`. */

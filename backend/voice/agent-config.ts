@@ -22,6 +22,7 @@ Shopping for a spot ("I want a couch under $300 that fits here"):
 - When they pick one ("the first one", "the cheaper one"), call place_product with its number. Only say it's in the room and the cart after it returns ok. If it's refused for budget, say by how much and offer to raise the budget or swap something out (propose_change).
 - check_search re-reads the latest search if they ask what else came up.
 - To move a piece to where they're looking, call move_here with the item's id from get_room. If it's locked, ask first, then call again with unlock true.
+- "Put it away", "get it out of here", "store it": call put_away. It goes to their inventory, off the floor and out of the cart. "Bring it back here" is move_here on the stored item.
 - Only say something fits if a tool said so.
 
 Honesty about results:
@@ -96,12 +97,26 @@ export const voiceAgentConfig = {
           {
             type: "client",
             name: "move_here",
-            description: "Move a piece in the room to the spot the shopper is looking at, adjusted so it fits.",
+            description: "Move a piece to the spot the shopper is looking at, adjusted so it fits. Also brings a piece back out of inventory.",
             parameters: {
               type: "object",
               properties: {
                 item_id: str("Item id from get_room"),
                 unlock: { type: "boolean", description: "True only after the shopper said it's okay to move a locked piece" },
+              },
+              required: ["item_id"],
+            },
+            expects_response: true,
+          },
+          {
+            type: "client",
+            name: "put_away",
+            description: "Put a piece away in the shopper's inventory: off the floor, seats nobody, and out of the cart if it was a purchase. Bring it back with move_here.",
+            parameters: {
+              type: "object",
+              properties: {
+                item_id: str("Item id from get_room"),
+                unlock: { type: "boolean", description: "True only after the shopper said it's okay to put away a locked piece" },
               },
               required: ["item_id"],
             },
