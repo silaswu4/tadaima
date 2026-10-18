@@ -145,16 +145,6 @@ export function projectEyes(g: Gaze, r: number, split: number): [Projected, Proj
 /* ---------- face markup (source: lib/face.ts) ---------- */
 
 const INK = "#1d140d";
-// the head is ink, so the mouth is drawn in cream to read against it
-const CREAM = "#fbf3e6";
-
-const MOUTHS: Record<Mouth, string> = {
-  smile: `<path d="M-.2 0Q0 .16 .2 0" fill="none" stroke="${CREAM}" stroke-width=".07" stroke-linecap="round"/>`,
-  grin: `<path d="M-.24-.02Q0 .26 .24-.02Z" fill="${CREAM}" stroke="${CREAM}" stroke-width=".04" stroke-linejoin="round"/>`,
-  laugh: `<path d="M-.26-.03Q0 .36 .26-.03Z" fill="${CREAM}" stroke="${CREAM}" stroke-width=".04" stroke-linejoin="round"/><path d="M-.11 .14Q0 .07 .11 .14Q0 .2-.11 .14Z" fill="#f07a8a"/>`,
-  o: `<ellipse cx="0" cy=".05" rx=".07" ry=".085" fill="${CREAM}"/>`,
-  flat: `<path d="M-.15 .04H.15" fill="none" stroke="${CREAM}" stroke-width=".07" stroke-linecap="round"/>`,
-};
 
 /**
  * Inner svg markup for the face. r is the head radius, blink is lid openness (0..1),
@@ -180,9 +170,8 @@ export function faceMarkup(x: Expression, o: { r: number; blink: number; ox: num
     const ey = p.y + o.oy;
     const alpha = clamp(p.depth / 0.12);
     placed.push({ x: ex, y: ey, alpha });
-    // eyes a touch bigger than the source: the tour mascot is drawn small
-    const w = shape.w * o.r * 1.22;
-    const h = shape.h * o.r * 1.22;
+    const w = shape.w * o.r;
+    const h = shape.h * o.r;
     const rx = Math.max(w / 2, h * 0.4);
     const ry = (h / 2) * 0.92;
     // pupils drift toward where the eye sits on the head, which is where it looks
@@ -203,27 +192,10 @@ export function faceMarkup(x: Expression, o: { r: number; blink: number; ox: num
     s +=
       `<g transform="matrix(${r2(ux)},${r2(uy * open)},${r2(vx)},${r2(vy * open)},${r2(ex)},${r2(ey)})" opacity="${r2(alpha)}">` +
       `<clipPath id="${clip}"><ellipse rx="${r2(rx)}" ry="${r2(ry)}"/></clipPath>` +
-      `<ellipse rx="${r2(rx)}" ry="${r2(ry)}" fill="#fff"/>` +
+      // the head is white, so the eye white gets a faint rim to keep its shape
+      `<ellipse rx="${r2(rx)}" ry="${r2(ry)}" fill="#fff" stroke="${INK}" stroke-opacity=".14" stroke-width="${r2(Math.min(rx, ry) * 0.12)}"/>` +
       `<g clip-path="url(#${clip})"><circle cx="${r2(px)}" cy="${r2(py)}" r="${r2(pr)}" fill="${INK}"/>` +
       `<circle cx="${r2(px - pr * 0.32)}" cy="${r2(py - pr * 0.36)}" r="${r2(pr * 0.3)}" fill="#fff"/></g></g>`;
   });
-  if (placed.length === 2) {
-    const [l, r] = placed[0].x <= placed[1].x ? placed : [placed[1], placed[0]];
-    const ux = r.x - l.x;
-    const uy = r.y - l.y;
-    const D = Math.hypot(ux, uy);
-    if (D > 2) {
-      const alpha = r2(Math.min(l.alpha, r.alpha));
-      const angle = r2((Math.atan2(uy, ux) * 180) / Math.PI);
-      for (const [k, p] of [l, r].entries()) {
-        const bx = p.x - uy * 0.36 + (k ? 1 : -1) * ux * 0.08;
-        const by = p.y + ux * 0.36 + (k ? 1 : -1) * uy * 0.08;
-        s += `<ellipse cx="${r2(bx)}" cy="${r2(by)}" rx="${r2(D * 0.16)}" ry="${r2(D * 0.09)}" transform="rotate(${angle} ${r2(bx)} ${r2(by)})" fill="#ff8fa3" opacity="${r2(alpha * 0.55)}"/>`;
-      }
-      const mx = (l.x + r.x) / 2 - uy * 0.62;
-      const my = (l.y + r.y) / 2 + ux * 0.62;
-      s += `<g transform="matrix(${r2(ux)},${r2(uy)},${r2(-uy)},${r2(ux)},${r2(mx)},${r2(my)})" opacity="${alpha}">${MOUTHS[x.mouth]}</g>`;
-    }
-  }
   return s;
 }

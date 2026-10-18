@@ -34,6 +34,9 @@ type Props = {
 const R = 50; // head radius in svg units
 const CY = 8; // head centre
 const INK = "#1d140d";
+/** The bot is white; its outline and limbs carry a soft warm grey so it reads on light rooms. */
+const BODY = "#fbfaf7";
+const EDGE = "rgba(29, 20, 13, 0.16)";
 const AMBER = "#f0b429";
 const CONFETTI = ["#f0b429", "#e8483f", "#3ecf8e", "#3b93f0", "#ff7d93", "#8b5cf6"];
 const EXPRESSION_FOR: Record<Gesture, ExpressionId> = { idle: "neutral", wave: "happy", point: "neutral", celebrate: "excited", think: "curious" };
@@ -288,26 +291,26 @@ export const Mascot = forwardRef<MascotHandle, Props>(function Mascot({ gesture,
     <svg className={className} width={size} height={size} viewBox="-80 -80 160 160" aria-hidden="true" focusable="false" overflow="visible">
       <defs>
         <radialGradient id={`${uid}-sheen`} cx="0.34" cy="0.26" r="0.75">
-          <stop offset="0" stopColor="#fff" stopOpacity={0.16} />
-          <stop offset="0.55" stopColor="#fff" stopOpacity={0.03} />
-          <stop offset="1" stopColor="#000" stopOpacity={0.18} />
+          <stop offset="0" stopColor="#fff" stopOpacity={0.9} />
+          <stop offset="0.55" stopColor="#fff" stopOpacity={0} />
+          <stop offset="1" stopColor="#5b4532" stopOpacity={0.16} />
         </radialGradient>
       </defs>
       <g ref={confettiRef} />
       <g ref={rootRef}>
         {/* antenna and arms sit behind the head */}
-        <path ref={antennaRef} fill="none" stroke={INK} strokeWidth={5} strokeLinecap="round" />
+        <path ref={antennaRef} fill="none" stroke="#d9d3ca" strokeWidth={5} strokeLinecap="round" />
         <g ref={bulbRef}>
           <circle r={8} fill={AMBER} />
           <circle cx={-2.6} cy={-2.8} r={2.4} fill="#fff" opacity={0.75} />
         </g>
         <g ref={armLRef}>
-          <rect x={-7} y={-6} width={14} height={32} rx={7} fill={INK} />
+          <rect x={-7} y={-6} width={14} height={32} rx={7} fill={BODY} stroke={EDGE} strokeWidth={1.5} />
         </g>
         <g ref={armRRef}>
-          <rect x={-7} y={-6} width={14} height={32} rx={7} fill={INK} />
+          <rect x={-7} y={-6} width={14} height={32} rx={7} fill={BODY} stroke={EDGE} strokeWidth={1.5} />
         </g>
-        <circle cx={0} cy={CY} r={R} fill={INK} />
+        <circle cx={0} cy={CY} r={R} fill={BODY} stroke={EDGE} strokeWidth={1.5} />
         {/* soft sheen so the head reads as round */}
         <circle cx={0} cy={CY} r={R} fill={`url(#${uid}-sheen)`} />
         <g ref={faceRef} />
