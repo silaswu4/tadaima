@@ -24,6 +24,15 @@ interface Brief {
 
 const TERMINAL = new Set(["succeeded", "failed", "cancelled"]);
 
+function applyMessage(r: ApplyResult | null, error: string | null): { kind: "ok" | "err"; text: string } {
+  if (!r) return { kind: "err", text: `Request failed: ${error}` };
+  if (r.ok) return { kind: "ok", text: `Applied. Now at revision ${r.plan.revision}.` };
+  if (r.reason === "stale_revision")
+    return { kind: "err", text: `stale_revision: the room changed since this was planned (server is at revision ${r.currentRevision}). Propose again.` };
+  const fails = r.validations.filter((v) => v.status === "fail").map((v) => v.message);
+  return { kind: "err", text: `validation_failed: ${fails.join(" ") || "a check did not pass"}` };
+}
+
 export function DevConsole() {
   const [projectId, setProjectId] = useState("proj_dev");
   const [draftId, setDraftId] = useState("proj_dev");
@@ -103,17 +112,7 @@ export function DevConsole() {
   }
 
   function onApply(r: ApplyResult | null, error: string | null) {
-    if (!r) return setNotice({ kind: "err", text: `Request failed: ${error}` });
-    if (r.ok) setNotice({ kind: "ok", text: `Applied. Now at revision ${r.plan.revision}.` });
-    else if (r.reason === "stale_revision") setNotice({ kind: "err", text: `stale_revision: the server is at revision ${r.currentRevision}. Refresh and try again.` });
-    else
-      setNotice({
-        kind: "err",
-        text: `validation_failed: ${r.validations
-          .filter((v) => v.status === "fail")
-          .map((v) => v.message)
-          .join(" ")}`,
-      });
+    setNotice(applyMessage(r, error));
   }
 
   return (
@@ -363,6 +362,23 @@ function ItemCard({
     };
   }, [base, itemId, inLive, livePlan.revision]);
 
+  // reopen the last research job for this item after a page reload
+  const jobKey = `devconsole:job:${base}:${itemId}`;
+  useEffect(() => {
+    let saved: string | null = null;
+    try {
+      saved = sessionStorage.getItem(jobKey);
+    } catch {}
+    if (!saved) return;
+    let stale = false;
+    void api<Job<ResearchJobOutput>>("GET", `${base}/jobs/${saved}`).then((r) => {
+      if (!stale && r.ok && r.data) setJob((j) => j ?? r.data);
+    });
+    return () => {
+      stale = true;
+    };
+  }, [base, jobKey]);
+
   const jobId = job?.id;
   const jobDone = job ? TERMINAL.has(job.state) : true;
   useEffect(() => {
@@ -397,8 +413,12 @@ function ItemCard({
     setJobErr(null);
     setJob(null);
     const r = await api<Job<ResearchJobOutput>>("POST", `${base}/research`, { itemId, request: request.trim() || null, merchant });
-    if (r.ok && r.data) setJob(r.data);
-    else setJobErr(r.error);
+    if (r.ok && r.data) {
+      setJob(r.data);
+      try {
+        sessionStorage.setItem(jobKey, r.data.id);
+      } catch {}
+    } else setJobErr(r.error);
   }
 
   const out = job?.output;
@@ -549,6 +569,7 @@ function RequestCard({
   const [pending, setPending] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [applying, setApplying] = useState(false);
+  const [applyMsg, setApplyMsg] = useState<{ id: string; kind: "ok" | "err"; text: string } | null>(null);
 
   async function propose() {
     if (!intent.trim()) return;
@@ -565,6 +586,7 @@ function RequestCard({
     setApplying(true);
     const r = await api<ApplyResult>("POST", `${base}/proposals/${proposal.id}/apply`, { expectedRevision: proposal.baseRevision });
     setApplying(false);
+    setApplyMsg({ id: proposal.id, ...applyMessage(r.data, r.error) });
     await onApplied(r.data, r.error);
   }
 
@@ -634,6 +656,9 @@ function RequestCard({
             <div className="mb-1 text-xs font-medium text-zinc-500">Validations</div>
             <ValidationList vs={proposal.validations} />
           </div>
+          {applyMsg?.id === proposal.id && (
+            <p className={`rounded-md px-2 py-1.5 text-sm ${applyMsg.kind === "ok" ? "bg-emerald-50 text-emerald-800" : "bg-red-50 text-red-800"}`}>{applyMsg.text}</p>
+          )}
           <div className="flex gap-2">
             <button className="btn btn-primary" disabled={applying || proposal.changes.length === 0} onClick={apply}>
               {applying ? "Applying..." : "Apply"}
