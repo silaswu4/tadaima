@@ -166,13 +166,10 @@ export default function Home() {
       >
         <div className="hero-side">
           <ul className="hero-list">
-            {ROWS.map((row, i) => (
+            {ROWS.map((row) => (
               <li key={row.key} className="hero-row">
                 {row.key === "type" && open === "type" ? (
                   <form className="hero-row__inner is-form" onSubmit={submitAddress}>
-                    <span className="hero-row__index" aria-hidden="true">
-                      {String(i + 1).padStart(2, "0")}
-                    </span>
                     <span className="hero-row__field">
                       <label htmlFor="hero-address" hidden>
                         Address
@@ -200,7 +197,7 @@ export default function Home() {
                   </form>
                 ) : row.key === "demo" ? (
                   <WipeLink href="/rooms" className="hero-row__inner">
-                    <RowText row={row} index={i + 1} />
+                    <RowText row={row} />
                   </WipeLink>
                 ) : (
                   <button
@@ -209,7 +206,7 @@ export default function Home() {
                     onClick={row.key === "scan" ? showScan : showType}
                     aria-expanded={row.key === "scan" ? open === "scan" : undefined}
                   >
-                    <RowText row={row} index={i + 1} />
+                    <RowText row={row} />
                   </button>
                 )}
               </li>
@@ -255,12 +252,9 @@ export default function Home() {
   );
 }
 
-function RowText({ row, index }: { row: Row; index: number }) {
+function RowText({ row }: { row: Row }) {
   return (
     <>
-      <span className="hero-row__index" aria-hidden="true">
-        {String(index).padStart(2, "0")}
-      </span>
       <span className="hero-row__text">
         <span className="hero-row__label">
           {row.label}

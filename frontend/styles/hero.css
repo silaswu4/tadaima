@@ -53,14 +53,6 @@
   cursor: pointer;
 }
 .tadaima-hero .hero-row__inner:focus-visible { outline: 1px solid var(--hero-fg); outline-offset: 8px; }
-.tadaima-hero .hero-row__index {
-  flex: 0 0 22px;
-  font-size: 12px;
-  line-height: 16px;
-  letter-spacing: 0.04em;
-  color: var(--hero-muted);
-  font-variant-numeric: tabular-nums;
-}
 .tadaima-hero .hero-row__text { display: flex; flex-direction: column; gap: 6px; }
 .tadaima-hero .hero-row__label {
   display: inline-flex;
@@ -126,7 +118,6 @@
 .tadaima-hero .hero-row__go:focus-visible { text-decoration: underline; outline: none; }
 
 .tadaima-hero .hero-error {
-  padding-left: 40px;
   font-size: 13px;
   line-height: 18px;
   color: var(--hero-sun);
@@ -136,7 +127,6 @@
   flex-direction: column;
   gap: 10px;
   align-items: flex-start;
-  padding-left: 40px;
 }
 .tadaima-hero .hero-qr .code { padding: 8px; line-height: 0; background: var(--hero-fg); }
 .tadaima-hero .hero-qr .code img { display: block; width: 132px; height: 132px; }
