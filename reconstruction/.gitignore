@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+output/
+*.blend
+*.blend1
+*.glb
+*.log

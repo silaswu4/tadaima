@@ -1,6 +1,6 @@
 # Proposed data model and contracts
 
-**Status:** A recommended implementation contract. A small browser-safe starting subset now exists in [`backend/contracts.ts`](../backend/contracts.ts), with a worker adapter in [`reconstruction/contracts.ts`](../reconstruction/contracts.ts). These are compile-time scaffolding, not runtime validation, endpoints, persistence tables, or a complete implementation of this proposal. Coordinate changes through the [team boundaries](team-ownership.md).
+**Status:** A recommended application data model. A small browser-safe subset exists in [`backend/contracts.ts`](../backend/contracts.ts). Reconstruction now has [runtime geometry validation and generation](../reconstruction/README.md), a [manifest contract](../reconstruction/contracts.ts), and a Node adapter. That is not a complete implementation of the shopping model, API, or persistence layer. Coordinate changes through the [team boundaries](team-ownership.md).
 
 ## Conventions
 
@@ -57,6 +57,8 @@ All IDs, timestamps, and values in examples here are synthetic. No example repre
 ## Geometry
 
 A room shell should have a closed floor polygon, wall segments with stable IDs, and openings referenced to their parent wall. For a simple first room, wall height and thickness can be consistent defaults, but defaults must remain labeled. Complex apartments need shared boundary rules instead of overlapping independent walls.
+
+The implemented shell worker currently treats wall segments and room floor polygons as **centerline boundaries**, with half the wall thickness on each side. Net interior clearance is smaller. Upstream capture/plan extraction must convert measured clear dimensions deliberately; downstream fit checks must account for actual wall solids. See [the concrete geometry semantics](../reconstruction/README.md#geometry-contract).
 
 Recommended geometry fields:
 

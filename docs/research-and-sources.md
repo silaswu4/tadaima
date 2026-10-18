@@ -1,8 +1,8 @@
 # Research and Sources
 
-Research consolidated: **October 17, 2026**. This register captures the public evidence used during product research. It is not a statement that every integration is implemented, available to our account, or tested on team hardware. Recheck deadlines, eligibility, API versions, pricing, access, and licenses before depending on them.
+Research consolidated October 17, with native-capture references updated **October 18, 2026**. This register captures the public evidence used during product research. It is not a statement that every integration is implemented, available to our account, or tested on team hardware. Recheck deadlines, eligibility, API versions, pricing, access, and licenses before depending on them.
 
-The conversation contains three types of material: explicit user requirements, research findings from public sources, and proposed product extensions. Source links establish capabilities and constraints; they do not turn a proposal into an approved feature. The latest user requirement is web only, using iPhone web capture and Meta Quest 3S as an optional immersive surface.
+The conversation contains three types of material: explicit user requirements, research findings from public sources, and proposed product extensions. Source links establish capabilities and constraints; they do not turn a proposal into an approved feature. The user has now approved an optional thin SwiftUI/RoomPlan capture companion for iPhone 14 Pro. Shopping, design, and Meta Quest 3S remain web-based; address research and browser-photo capture remain available without tape measurements.
 
 ## Evidence and uncertainty rules
 
@@ -102,7 +102,11 @@ See [Capture and Reconstruction](capture-and-reconstruction.md) for the proposed
 
 - [WebKit MediaRecorder](https://webkit.org/blog/11353/mediarecorder-api/): Safari media capture baseline; feature-detect formats and test actual devices.
 - [WebKit iPhone WebXR issue](https://bugs.webkit.org/show_bug.cgi?id=309550): evidence against treating iPhone immersive WebXR as a supported baseline. visionOS support does not establish iPhone support.
-- [Apple RoomPlan](https://developer.apple.com/augmented-reality/roomplan/) and [multiroom scanning](https://developer.apple.com/documentation/roomplan/scanning-the-rooms-of-a-single-structure): native framework capabilities, outside the present web-only implementation.
+- [Apple RoomPlan](https://developer.apple.com/augmented-reality/roomplan/) and [multiroom scanning](https://developer.apple.com/documentation/roomplan/scanning-the-rooms-of-a-single-structure): capabilities behind the approved optional native capture input; they do not make Safari a RoomPlan scanner. See [native scan status](native-scan.md) for implementation versus physical-device evidence.
+- [Apple's official RoomCaptureView sample](https://developer.apple.com/documentation/roomplan/create-a-3d-model-of-an-interior-room-by-guiding-the-user-through-an-ar-experience): requires a physical LiDAR device. Simulator/build success does not verify scanning.
+- [Surface polygon corners](https://developer.apple.com/documentation/roomplan/capturedroom/surface/polygoncorners) and [parent identifiers](https://developer.apple.com/documentation/roomplan/capturedroom/surface/parentidentifier): corners use local plane coordinates; the parent associates an opening/window with its wall. Import must preserve transforms and identity rather than guessing screen-space geometry.
+- [Apple DTS clarification on wall surfaces](https://developer.apple.com/forums/thread/837547): Apple staff confirms that RoomPlan returns estimated planes without wall thickness or an interior/exterior designation. Any added wall thickness and extrusion convention are modeling assumptions, not sensor measurements or guaranteed inward normals.
+- [RoomCaptureView processing delegate](https://developer.apple.com/documentation/roomplan/roomcaptureviewdelegate) and [WWDC23 enhancements](https://developer.apple.com/videos/play/wwdc2023/10192/): use the final processed result, not an intermediate rectangle or stale scan; local multiroom scans need a common AR session or relocalization before merging.
 - [Apple Quick Look](https://developer.apple.com/quick-look-gallery/) and [model-viewer AR examples](https://modelviewer.dev/examples/augmentedreality/index.html): viewing handoffs and distinct rendering modes; not a semantic room-scanning API.
 - [Google WebXR requirements](https://developers.google.com/ar/develop/webxr/requirements), [ARCore comparison](https://developers.google.com/ar/develop/webxr/arcore-comparison), and [Hello WebXR](https://developers.google.com/ar/develop/webxr/hello-webxr): Android/browser capability references. Support varies; Android is not the team's confirmed capture device.
 - [Raw Camera Access specification](https://immersive-web.github.io/raw-camera-access/): proposed/implemented API semantics. A specification is not evidence of support on every target device.
@@ -127,7 +131,7 @@ The user rejected x402 as the project direction. Later research proposed sell-to
 - [SWIG repository](https://github.com/anagrambuild/swig-wallet): alternative delegated-wallet research. Licensing and the complete SDK/infrastructure path require their own evaluation; not selected.
 - [Privy authentication](https://docs.privy.io/authentication), [policy and controls](https://docs.privy.io/security/wallet-infrastructure/policy-and-controls), and [Solana signing](https://docs.privy.io/wallets/using-wallets/solana/sign-a-transaction): possible web wallet integration. Actual account access, controls, and device behavior are unverified.
 - [Phantom Browser SDK](https://docs.phantom.com/sdks/browser-sdk): research found new Portal/Connect application creation paused while existing application IDs could continue. Recheck availability rather than planning around a fresh embedded login.
-- [Phantom connection help](https://help.phantom.com/hc/en-us/articles/29995498642195-Connect-to-apps): mobile connection constraints. An external wallet application or in-app browser can introduce installation and handoff friction despite Tadaima itself being web only.
+- [Phantom connection help](https://help.phantom.com/hc/en-us/articles/29995498642195-Connect-to-apps): mobile connection constraints. An external wallet application or in-app browser can introduce installation and handoff friction in the web shopping experience.
 
 ### Actual merchant rails
 
