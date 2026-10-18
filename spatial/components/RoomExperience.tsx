@@ -18,6 +18,7 @@ type Panel = "catalog" | "basket" | "inventory" | null;
 type Anchor = { x: number; y: number } | null;
 
 const RoomCheckout = dynamic(() => import("./RoomCheckout").then((module) => module.RoomCheckout), { loading: () => <p role="status">Loading checkout…</p> });
+const RoomVoice = dynamic(() => import("./RoomVoice").then((module) => module.RoomVoice), { ssr: false });
 
 const CATEGORY_LABEL: Record<FurnitureCategory, string> = {
   sofa: "Sofas",
@@ -504,6 +505,25 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
     }).catch(() => { if (engine && api() === engine) { engine.cancelProductPreview(); setPending(null); setPendingPlacement(null); } });
   };
   useLayoutEffect(() => { confirmRef.current = confirmProduct; });
+
+  /* --- voice: "here" is the picked floor spot, else where the shopper is looking --- */
+  const voiceJob = useRef<string | null>(null);
+  const voiceSpot = (): FloorSpot | null => {
+    try { return floorSpot ?? api()?.getShoppingSpot() ?? null; } catch { return null; }
+  };
+  const onVoiceShop = (job: Parameters<typeof shopping.showJob>[0]) => {
+    shopping.showJob(job);
+    if (!job.output || voiceJob.current === job.id) return;
+    // first update of a voice search: show its results like a typed one
+    voiceJob.current = job.id;
+    setSwapTarget(null);
+    setCategory(job.output.request.category);
+    setSearchSpot(job.output.request.spot);
+    setPanel("catalog");
+  };
+  const onVoicePlaced = (itemId: string) => {
+    void shopping.refresh().then(() => api()?.select(itemId)).catch(() => undefined);
+  };
   const cancelProduct = () => { api()?.cancelProductPreview(); setPending(null); setPendingPlacement(null); setSwapTarget(null); };
   const safely = (action: () => void) => {
     if (blocked) return;
@@ -701,6 +721,15 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
             {Icon.undo}
             <span className="room-x__tools-text">Undo</span>
           </button>
+          <RoomVoice
+            projectId={shopping.session?.plan.projectId ?? null}
+            getSpot={voiceSpot}
+            getSelectedItemId={() => selected?.id ?? null}
+            onPlanChanged={() => void shopping.refresh().catch(() => undefined)}
+            onShop={onVoiceShop}
+            onPlaced={onVoicePlaced}
+            disabled={presenting}
+          />
           <button
             type="button"
             className="room-x__pill room-x__pill--ink"

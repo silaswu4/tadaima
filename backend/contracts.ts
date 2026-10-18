@@ -200,7 +200,8 @@ export interface PlanProposal {
 export type ApplyResult =
   | { ok: true; plan: RoomPlan }
   | { ok: false; reason: "stale_revision"; currentRevision: number }
-  | { ok: false; reason: "validation_failed"; validations: ValidationResult[] };
+  /** `blocking` names the failures this change caused or worsened; other failing checks were already failing. */
+  | { ok: false; reason: "validation_failed"; validations: ValidationResult[]; blocking?: ValidationResult[] };
 
 // ---------- async jobs ----------
 
@@ -299,7 +300,8 @@ export type PlaceResult =
   | { ok: false; reason: "no_fit"; message: string; nearest: Placement | null }
   | { ok: false; reason: "locked"; message: string }
   | { ok: false; reason: "stale_revision"; currentRevision: number }
-  | { ok: false; reason: "validation_failed"; validations: ValidationResult[] };
+  /** `blocking` names the failures this change caused or worsened; other failing checks were already failing. */
+  | { ok: false; reason: "validation_failed"; validations: ValidationResult[]; blocking?: ValidationResult[] };
 
 // ---------- cart and checkout ----------
 

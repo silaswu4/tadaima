@@ -117,6 +117,13 @@ export function useRoomShopping(options: Options) {
     });
   }, [stopSearch, refresh]);
 
+  /** Show a search someone else is running (the voice agent polls its own), replacing ours. */
+  const showJob = useCallback((next: Job<ShopJobOutput>) => {
+    if (!current.current || next.projectId !== current.current.session.plan.projectId) return;
+    stopSearch();
+    setJob(next);
+  }, [stopSearch]);
+
   const place = useCallback((productId: string, spot: FloorSpot, previewRevision: number, jobId?: string, replaceItemId?: string) => mutate(async (active) => {
     if (previewRevision !== active.session.plan.revision) throw new Error("The room changed. Preview this piece again before confirming.");
     const result = await roomClient(active.session.plan.projectId).place(productId, spot, jobId, previewRevision, replaceItemId);
@@ -129,5 +136,5 @@ export function useRoomShopping(options: Options) {
     return result;
   }), [mutate, apply]);
 
-  return { session, busy, connecting, error, job, connect, disconnect, sync, refresh, search, stopSearch, place };
+  return { session, busy, connecting, error, job, connect, disconnect, sync, refresh, search, stopSearch, showJob, place };
 }
