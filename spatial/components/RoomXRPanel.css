@@ -25,8 +25,11 @@
 .room-x--vr .room-x__title { max-width: 260px; }
 .room-x--vr .room-x__help { width: 38px; padding: 0; }
 /* with a drawer open, the bar's pills sit beside it so every drawer stays one press away */
-.room-x--vr[data-drawer] .room-x__bar { right: calc(var(--drawer) + 8px); grid-template-columns: auto 1fr auto; }
-.room-x--vr[data-drawer] .room-x__title { visibility: hidden; }
+.room-x--vr[data-drawer] .room-x__bar { right: calc(var(--drawer) + 8px); display: flex; justify-content: flex-end; padding-inline: 10px; }
+/* the drawer has its own close, so the mark, title and hide pill make room for the drawer pills */
+.room-x--vr[data-drawer] .room-x__start,
+.room-x--vr[data-drawer] .room-x__title,
+.room-x--vr[data-drawer] [data-xr-id="close"] { display: none; }
 
 /* glass surfaces without backdrop blur */
 .room-x--vr .room-x__carry,
