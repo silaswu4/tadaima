@@ -25,6 +25,7 @@ test("Fetch uses the browser's actual canonical room, sends fitting previews bac
   assert.deepEqual(read.plan.geometry, canonical.geometry);
   assert.equal(read.plan.revision, canonical.revision);
   assert.deepEqual(read.plan.evidence, []);
+  assert.equal((await call(`/api/viz/${id}/r${canonical.revision}.png`)).status, 404);
   assert.equal((await call("/api/projects/proj_demo", "GET", undefined, undefined, binding.token)).status, 404);
   assert.equal((await call(projectPath + "/place", "POST", {}, undefined, binding.token)).status, 403);
   assert.equal((await call(projectPath + "/checkout", "GET", undefined, undefined, binding.token)).status, 403);

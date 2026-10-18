@@ -106,6 +106,7 @@ function db(): Backend {
 
 const planKey = (projectId: string) => `plan:${projectId}`;
 const proposalKey = (projectId: string, id: string) => `proposal:${projectId}:${id}`;
+const revKey = (projectId: string, rev: number) => `planrev:${projectId}:${rev}`;
 
 /** Fixture-backed projects seed themselves on first read. */
 const SEEDS: Record<string, RoomPlan> = { proj_demo: demoPlan, proj_dev: { ...demoPlan, projectId: "proj_dev" } };
@@ -120,7 +121,9 @@ export const persistenceMode = () => process.env.KV_REST_API_URL && process.env.
 
 /** Registration never overwrites an existing canonical plan. */
 export async function createPlan(plan: RoomPlan): Promise<boolean> {
-  return db().setIfAbsent(planKey(plan.projectId), plan);
+  const created = await db().setIfAbsent(planKey(plan.projectId), plan);
+  if (created) await db().set(revKey(plan.projectId, plan.revision), plan);
+  return created;
 }
 
 export async function getPlan(projectId: string): Promise<RoomPlan | null> {
@@ -128,7 +131,7 @@ export async function getPlan(projectId: string): Promise<RoomPlan | null> {
   if (plan) return plan;
   const seed = seedFor(projectId);
   if (!seed) return null;
-  await db().setIfAbsent(planKey(projectId), seed);
+  if (await db().setIfAbsent(planKey(projectId), seed)) await db().set(revKey(projectId, seed.revision), seed);
   return db().get<RoomPlan>(planKey(projectId));
 }
 
@@ -136,12 +139,25 @@ export async function resetPlan(projectId: string): Promise<RoomPlan | null> {
   const seed = seedFor(projectId);
   if (!seed) return null;
   await db().set(planKey(projectId), seed);
+  await db().set(revKey(projectId, seed.revision), seed);
   return structuredClone(seed);
 }
 
 /** Saves `next` as revision expected + 1, unless someone else saved first. */
 export async function savePlan(projectId: string, expectedRevision: number, next: RoomPlan) {
-  return db().casPlan(planKey(projectId), expectedRevision, { ...next, revision: expectedRevision + 1 });
+  const saved = { ...next, revision: expectedRevision + 1 };
+  const result = await db().casPlan(planKey(projectId), expectedRevision, saved);
+  // immutable snapshot so old chat images keep showing the plan they were made for
+  if (result.ok) await db().set(revKey(projectId, saved.revision), saved);
+  return result;
+}
+
+/** The plan as saved at `rev`. Falls back to the current plan for seeded or pre-snapshot revisions. */
+export async function getPlanRevision(projectId: string, rev: number): Promise<RoomPlan | null> {
+  const snap = await db().get<RoomPlan>(revKey(projectId, rev));
+  if (snap) return snap;
+  const cur = await getPlan(projectId);
+  return cur?.revision === rev ? cur : null;
 }
 
 export async function saveProposal(p: PlanProposal) {
@@ -149,6 +165,12 @@ export async function saveProposal(p: PlanProposal) {
 }
 
 /** Small per-project records (checkout state). Keys are namespaced by project. */
+/** Account records (users, sender links, room inventory). */
+export const accountKv = {
+  get: <T>(key: string) => db().get<T>(`acct:${key}`),
+  set: (key: string, value: unknown) => db().set(`acct:${key}`, value),
+};
+
 export const projectKv = {
   get: <T>(projectId: string, name: string) => db().get<T>(`kv:${projectId}:${name}`),
   compareAndSet: <T>(projectId: string, name: string, expected: T | null, next: T) => db().compareAndSet(`kv:${projectId}:${name}`, expected, next),

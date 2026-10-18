@@ -3,7 +3,7 @@
  * check that the answer actually does what was asked. Every case also has to
  * obey the universal rules: a proposal with changes passes every validator,
  * and locked items survive unless the request unlocks them.
- * Costs roughly $0.05 to $0.10 per case.
+ * Costs roughly $0.05 to $0.10 per case. Opt in with E2E_PLANNER=1.
  */
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -132,8 +132,11 @@ const release = () => {
   queue.shift()?.();
 };
 
+// ~$1 of Claude per run, so it only runs when asked
+const SKIP = process.env.E2E_PLANNER !== "1" && "set E2E_PLANNER=1 to run the planner exam (~$1 of Claude)";
+
 for (const c of CASES) {
-  test(`planner: ${c.name}`, { timeout: 3 * 60 * 1000, concurrency: true }, async () => {
+  test(`planner: ${c.name}`, { timeout: 3 * 60 * 1000, concurrency: true, skip: SKIP }, async () => {
     await slot();
     try {
       const a = api(newProjectId());
