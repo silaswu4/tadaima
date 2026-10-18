@@ -123,7 +123,6 @@
 /* ---------- wordmark, bottom left, with the mark in front ---------- */
 .tadaima-hero .hero-word {
   position: absolute;
-  z-index: 2;
   left: var(--hero-left);
   bottom: 0;
   margin: 0;
@@ -137,11 +136,21 @@
   pointer-events: none;
 }
 .tadaima-hero .hero-word__line { display: block; overflow: hidden; padding-top: 0.04em; }
+/* two copies of the word: a fill blended into the room, so the letters glow where the
+   window light lands and the leaf shadows pass through them, and a thin outline on top */
+.tadaima-hero .hero-word__fill { mix-blend-mode: overlay; }
+.tadaima-hero .hero-word__edge {
+  position: absolute;
+  inset: 0;
+  color: transparent;
+  -webkit-text-stroke: 1px rgba(246, 235, 217, 0.7);
+}
+.tadaima-hero .hero-word__edge .hero-word__mark { background: rgba(246, 235, 217, 0.28); }
 .tadaima-hero .hero-word__char { display: inline-block; }
-/* as tall as the ascenders, sat on the baseline, tucked close to the word */
+/* a little under the ascender height, sat on the baseline, tucked close to the word */
 .tadaima-hero .hero-word__mark {
-  width: 0.72em;
-  height: 0.72em;
+  width: 0.64em;
+  height: 0.64em;
   margin-right: 0.03em;
   background: currentColor;
   -webkit-mask: center / contain no-repeat;

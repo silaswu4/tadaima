@@ -97,7 +97,10 @@ export default function Home() {
     if (!revealed || !root.current) return;
     if (reduced) return;
     const ctx = gsap.context(() => {
-      gsap.fromTo(".hero-word__char", { yPercent: 105 }, { yPercent: 0, duration: 1.15, ease: "power4.out", stagger: 0.05, delay: 0.1 });
+      // the fill and the outline are two stacked copies, so they rise together letter by letter
+      for (const layer of [".hero-word__fill", ".hero-word__edge"]) {
+        gsap.fromTo(`${layer} .hero-word__char`, { yPercent: 105 }, { yPercent: 0, duration: 1.15, ease: "power4.out", stagger: 0.05, delay: 0.1 });
+      }
       gsap.fromTo(".hero-row", { y: 14, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: 0.8, ease: "power3.out", stagger: 0.1, delay: 0.45 });
     }, root);
     return () => ctx.revert();
@@ -233,8 +236,12 @@ export default function Home() {
           )}
         </div>
 
-        <h1 className="hero-word" aria-label="tadaima">
-          <span className="hero-word__line" aria-hidden="true">
+      </DappledLight>
+
+      {/* outside the light's own layer so it can blend with it */}
+      <h1 className="hero-word" aria-label="tadaima">
+        {(["fill", "edge"] as const).map((layer) => (
+          <span key={layer} className={`hero-word__line hero-word__${layer}`} aria-hidden="true">
             <span className="hero-word__char hero-word__mark" style={markStyle} />
             {Array.from("tadaima").map((c, i) => (
               <span key={i} className="hero-word__char">
@@ -242,8 +249,8 @@ export default function Home() {
               </span>
             ))}
           </span>
-        </h1>
-      </DappledLight>
+        ))}
+      </h1>
 
       {!loaderGone && <Loader onLift={reveal} onDone={finishLoading} reduced={reduced} />}
     </main>
