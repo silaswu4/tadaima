@@ -261,6 +261,32 @@ class NativeGeometryTests(unittest.TestCase):
         with self.assertRaisesRegex(RoomPlanError, "ambiguous"):
             import_scan(value)
 
+    def test_split_wall_with_sensor_noise_joins_as_one_straight_edge(self):
+        # RoomPlan estimates each piece of a split wall separately in float32, so the
+        # pieces are never exactly collinear. Rejecting them declined real rooms.
+        # Endpoints deliberately do not coincide: real pieces never share an exact point.
+        cases = {"0.5 degree yaw": ([0, 0], [2.5, 0], [2.53, 0.004], [5, 0.0256]),
+                 "1e-4 rad yaw + 4 cm gap": ([0, 0], [2.48, 0], [2.52, 0.0002], [5, 0.0005]),
+                 "1 degree yaw, 2 cm offset": ([0, 0], [2.5, 0], [2.52, 0.02], [5, 0.0633])}
+        for name, (a, b, c, d) in cases.items():
+            with self.subTest(name):
+                value = packet(apertures=False)
+                value["surfaces"][0] = surface("wall-0", a, b)
+                value["surfaces"].append(surface("wall-0-rest", c, d))
+                value["surfaces"][1] = surface("wall-1", [5, d[1]], [5, 4])
+                result = import_scan(rotate_packet(value, 0.7))
+                self.assertEqual(result["request"], validate_request(result["request"]))
+                self.assertEqual(len(result["request"]["geometry"]["walls"]), 5)
+
+    def test_parallel_but_displaced_walls_are_not_merged(self):
+        # A 15 cm step between parallel pieces is a real jog, not sensor noise.
+        value = packet(apertures=False)
+        value["surfaces"][0] = surface("wall-0", [0, 0], [2.5, 0])
+        value["surfaces"].append(surface("wall-0-rest", [2.5, 0.15], [5, 0.15]))
+        value["surfaces"][1] = surface("wall-1", [5, 0.15], [5, 4])
+        with self.assertRaisesRegex(RoomPlanError, "partial/disconnected"):
+            import_scan(value)
+
     def test_opening_orientation_and_plane_mismatch_rejected(self):
         for mode in ("orientation", "plane"):
             with self.subTest(mode=mode):

@@ -1,0 +1,2 @@
+.room-agent-voice__transcript { max-height: 15rem; overflow: auto; display: grid; gap: 0.6rem; padding: 0.8rem; border: 1px solid currentColor; font-size: 0.8rem; line-height: 1.5; overflow-wrap: anywhere; }
+.room-agent-voice__transcript p { margin: 0; }

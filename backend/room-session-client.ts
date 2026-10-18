@@ -2,7 +2,7 @@
 import type { ApplyResult, RoomPlan } from "./contracts";
 import { ApiError } from "./client";
 
-export type RoomCapabilities = { liveSearch: boolean; testPayments: boolean; persistence: "memory" | "redis" };
+export type RoomCapabilities = { liveSearch: boolean; testPayments: boolean; persistence: "memory" | "redis"; planning?: boolean; voice?: boolean };
 export type RegisteredRoom = { plan: RoomPlan; capabilities: RoomCapabilities; resumed: boolean };
 
 async function post<T>(path: string, body: unknown, signal?: AbortSignal): Promise<T> {
@@ -56,5 +56,5 @@ export function localRoomSnapshot(serverPlan: RoomPlan, sourceProjectId: string)
 }
 export function mutationMessage(result: Exclude<ApplyResult, { ok: true }>): string {
   return result.reason === "stale_revision" ? "The room changed on the server. It has been refreshed; please try your edit again."
-    : result.validations.filter((v) => v.status === "fail" || v.status === "unknown").map((v) => v.message).join(" ") || "The server refused this change.";
+    : (result.blocking ?? result.validations.filter((v) => v.status === "fail" || v.status === "unknown")).map((v) => v.message).join(" ") || "The server refused this change.";
 }

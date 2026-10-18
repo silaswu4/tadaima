@@ -36,6 +36,10 @@ MAX_WALLS = 64
 MAX_OPENINGS = 128
 WALL_THICKNESS = 0.12
 JOIN_TOLERANCE = 0.10
+# One physical wall is often split into separately estimated float32 segments
+# that are a fraction of a degree apart; join those as a straight continuation.
+CONTINUATION_ANGLE = math.radians(2)
+CONTINUATION_OFFSET = 0.03
 FLOOR_TOLERANCE = 0.08
 OPENING_TOLERANCE = 0.05
 UPRIGHT_TOLERANCE = 0.01
@@ -245,17 +249,18 @@ def _recover_loop(walls):
         a, b = lines[wall["id"]]
         for other in walls[:index]:
             c, d = lines[other["id"]]
-            intersect = _intersection(a, b, c, d)
+            along, other_along = (b[0] - a[0], b[1] - a[1]), (d[0] - c[0], d[1] - c[1])
+            sine = abs(_cross(along, other_along)) / (math.hypot(*along) * math.hypot(*other_along))
+            # Near-parallel lines meet far away (or nowhere); join them end to end instead.
+            intersect = None if sine <= math.sin(CONTINUATION_ANGLE) else _intersection(a, b, c, d)
             for own_end, own_point in enumerate((a, b)):
                 for other_end, other_point in enumerate((c, d)):
                     point = intersect
                     if point is None:
-                        # Parallel continuation only; nearby parallel displaced
+                        # Straight continuation only; nearby parallel displaced
                         # walls are not silently turned into a large room edge.
-                        length = _distance(a, b)
-                        separation = abs(_cross((b[0] - a[0], b[1] - a[1]),
-                                                (c[0] - a[0], c[1] - a[1]))) / length
-                        if separation > 0.02 or _distance(own_point, other_point) > JOIN_TOLERANCE:
+                        separation = abs(_cross(along, (other_point[0] - a[0], other_point[1] - a[1]))) / math.hypot(*along)
+                        if separation > CONTINUATION_OFFSET or _distance(own_point, other_point) > JOIN_TOLERANCE:
                             continue
                         point = [(own_point[i] + other_point[i]) / 2 for i in (0, 1)]
                     if max(_distance(own_point, point), _distance(other_point, point)) <= JOIN_TOLERANCE:

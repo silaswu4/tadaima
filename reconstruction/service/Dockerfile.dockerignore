@@ -1,0 +1,10 @@
+# Build context is the repository root; send only what the image copies.
+*
+!reconstruction/
+!public/materials/room/
+reconstruction/ios/
+reconstruction/output/
+reconstruction/tests/
+reconstruction/**/__pycache__/
+reconstruction/service/.venv/
+reconstruction/capture/demo/

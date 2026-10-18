@@ -1,4 +1,4 @@
-import type { ApplyResult, Cart, FloorSpot, FurnitureCategory, Job, Mandate, Order, PaymentMethod, PlaceResult, PlanProposal, Recheck, RoomPlan, ShopJobOutput, ShopResult } from "@/backend/contracts";
+import type { ApplyResult, ValidationResult, Cart, FloorSpot, FurnitureCategory, Job, Mandate, Order, PaymentMethod, PlaceResult, PlanProposal, Recheck, RoomPlan, ShopJobOutput, ShopResult } from "@/backend/contracts";
 
 type CheckoutView = { cart: Cart; recheck: Recheck | null; paymentMethods: PaymentMethod[]; mandate: Mandate | null; orders: Order[]; blockers: string[] };
 
@@ -17,6 +17,10 @@ type CheckoutView = { cart: Cart; recheck: Recheck | null; paymentMethods: Payme
  * "[app update] ..." sentence when it lands. Pass that to the conversation's
  * sendUserMessage so the agent tells the shopper without being asked.
  */
+
+/** Only the checks this change broke; others may have been failing already and aren't the reason. */
+const whyBlocked = (r: { validations: ValidationResult[]; blocking?: ValidationResult[] }) =>
+  (r.blocking ?? r.validations.filter((v) => v.status === "fail")).map((v) => v.message).join(" ");
 
 const dollars = (minor: number) => `$${Math.round(minor / 100).toLocaleString("en-US")}`;
 const cm = (m: number) => `${Math.round(m * 100)} cm`;
@@ -71,6 +75,8 @@ export function voiceClientTools(opts: {
   getSpot?: () => FloorSpot | null;
   /** Called with each shopping job as it updates, so the UI can show the options. */
   onShop?: (job: Job<ShopJobOutput>) => void;
+  /** Called after place_product puts a piece in the room (instead of onPlan/onCheckout), e.g. to select it. */
+  onPlaced?: (itemId: string) => void;
   /** Called once when a live search finishes, with a sentence for the agent ("[app update] ..."). */
   onShopUpdate?: (message: string) => void;
   /** Return false once the conversation ends, to stop polling. */
@@ -137,7 +143,8 @@ export function voiceClientTools(opts: {
         const p = await post<PlanProposal>(`${base}/proposals`, { intent: request, selectedItemId: opts.getSelectedItemId() });
         proposals.set(p.id, p);
         opts.onProposal?.(p);
-        const failed = p.validations.filter((v) => v.status === "fail");
+        // only what this proposal would break; a check already failing in the room isn't its fault
+        const failed = p.blocking ?? p.validations.filter((v) => v.status === "fail");
         const diff = p.costBefore.knownSubtotal.amountMinor - p.costAfter.knownSubtotal.amountMinor;
         if (p.changes.length === 0) return `No change proposed. ${p.summary}`;
         return `Proposal ${p.id}. ${p.summary} ${
@@ -184,8 +191,11 @@ export function voiceClientTools(opts: {
       try {
         const res = await post<PlaceResult>(`${base}/place`, { productId: r.product.id, spot: job.output.request.spot, jobId: job.id });
         if (res.ok) {
-          opts.onPlan?.(res.plan);
-          opts.onCheckout?.();
+          if (opts.onPlaced) opts.onPlaced(res.itemId);
+          else {
+            opts.onPlan?.(res.plan);
+            opts.onCheckout?.();
+          }
           const item = res.plan.items.find((i) => i.id === res.itemId)!;
           const total = res.plan.items.reduce((n, i) => n + (i.origin === "proposed_purchase" ? (res.plan.products.find((p) => p.id === i.productId)?.price?.amountMinor ?? 0) : 0), 0);
           const budget = res.plan.constraints.budget;
@@ -194,7 +204,7 @@ export function voiceClientTools(opts: {
         if (res.reason === "no_fit") return `Not placed: ${res.message}`;
         if (res.reason === "stale_revision") return "Not placed: the room just changed. Try again.";
         if (res.reason === "validation_failed")
-          return `Not placed: ${res.validations.filter((v) => v.status === "fail").map((v) => v.message).join(" ")} Offer to raise the budget or drop something to make room.`;
+          return `Not placed: ${whyBlocked(res)} Offer to raise the budget or drop something to make room.`;
         return `Not placed: ${res.message}`;
       } catch (e) {
         return `Not placed: ${(e as Error).message}`;
@@ -213,7 +223,7 @@ export function voiceClientTools(opts: {
         if (res.reason === "locked") return `Not moved: ${res.message} Ask the shopper if it's okay to move it, then call again with unlock true.`;
         if (res.reason === "no_fit") return `Not moved: ${res.message}`;
         if (res.reason === "stale_revision") return "Not moved: the room just changed. Try again.";
-        return `Not moved: ${res.validations.filter((v) => v.status === "fail").map((v) => v.message).join(" ")}`;
+        return `Not moved: ${whyBlocked(res)}`;
       } catch (e) {
         return `Not moved: ${(e as Error).message}`;
       }
@@ -234,7 +244,7 @@ export function voiceClientTools(opts: {
         }
         if (res.reason === "locked") return `Not put away: ${res.message} Ask the shopper if that's okay, then call again with unlock true.`;
         if (res.reason === "stale_revision") return "Not put away: the room just changed. Try again.";
-        return `Not put away: ${res.validations.filter((v) => v.status === "fail").map((v) => v.message).join(" ")}`;
+        return `Not put away: ${whyBlocked(res)}`;
       } catch (e) {
         return `Not put away: ${(e as Error).message}`;
       }
@@ -281,7 +291,7 @@ export function voiceClientTools(opts: {
           return "ok: the room is updated.";
         }
         if (r.reason === "stale_revision") return "Not applied: the room changed since this was planned. Ask me to plan it again.";
-        return `Not applied: ${r.validations.filter((v) => v.status === "fail").map((v) => v.message).join(" ")}`;
+        return `Not applied: ${whyBlocked(r)}`;
       } catch (e) {
         return `Not applied: ${(e as Error).message}`;
       }

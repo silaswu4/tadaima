@@ -13,7 +13,7 @@ import { block, rug, standingLamp, surface } from "./parts";
 import { createRoomLighting, setMetricSurfaceUVs } from "./lighting";
 import { createIndoorLighting, fitRoomShadow } from "./indoor-lighting";
 import { applyBakedIndirect, bakedPoseMatches, FULL_DIFFUSE_PROFILE, ownBakedIndirectMaterials, setBakedIndirectEnabled } from "./baked-indirect";
-import { prepareWindowGlass } from "./window-glass";
+import { createWindowBlinds, createWindowDaylightBackground, prepareWindowGlass } from "./window-glass";
 import { createShadowCache } from "./shadow-cache";
 import { createFurnitureProxy, placeFurnitureModel } from "./furniture-model";
 import { galleryPart } from "./gallery-parts";
@@ -180,6 +180,9 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(BACKGROUND);
+  const presentationBackground = scene.background;
+  let windowBackground: THREE.DataTexture | null = null;
+  let windowBlinds: ReturnType<typeof createWindowBlinds> | null = null;
   const lighting = createRoomLighting(renderer, scene, lite);
   const hemisphere = new THREE.HemisphereLight("#eef2ff", "#b6a48c", 0.55);
   scene.add(hemisphere);
@@ -443,7 +446,9 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
     const bakedMeshes = applyBakedIndirect(gltf.scene);
     const bound = prepareWalkSource(bindTexturedRoom(gltf.scene, source.plan, source.binding));
     scene.add(bound.shell); allRoots.add(bound.shell);
-    prepareWindowGlass(bound.shell);
+    if (prepareWindowGlass(bound.shell) > 0) windowBackground = createWindowDaylightBackground();
+    windowBlinds = createWindowBlinds(bound.shell);
+    setWindowBlindsRaised(true);
     for (const [id, object] of bound.templates) { sourceTemplates.set(id, object); allRoots.add(object); }
     for (const floor of floorMeshes) (floor.material as THREE.Material).visible = false;
     for (const mesh of wallMeshes) mesh.visible = false;
@@ -978,12 +983,22 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
 
   function applyWallMode() {
     const orbit = mode === "orbit";
+    scene.background = !orbit && windowBackground ? windowBackground : presentationBackground;
+    ground.visible = orbit || !windowBackground;
     for (const wall of wallViews) {
       for (const material of wall.materials) applyWalkCutaway(material, false);
       for (const mesh of wall.meshes) mesh.castShadow = true;
     }
     for (const ceiling of ceilings) ceiling.visible = !orbit && !environment;
     pickDirty = true;
+  }
+
+  function setWindowBlindsRaised(raised: boolean) {
+    if (disposed || !windowBlinds?.count) return;
+    windowBlinds.setRaised(raised);
+    shadowCache.invalidate();
+    pickDirty = true;
+    callbacks.onWindowBlindsChange?.(raised);
   }
 
   function resize() {
@@ -1811,6 +1826,7 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
     lighting.dispose();
     indoorLighting?.dispose();
     shadowCache.dispose();
+    windowBackground?.dispose();
     const roots: THREE.Object3D[] = [scene, ...allRoots];
     for (const op of undoStack) {
       if (op.kind === "remove") roots.push(op.entry.root);
@@ -1849,6 +1865,7 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
     undo,
     canUndo: () => undoStack.length > 0,
     setMode,
+    setWindowBlindsRaised,
     lockPointer: requestLock,
     setMoveInput,
     xrSupported,

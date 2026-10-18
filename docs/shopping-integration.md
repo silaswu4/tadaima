@@ -11,6 +11,8 @@ Add credentials to the checkout’s ignored `.env.local`, then restart the devel
 | Variable | Purpose | Without it |
 | --- | --- | --- |
 | `BROWSER_USE_API_KEY` | Browser Use Cloud searches retailer pages. | Observed catalog search still works; live browsing is visibly unavailable. |
+| `ANTHROPIC_API_KEY` | Natural-language room proposals. | The assistant keeps catalog search available and explains that room planning is unavailable. |
+| `ELEVENLABS_API_KEY` and `ELEVENLABS_AGENT_ID` | Optional in-room voice conversation using the existing agent configuration. | Text and touch remain available; microphone controls stay unavailable. |
 | `STRIPE_SECRET_KEY` | Stripe **test** payments. Only `sk_test_` / `rk_test_` keys are accepted. | Test card connection and payment remain unavailable. |
 | `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` or `STRIPE_PUBLISHABLE_KEY` | Optional publishable test key for the existing Stripe card setup interface. | The in-room test Visa shortcut only needs a configured test secret key. |
 | `KV_REST_API_URL` and `KV_REST_API_TOKEN` | Upstash persistence for canonical plans, jobs, sessions and checkout state. | Development uses process memory; production refuses to run the store without persistence. |
@@ -39,6 +41,20 @@ The native scanner and private local capture bridge retain their separate setup 
 Returning to the gallery, reopening the same room or refreshing resumes its server project while the browser session cookie remains valid. Other room IDs keep separate plans, baskets, approvals and orders.
 
 ## Session and source boundaries
+
+### In-room assistant
+
+**Ask Tadaima** opens the assistant inside the selected room. **Find furniture** uses the same spot, catalog/live research job, fit results, product preview and explicit placement confirmation as Add furniture. The category, price cap and retailer remain explicit; descriptive text is passed through to the research agent. Catalog observations are never described as a completed live search.
+
+**Change the room** sends a bounded natural-language request and the selected item to the existing planner. It displays proposed changes, before/after known purchase cost, unknown prices and failed/unknown room checks. Nothing changes until **Apply changes** is selected. Cross-room, empty, newly blocked and stale proposals are refused. Existing scan warnings remain visible and use the backend’s non-worsening validation policy; a revision conflict refreshes the canonical room. Accepted changes update the same viewer, browser draft and basket through `useRoomShopping`'s serialized mutation queue.
+
+The room’s **Talk** pill is the single voice entry point. Its SDK session loads after the user selects it; microphone access is never requested during room startup. It uses the current room, selection and floor spot. Search results can be spoken as they arrive. Voice can move or store unlocked pieces through the same mutation queue; it cannot unlock protected furniture, approve proposals, confirm purchase placements or execute payments. Those actions stay on screen. The same voice session stays active across assistant panels and furniture previews. **Stop voice**, a room change or room teardown ends the conversation and rejects late tools. A visible transcript contains user/assistant speech rather than raw tool arguments, and the primary pill retains its sound-reactive animation and working state. The token route reports exhausted ElevenLabs credits explicitly.
+
+Server registration reports provider availability as booleans; credentials remain server-side. Set the variables above and restart the server to enable configured providers. After adding ElevenLabs credentials, synchronize the checked-in screen-review tool instructions with `npx tsx --env-file=.env.local backend/voice/setup-agent.ts`; this updates the configured agent (or creates it if no agent ID is set). A rendered control or a mocked tool test does not establish a successful live provider call. Physical Quest microphone behavior remains unverified.
+
+The Fetch agent and its visualization/payment extensions are currently on separate branches. They are not wired to the browser's private scanned-room session. They need scoped room pairing before external chat can operate on that room; merging their code alone does not grant that access.
+
+### Private room identity
 
 `POST /api/room-sessions` registers a bounded metric `RoomPlan` and a browser room ID. It returns an opaque `proj_room_<random ID>` and sets an HttpOnly, SameSite=Strict browser cookie. Private project routes verify that cookie; mutations also require a matching Origin. A missing or different room session receives 404. Provider credentials stay on the server.
 

@@ -1,0 +1,13 @@
+.phone-inbox { position: fixed; right: 16px; bottom: 16px; z-index: 50; width: min(340px, calc(100vw - 32px)); box-sizing: border-box; background: #f5f2ea; color: #302c27; border: 1px solid #d6d1c5; border-radius: 4px; padding: 16px; font-family: inherit; box-shadow: 0 8px 28px #2b1a1018; }
+.phone-inbox__eyebrow { margin: 0 0 10px; font-size: 10px; letter-spacing: .15em; color: #766b5e; }
+.phone-inbox__list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.phone-inbox__scan { display: grid; gap: 6px; border-top: 1px solid #e2ddd2; padding-top: 10px; }
+.phone-inbox__scan:first-child { border-top: 0; padding-top: 0; }
+.phone-inbox__title { display: flex; justify-content: space-between; gap: 12px; font-size: 12px; }
+.phone-inbox__title time { color: #83796c; font-size: 10px; }
+.phone-inbox__detail { margin: 0; font-size: 11px; line-height: 1.55; color: #6b6257; overflow-wrap: anywhere; }
+.phone-inbox__error { margin: 0; font-size: 11px; line-height: 1.55; color: #9b362a; overflow-wrap: anywhere; }
+.phone-inbox__enter { min-height: 40px; padding: 8px 12px; border: 1px solid #302c27; border-radius: 2px; background: #302c27; color: #fffdf7; font: inherit; font-size: 12px; cursor: pointer; }
+.phone-inbox__enter:disabled { opacity: .5; cursor: default; }
+.phone-inbox__enter:focus-visible { outline: 2px solid #967a47; outline-offset: 3px; }
+.phone-inbox__fresh { border-color: #302c27; }

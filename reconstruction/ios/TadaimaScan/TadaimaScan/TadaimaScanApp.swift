@@ -18,6 +18,11 @@ struct ScanScreen: View {
     @StateObject private var model = ScanModel()
     @Environment(\.scenePhase) private var scenePhase
     @State private var share: SharedScan?
+    // Defaults can be baked in at build time (TADAIMA_SERVER / TADAIMA_UPLOAD_KEY build settings).
+    @AppStorage("tadaimaServer") private var server = Bundle.main.object(forInfoDictionaryKey: "TadaimaServer") as? String ?? ""
+    @AppStorage("tadaimaUploadKey") private var uploadKey = Bundle.main.object(forInfoDictionaryKey: "TadaimaUploadKey") as? String ?? ""
+    @State private var sending = false
+    @State private var uploadStatus: String?
 
     var body: some View {
         NavigationStack {
@@ -107,7 +112,7 @@ struct ScanScreen: View {
                             HStack { ProgressView(); Text(progressMessage).font(.subheadline) }
                         }
                         controls
-                        Text("Share scan + photos keeps geometry, JPEGs and camera calibration together. JSON and USDZ export geometry only. No automatic upload.")
+                        Text("Send to Tadaima uploads the scan and photos to your Mac, which rebuilds the room for shopping. Share scan + photos keeps geometry, JPEGs and camera calibration together. Nothing uploads until you tap Send.")
                             .font(.caption).foregroundStyle(.secondary)
                     }
                     .padding()
@@ -119,6 +124,45 @@ struct ScanScreen: View {
             .onChange(of: scenePhase) { _, phase in
                 if phase == .background { share = nil; model.backgrounded() }
             }
+            // Auto-lock backgrounds the app, which discards an in-progress scan or upload.
+            .onChange(of: model.phase) { _, _ in updateIdleTimer() }
+            .onChange(of: sending) { _, _ in updateIdleTimer() }
+        }
+    }
+
+    private func updateIdleTimer() {
+        let active: [ScanModel.Phase] = [.requestingPermission, .scanning, .processing, .detailing, .finishingDetail, .exporting]
+        UIApplication.shared.isIdleTimerDisabled = sending || active.contains(model.phase)
+    }
+
+    private func send() async {
+        sending = true
+        defer { sending = false }
+        do {
+            let uploader = try ScanUploader(server: server, key: uploadKey)
+            uploadStatus = "Preparing the scan…"
+            guard let file = await model.shareFile(includeUSDZ: false, includePhotos: model.photoExportKind != nil) else {
+                uploadStatus = nil  // The model reports export problems in its own message.
+                return
+            }
+            uploadStatus = "Sending to Tadaima…"
+            var status = try await uploader.upload(file)
+            uploadStatus = "Building your room on the Mac…"
+            var polls = 0
+            while ["queued", "running"].contains(status.status) && polls < 300 {
+                try await Task.sleep(for: .seconds(2))
+                status = try await uploader.status(status.id)
+                polls += 1
+            }
+            if status.ready {
+                uploadStatus = "Ready. On the laptop, open Tadaima › Your rooms and choose Enter room."
+            } else if status.status == "failed" {
+                uploadStatus = (status.error ?? "The room could not be rebuilt.") + " Scan again."
+            } else {
+                uploadStatus = "Still building after 10 minutes. Check the Mac."
+            }
+        } catch {
+            uploadStatus = error.localizedDescription
         }
     }
 
@@ -170,6 +214,17 @@ struct ScanScreen: View {
             Button("Cancel scan", role: .cancel) { model.rescan() }.buttonStyle(.bordered)
         case .review:
             VStack(alignment: .leading, spacing: 10) {
+                TextField("Tadaima server, e.g. http://your-mac.local:3000", text: $server)
+                    .textFieldStyle(.roundedBorder).keyboardType(.URL)
+                    .textInputAutocapitalization(.never).autocorrectionDisabled().disabled(sending)
+                TextField("Upload key", text: $uploadKey)
+                    .textFieldStyle(.roundedBorder)
+                    .textInputAutocapitalization(.never).autocorrectionDisabled().disabled(sending)
+                Button(sending ? "Sending…" : "Send to Tadaima") { Task { await send() } }
+                    .buttonStyle(.borderedProminent).disabled(sending)
+                if let uploadStatus {
+                    Text(uploadStatus).font(.footnote).accessibilityAddTraits(.updatesFrequently)
+                }
                 if let exportKind = model.photoExportKind {
                     Button(exportKind.label) {
                         Task {
@@ -177,7 +232,7 @@ struct ScanScreen: View {
                                 share = SharedScan(url: url)
                             }
                         }
-                    }.buttonStyle(.borderedProminent)
+                    }.buttonStyle(.bordered).disabled(sending)
                 }
                 HStack {
                     Button("Share scan JSON") { Task { if let url = await model.shareFile(includeUSDZ: false) { share = SharedScan(url: url) } } }
@@ -185,7 +240,7 @@ struct ScanScreen: View {
                     Button("Share USDZ") { Task { if let url = await model.shareFile(includeUSDZ: true) { share = SharedScan(url: url) } } }
                         .buttonStyle(.bordered)
                 }
-                Button("Scan again") { share = nil; model.rescan() }.buttonStyle(.bordered)
+                Button("Scan again") { share = nil; uploadStatus = nil; model.rescan() }.buttonStyle(.bordered).disabled(sending)
             }
         case .exporting:
             EmptyView()

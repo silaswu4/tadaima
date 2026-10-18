@@ -1,0 +1,21 @@
+.room-agent__body { padding: 0 24px 24px; overflow-y: auto; overscroll-behavior: contain; min-height: 0; font-size: 13px; line-height: 1.55; }
+.room-agent__context, .room-agent__note { color: var(--muted); font-size: 12px; }
+.room-agent__context { margin-bottom: 18px; }
+.room-agent__tabs, .room-agent__actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.room-agent__form { display: grid; gap: 12px; margin-top: 18px; }
+.room-agent__form label { display: grid; gap: 5px; min-width: 0; font-size: 12px; }
+.room-agent__form textarea, .room-agent__form input, .room-agent__form select { width: 100%; min-width: 0; padding: 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--well); color: var(--ink); font: inherit; font-size: 13px; }
+.room-agent__form textarea { resize: vertical; min-height: 80px; }
+.room-agent__form :focus-visible, .room-agent__body button:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
+.room-agent__fields { display: grid; grid-template-columns: 1.2fr 1fr 1fr; gap: 10px; }
+.room-agent__error { color: #982d25; margin: 12px 0; }
+.room-agent__results { padding: 0; list-style: none; }
+.room-agent__results li { display: flex; align-items: center; gap: 12px; justify-content: space-between; padding: 14px 0; border-bottom: 1px solid var(--line); }
+.room-agent__results li > div { min-width: 0; overflow-wrap: anywhere; }
+.room-agent__results p { color: var(--muted); margin-top: 4px; font-size: 12px; }
+.room-agent__proposal, .room-agent__voice { margin: 20px 0; padding-top: 18px; border-top: 1px solid var(--line); }
+.room-agent__proposal h3, .room-agent__voice h3 { margin-bottom: 8px; font-size: 15px; font-weight: 500; }
+.room-agent__proposal ul { padding-left: 18px; margin: 10px 0; }
+.room-agent__voice p { margin-bottom: 12px; }
+@media (max-width: 420px) { .room-agent__body { padding-inline: 18px; } .room-agent__fields { gap: 6px; } }
+@media (max-width: 767px) { .room-agent__form textarea, .room-agent__form input, .room-agent__form select { font-size: 16px; } }

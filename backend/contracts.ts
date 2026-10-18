@@ -190,6 +190,8 @@ export interface PlanProposal {
   /** The plan as it would look if applied. Not canonical until applied. */
   result: RoomPlan;
   validations: ValidationResult[];
+  /** Failures applying this would cause or worsen. Empty means it can be applied. */
+  blocking?: ValidationResult[];
   costBefore: CostSummary;
   costAfter: CostSummary;
   /** Short human explanation of what changed and why. */
@@ -200,7 +202,8 @@ export interface PlanProposal {
 export type ApplyResult =
   | { ok: true; plan: RoomPlan }
   | { ok: false; reason: "stale_revision"; currentRevision: number }
-  | { ok: false; reason: "validation_failed"; validations: ValidationResult[] };
+  /** `blocking` names the failures this change caused or worsened; other failing checks were already failing. */
+  | { ok: false; reason: "validation_failed"; validations: ValidationResult[]; blocking?: ValidationResult[] };
 
 // ---------- async jobs ----------
 
@@ -299,7 +302,8 @@ export type PlaceResult =
   | { ok: false; reason: "no_fit"; message: string; nearest: Placement | null }
   | { ok: false; reason: "locked"; message: string }
   | { ok: false; reason: "stale_revision"; currentRevision: number }
-  | { ok: false; reason: "validation_failed"; validations: ValidationResult[] };
+  /** `blocking` names the failures this change caused or worsened; other failing checks were already failing. */
+  | { ok: false; reason: "validation_failed"; validations: ValidationResult[]; blocking?: ValidationResult[] };
 
 // ---------- cart and checkout ----------
 

@@ -67,6 +67,8 @@ Generation runs in a private staging directory, published only after save/export
 
 ## Matthew: backend handoff
 
+Prefer the [HTTP job service](service/README.md) for integration: it wraps every pipeline below with auth, early validation, job polling, and artifact downloads, and ships as a Blender Docker image. The Node adapter remains for direct local use.
+
 [`processor.server.ts`](processor.server.ts) implements `ReconstructionProcessor` with a Node subprocess and no shell interpolation. Import only on the server:
 
 ```ts

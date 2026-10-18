@@ -23,6 +23,7 @@ Repository originally inspected October 17, 2026 at base commit `cbbe48fe69b1b12
 | `reconstruction/address/` | Local bounded public evidence acquisition, research/vision provider adapters, data-only proposal handoffs, provenance validation, and draft generation |
 | `app/capture/page.tsx`, `reconstruction/capture/` | Browser capture demo, bounded photo ZIP processing, photo-only inferred proposals without tape measurements, and optional explicit-dimension mode |
 | `reconstruction/ios/TadaimaScan/TadaimaScan.xcodeproj`, `reconstruction/roomplan/` | Native scan/preview/export app compiles for iOS and Simulator; Swift-emitted synthetic scan imports through Blender/GLB. [Verification](native-scan.md) excludes physical iPhone capture and accuracy |
+| `reconstruction/service/` | FastAPI job service (geometry, RoomPlan, capture, address), SQLite job records, allow-listed artifact downloads, Blender 4.5 Docker image and Railway config |
 | `reconstruction/tests/`, `verify-glb.mjs` | Geometry/failure tests, actual Blender reopen, Three.js loading, and optional Khronos validation |
 | `public/models/` | Seven bundled GLB models, referenced by the hero |
 | `app/fonts/` | Paper Mono WOFF2 and SIL Open Font License text |
@@ -40,7 +41,7 @@ Commit `07d83cb` attributes the bundled furniture models to CC0 Poly Haven asset
 
 ## What does not exist
 
-No hosted upload/job service, canonical runtime room-plan service, backend persistence/authentication, product catalog, real retailer shopping agent, cart preparation/checkout, WebXR session, shared-device state, voice agent, Fetch agent, wallet, or Solana contract is connected yet. Local address and browser-photo pipelines now exist; live paid-provider execution and physical iPhone scanning are separate verification gates, not implied by passing fixture tests. The optional RoomPlan companion/importer is being added; its current evidence belongs in [native scanning](native-scan.md). Reconstruction has Python and standalone Node checks; shared TypeScript types alone do not implement the remaining application services.
+A [FastAPI reconstruction job service](../reconstruction/service/README.md) with a Blender Docker image exists and was verified locally and in a container; it is not yet deployed or called by the Next app. No canonical runtime room-plan service, backend persistence/authentication, product catalog, real retailer shopping agent, cart preparation/checkout, WebXR session, shared-device state, voice agent, Fetch agent, wallet, or Solana contract is connected yet. Local address and browser-photo pipelines now exist; live paid-provider execution and physical iPhone scanning are separate verification gates, not implied by passing fixture tests. The optional RoomPlan companion/importer is being added; its current evidence belongs in [native scanning](native-scan.md). Reconstruction has Python and standalone Node checks; shared TypeScript types alone do not implement the remaining application services.
 
 ## Dependencies and local setup
 
