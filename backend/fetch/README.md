@@ -10,7 +10,7 @@ Furniture shopping agent for a real room. Tell it what you want in plain words (
 | | |
 | --- | --- |
 | Agent name | `tadaima` |
-| Agent address | `agent1q...` (printed on startup, fill in after first run) |
+| Agent address | `agent1qdsuu2yjgd0tnddnu79rp8jxdu7zd9lkjgskxasptxukqrdlrv08szru3em` |
 | Agentverse profile | (fill in) |
 | Protocols | Agent Chat Protocol 0.3.0, ASI:One interactive cards |
 
