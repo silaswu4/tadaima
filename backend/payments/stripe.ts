@@ -87,3 +87,16 @@ export async function chargeSavedCard(opts: { customerId: string; paymentMethodI
     throw e;
   }
 }
+
+/** A Checkout Session paid in the shopper's own Stripe form (the ASI:One payment card), read back from Stripe itself. */
+export async function paidCheckoutSession(sessionId: string) {
+  const s = await stripe().checkout.sessions.retrieve(sessionId);
+  return {
+    id: s.id,
+    paid: s.payment_status === "paid",
+    amountTotal: s.amount_total ?? 0,
+    currency: (s.currency ?? "").toUpperCase(),
+    metadata: (s.metadata ?? {}) as Record<string, string>,
+    paymentIntentId: typeof s.payment_intent === "string" ? s.payment_intent : s.payment_intent?.id ?? null,
+  };
+}

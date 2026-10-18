@@ -713,17 +713,38 @@ async def change(ctx: Context, sender: str, project: str, changes: list[dict], o
 
 
 async def start_checkout(ctx: Context, sender: str, project: str):
-    # RequestPayment must go out before any model call, or ASI:One shows plain text instead of the pay card
+    """Recheck live, then one Stripe payment card in chat for the real total: the furniture plus the service fee."""
+    view = await checkout.get_view(api, project)
+    if not view["cart"]["merchants"]:
+        return await ctx.send(sender, msg("Your plan has no new purchases, so there's nothing to check out."))
+    paid = next((o for o in view["orders"] if o["cartDigest"] == view["cart"]["digest"]), None)
+    if paid:
+        return await ctx.send(sender, msg("This exact cart is already paid for.", checkout.order_card(paid)))
+    await ctx.send(sender, msg(checkout.cart_text(view) + "\n\nChecking live prices and stock with each store first..."))
     try:
-        await request_fee(ctx, sender, project)
+        view = await api("POST", f"/api/projects/{project}/checkout/recheck", None, timeout=checkout.RECHECK_TIMEOUT)
+    except Rejected as e:
+        return await ctx.send(sender, msg(f"The live check didn't go through: {e}. Nothing was charged."))
+    blockers = [b for b in view["blockers"] if b != "no card connected"]
+    if blockers:
+        return await ctx.send(sender, msg(checkout.recheck_text(view) + "\n\nI can't take payment yet:\n" + checkout.blockers_text(blockers) + "\n\nNothing was charged."))
+    await ctx.send(sender, msg(checkout.recheck_text(view)))
+    try:
+        await request_fee(ctx, sender, project, cart=view["cart"])
     except (PaymentsUnavailable, StripeError) as e:
-        ctx.logger.error(f"service fee unavailable: {e}")
-        await checkout.start_checkout(ctx, sender, project, api)
+        ctx.logger.error(f"chat payment unavailable: {e}")
+        await checkout.finish_review(ctx, sender, project, view)
 
 
 @on_paid
-async def _fee_paid(ctx: Context, sender: str, project_id: str):
-    await checkout.start_checkout(ctx, sender, project_id, api)
+async def _paid(ctx: Context, sender: str, project_id: str, paid: dict):
+    if not paid.get("cartDigest"):
+        return await checkout.start_checkout(ctx, sender, project_id, api)
+    try:
+        order = await api("POST", f"/api/agent/rooms/{project_id}/orders", {"sessionId": paid["sessionId"]})
+    except Rejected as e:
+        return await ctx.send(sender, msg(f"Stripe took the test payment but I couldn't record the order: {e}."))
+    await ctx.send(sender, msg(checkout.order_text(order), checkout.order_card(order)))
 
 
 async def think(ctx: Context, sender: str, project: str, text: str):

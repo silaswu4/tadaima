@@ -7,7 +7,7 @@ import type { CheckoutView } from "@/backend/checkout/types";
 import { recheckProduct } from "@/backend/checkout/recheck";
 import { applyPlanChanges, getProject } from "@/backend/plan/operations";
 import { projectKv } from "@/backend/plan/store";
-import { attachTestVisa, chargeSavedCard, createCustomer, createSetupIntent, paymentMethodFromSetupIntent, publishableKey, PaymentsUnavailable } from "@/backend/payments/stripe";
+import { attachTestVisa, chargeSavedCard, paidCheckoutSession, createCustomer, createSetupIntent, paymentMethodFromSetupIntent, publishableKey, PaymentsUnavailable } from "@/backend/payments/stripe";
 
 /**
  * Checkout with an agent that pays, under rules the shopper sets:
@@ -220,6 +220,57 @@ export async function execute(projectId: string): Promise<Order> {
     lines: cart.merchants.flatMap((g) => g.lines),
     amount: cart.subtotal,
     payment: { provider: "stripe_test", paymentIntentId: charge.id, status: "succeeded", card: `${card.brand} ending ${card.last4}` },
+    merchantOrders: cart.merchants.map((g) => ({
+      merchant: g.merchant,
+      status: "simulated",
+      note: `Not placed with ${g.merchant}: retailer ordering is simulated in this build. Shipping and tax were not charged.`,
+    })),
+    testMode: true,
+    createdAt: new Date().toISOString(),
+  };
+  await projectKv.set(projectId, "orders", [order, ...(await orders(projectId))]);
+  await projectKv.compareAndSet<PaymentClaim>(projectId, claimKey(cart.digest), claim, { ...claim, status: "paid" });
+  return order;
+}
+
+/**
+ * Records an order the shopper paid themselves in a Stripe Checkout form (the
+ * ASI:One payment card), instead of the agent charging a saved card. Stripe is
+ * asked directly: the session must be paid, for this room, for this exact cart,
+ * for exactly the cart total plus the service fee it declared. Idempotent per session.
+ */
+export async function recordChatPayment(projectId: string, sessionId: string): Promise<Order> {
+  const existing = (await orders(projectId)).find((o) => o.payment.paymentIntentId === sessionId || o.mandateId === `chat_${sessionId}`);
+  if (existing) return existing;
+  let session: Awaited<ReturnType<typeof paidCheckoutSession>>;
+  try {
+    session = await paidCheckoutSession(sessionId);
+  } catch (e) {
+    if (e instanceof PaymentsUnavailable) throw e;
+    throw new CheckoutRefused("Stripe doesn't have that payment");
+  }
+  if (!session.paid) throw new CheckoutRefused("Stripe hasn't marked that payment as paid");
+  if (session.metadata.project_id !== projectId) throw new CheckoutRefused("that payment was for a different room");
+  const view = await getCheckout(projectId);
+  const { cart } = view;
+  if (session.metadata.cart_digest !== cart.digest) throw new CheckoutRefused("the cart changed after that payment was started; nothing was recorded, refund it in the Stripe test dashboard");
+  const fee = Number(session.metadata.fee_cents ?? "0");
+  if (session.currency !== cart.subtotal.currency || session.amountTotal !== cart.subtotal.amountMinor + fee) {
+    throw new CheckoutRefused("the amount paid doesn't match this cart");
+  }
+  const blockers = view.blockers.filter((b) => b !== "no card connected");
+  if (blockers.length) throw new CheckoutRefused(`can't record it: ${blockers.join("; ")}`);
+
+  const claim: PaymentClaim = { mandateId: `chat_${sessionId}`, status: "processing" };
+  if (!await projectKv.compareAndSet<PaymentClaim | null>(projectId, claimKey(cart.digest), null, claim)) throw new CheckoutRefused(PAYMENT_PROCESSING);
+  const order: Order = {
+    id: `ord_${crypto.randomUUID().slice(0, 12)}`,
+    projectId,
+    mandateId: claim.mandateId,
+    cartDigest: cart.digest,
+    lines: cart.merchants.flatMap((g) => g.lines),
+    amount: cart.subtotal,
+    payment: { provider: "stripe_test", paymentIntentId: sessionId, status: "succeeded", card: "paid in ASI:One with Stripe" },
     merchantOrders: cart.merchants.map((g) => ({
       merchant: g.merchant,
       status: "simulated",

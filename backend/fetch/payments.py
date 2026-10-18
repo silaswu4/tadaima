@@ -66,7 +66,8 @@ STRIPE_API = "https://api.stripe.com/v1"
 API_UI_MODES = ("embedded_page", "embedded")
 CHAT_UI_MODE = "embedded"
 
-OnPaid = Callable[[Context, str, str], Awaitable[None]]
+# fn(ctx, sender, project_id, paid) where paid = {"sessionId", "cartDigest"} (cartDigest None for a fee-only payment)
+OnPaid = Callable[[Context, str, str, dict], Awaitable[None]]
 _on_paid: OnPaid | None = None
 
 
@@ -127,16 +128,28 @@ async def _stripe(method: str, path: str, data: dict | None = None, idempotency_
             return body
 
 
-async def create_session(sender: str, project_id: str) -> dict:
-    """Embedded Checkout session for the fee. Overridable in tests."""
+def cart_lines(cart: dict) -> list[dict]:
+    """Stripe line items for a backend Cart: one per product line, then the service fee."""
+    items = []
+    for g in cart["merchants"]:
+        for line in g["lines"]:
+            # observedPrice is per unit; Stripe's total then equals the backend's cart subtotal exactly
+            items.append({"price_data": {"currency": CURRENCY, "product_data": {"name": f"{line['label']} ({g['merchant']})"[:120]}, "unit_amount": line["observedPrice"]["amountMinor"]}, "quantity": line["quantity"]})
+    return items
+
+
+async def create_session(sender: str, project_id: str, cart: dict | None = None) -> dict:
+    """Embedded Checkout session: the fee alone, or a cart plus the fee. Overridable in tests."""
+    fee = {"price_data": {"currency": CURRENCY, "product_data": {"name": PRODUCT}, "unit_amount": FEE_CENTS}, "quantity": 1}
     base = {
         "redirect_on_completion": "if_required",
         "mode": "payment",
         "return_url": os.getenv("STRIPE_RETURN_URL", "https://asi1.ai/") + "?session_id={CHECKOUT_SESSION_ID}",
-        "line_items": [{"price_data": {"currency": CURRENCY, "product_data": {"name": PRODUCT}, "unit_amount": FEE_CENTS}, "quantity": 1}],
+        "line_items": [*(cart_lines(cart) if cart else []), fee],
         # Stripe wants 30 min to 24 h; a minute past our deadline
         "expires_at": int(time.time()) + DEADLINE_S + 60,
-        "metadata": {"user_address": sender, "project_id": project_id, "kind": "tadaima_fee"},
+        "metadata": {"user_address": sender, "project_id": project_id, "kind": "tadaima_cart" if cart else "tadaima_fee",
+                     "cart_digest": cart["digest"] if cart else "", "fee_cents": str(FEE_CENTS)},
     }
     err: StripeError | None = None
     for mode in API_UI_MODES:
@@ -155,61 +168,68 @@ async def session_paid(session_id: str) -> bool:
     return s.get("payment_status") == "paid"
 
 
-def _fee_key(sender: str, project_id: str) -> str:
-    return f"fee:{sender}:{project_id}"
+def _fee_key(sender: str, project_id: str, digest: str | None = None) -> str:
+    return f"fee:{sender}:{project_id}" + (f":{digest}" if digest else "")
 
 
-def fee_state(ctx: Context, sender: str, project_id: str) -> dict | None:
-    return ctx.storage.get(_fee_key(sender, project_id))
+def fee_state(ctx: Context, sender: str, project_id: str, digest: str | None = None) -> dict | None:
+    return ctx.storage.get(_fee_key(sender, project_id, digest))
 
 
-def is_paid(ctx: Context, sender: str, project_id: str) -> bool:
-    return (fee_state(ctx, sender, project_id) or {}).get("status") == "paid"
+def is_paid(ctx: Context, sender: str, project_id: str, digest: str | None = None) -> bool:
+    return (fee_state(ctx, sender, project_id, digest) or {}).get("status") == "paid"
 
 
 def _text(t: str) -> ChatMessage:
     return ChatMessage(content=[TextContent(text=t)])
 
 
-async def request_fee(ctx: Context, sender: str, project_id: str) -> str:
+async def request_fee(ctx: Context, sender: str, project_id: str, cart: dict | None = None) -> str:
     """
-    Ask for the fee. Returns "paid" (on_paid already ran), "requested" (new
-    RequestPayment sent) or "pending" (the open request was re-sent, no new session).
+    Ask for payment: the service fee alone, or (with a backend Cart) the cart
+    total plus the fee in one Stripe form. Returns "paid" (on_paid already ran),
+    "requested" (new RequestPayment sent) or "pending" (open request re-sent).
     Raises PaymentsUnavailable when Stripe isn't configured.
     """
-    state = fee_state(ctx, sender, project_id) or {}
+    digest = cart["digest"] if cart else None
+    key = _fee_key(sender, project_id, digest)
+    state = ctx.storage.get(key) or {}
     if state.get("status") == "paid":
         if _on_paid:
-            await _on_paid(ctx, sender, project_id)
+            await _on_paid(ctx, sender, project_id, {"sessionId": state["sessionId"], "cartDigest": digest})
         return "paid"
     _, pk = _keys()
+    total = FEE_CENTS + (cart["subtotal"]["amountMinor"] if cart else 0)
     reuse = state.get("status") == "requested" and state.get("expiresAt", 0) > time.time() + 60 and state.get("stripe")
     if reuse:
         stripe_meta = state["stripe"]
     else:
-        s = await create_session(sender, project_id)
+        s = await create_session(sender, project_id, cart)
         stripe_meta = {
             "client_secret": s["client_secret"],
             "checkout_session_id": s["id"],
             "publishable_key": pk,
             "currency": CURRENCY,
-            "amount_cents": str(FEE_CENTS),
+            "amount_cents": str(total),
             "ui_mode": CHAT_UI_MODE,
         }
         state = {"status": "requested", "sessionId": s["id"], "expiresAt": time.time() + DEADLINE_S, "stripe": stripe_meta}
-        ctx.storage.set(_fee_key(sender, project_id), state)
-        ctx.storage.set(f"fee_session:{s['id']}", {"sender": sender, "projectId": project_id})
-    ctx.storage.set(f"fee_open:{sender}", project_id)
-    await ctx.send(sender, _text(
-        f"Finalizing your plan and checkout costs a one-time **{fee_label()}** service fee (Stripe test mode, "
-        "use card 4242 4242 4242 4242, any future date and CVC). Nothing in your room is bought by this fee."
-    ))
+        ctx.storage.set(key, state)
+        ctx.storage.set(f"fee_session:{s['id']}", {"sender": sender, "projectId": project_id, "cartDigest": digest})
+    ctx.storage.set(f"fee_open:{sender}", {"projectId": project_id, "cartDigest": digest})
+    if cart:
+        lead = (f"Total **${total / 100:,.2f}**: your furniture ${cart['subtotal']['amountMinor'] / 100:,.2f} plus the {fee_label()} Tadaima fee. "
+                "Pay below with Stripe (test mode: card 4242 4242 4242 4242, any future date and CVC). No real money moves and retailer orders are simulated.")
+    else:
+        lead = (f"Finalizing your plan and checkout costs a one-time **{fee_label()}** service fee (Stripe test mode, "
+                "use card 4242 4242 4242 4242, any future date and CVC). Nothing in your room is bought by this fee.")
+    await ctx.send(sender, _text(lead))
     await ctx.send(sender, RequestPayment(
-        accepted_funds=[Funds(currency=CURRENCY.upper(), amount=f"{FEE_CENTS / 100:.2f}", payment_method="stripe")],
+        accepted_funds=[Funds(currency=CURRENCY.upper(), amount=f"{total / 100:.2f}", payment_method="stripe")],
         recipient=str(ctx.agent.address),
         deadline_seconds=max(60, int(state["expiresAt"] - time.time())),
-        reference=f"tadaima_fee:{project_id}"[:120],
-        description=f"{PRODUCT} ({fee_label()}, test mode)",
+        reference=(f"tadaima_cart:{project_id}:{digest}" if cart else f"tadaima_fee:{project_id}")[:120],
+        description=(f"Tadaima room cart and service fee (${total / 100:,.2f}, test mode)" if cart else f"{PRODUCT} ({fee_label()}, test mode)"),
         metadata={"stripe": stripe_meta},
     ))
     return "pending" if reuse else "requested"
@@ -222,8 +242,9 @@ async def _settle(ctx: Context, reply_to: str, session_id: str, via_protocol: bo
         if via_protocol:
             await ctx.send(reply_to, CancelPayment(transaction_id=session_id, reason="unknown payment"))
         return False
-    sender, project_id = order["sender"], order["projectId"]
-    state = fee_state(ctx, sender, project_id) or {}
+    sender, project_id, digest = order["sender"], order["projectId"], order.get("cartDigest")
+    key = _fee_key(sender, project_id, digest)
+    state = ctx.storage.get(key) or {}
     if state.get("status") == "paid":
         # a repeat commit for a fee already settled; confirm again, don't run on_paid twice
         if via_protocol:
@@ -239,12 +260,12 @@ async def _settle(ctx: Context, reply_to: str, session_id: str, via_protocol: bo
             await ctx.send(reply_to, CancelPayment(transaction_id=session_id, reason="payment not completed"))
         await ctx.send(sender, _text("Stripe hasn't confirmed that payment, so nothing was charged and your plan isn't finalized yet. Say **checkout** to try again."))
         return False
-    ctx.storage.set(_fee_key(sender, project_id), {**state, "status": "paid", "paidAt": time.time()})
+    ctx.storage.set(key, {**state, "status": "paid", "paidAt": time.time()})
     if via_protocol:
         await ctx.send(reply_to, CompletePayment(transaction_id=session_id))
-    await ctx.send(sender, _text(f"Got it, {fee_label()} test payment confirmed. Finalizing your cart now."))
+    await ctx.send(sender, _text("Stripe confirmed your test payment. Recording your order now." if digest else f"Got it, {fee_label()} test payment confirmed. Finalizing your cart now."))
     if _on_paid:
-        await _on_paid(ctx, sender, project_id)
+        await _on_paid(ctx, sender, project_id, {"sessionId": session_id, "cartDigest": digest})
     return True
 
 
@@ -274,9 +295,12 @@ async def on_commit(ctx: Context, sender: str, m: CommitPayment):
 async def on_reject(ctx: Context, sender: str, m: RejectPayment):
     # RejectPayment carries no transaction id; it answers this sender's latest request
     ctx.logger.info(f"RejectPayment from {sender[:16]}: {m.reason}")
-    project_id = ctx.storage.get(f"fee_open:{sender}")
-    state = fee_state(ctx, sender, project_id) if project_id else None
+    open_ = ctx.storage.get(f"fee_open:{sender}") or {}
+    if isinstance(open_, str):  # written by an older build
+        open_ = {"projectId": open_, "cartDigest": None}
+    key = _fee_key(sender, open_["projectId"], open_.get("cartDigest")) if open_.get("projectId") else None
+    state = ctx.storage.get(key) if key else None
     if state and state.get("status") == "requested":
-        ctx.storage.set(_fee_key(sender, project_id), {**state, "status": "rejected"})
+        ctx.storage.set(key, {**state, "status": "rejected"})
     note = f" ({m.reason})" if m.reason else ""
-    await ctx.send(sender, _text(f"No problem, the fee was declined{note} and nothing was charged. Your room is saved; say **checkout** whenever you want to finalize."))
+    await ctx.send(sender, _text(f"No problem, the payment was declined{note} and nothing was charged. Your room is saved; say **check out** whenever you're ready."))
