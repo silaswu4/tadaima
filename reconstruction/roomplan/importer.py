@@ -111,7 +111,7 @@ def _distance(a, b):
     return math.hypot(a[0] - b[0], a[1] - b[1])
 
 
-def _transform(raw, path):
+def _transform(raw, path, *, upright=True):
     if not isinstance(raw, list) or len(raw) != 16:
         _fail(path, "expected 16 column-major matrix entries")
     values = [_number(v, -10_000, 10_000, f"{path}[{i}]") for i, v in enumerate(raw)]
@@ -128,7 +128,7 @@ def _transform(raw, path):
                    + c[0] * (a[1] * b[2] - a[2] * b[1]))
     if abs(determinant - 1) > 0.002:
         _fail(path, "rotation must be right-handed; reflections are unsupported")
-    if max(abs(axes[1][0]), abs(axes[1][1] - 1), abs(axes[1][2]), abs(axes[0][1]), abs(axes[2][1])) > UPRIGHT_TOLERANCE:
+    if upright and max(abs(axes[1][0]), abs(axes[1][1] - 1), abs(axes[1][2]), abs(axes[0][1]), abs(axes[2][1])) > UPRIGHT_TOLERANCE:
         _fail(path, "sloped or inverted surfaces are unsupported; local Y must be upright")
     return values
 
@@ -158,15 +158,18 @@ def _rectangular(surface):
 
 def validate_scan(raw: object) -> dict:
     """Validate bounded scan data; reject unsupported surface shapes explicitly."""
-    item = _object(raw, {"schemaVersion", "projectId", "jobId", "inputRevision", "capturedAt", "roomId",
-                         "roomLabel", "device", "surfaces"}, "scan")
-    if item["schemaVersion"] != SCHEMA_VERSION:
-        _fail("schemaVersion", f"expected {SCHEMA_VERSION}")
+    fields = {"schemaVersion", "projectId", "jobId", "inputRevision", "capturedAt", "roomId", "roomLabel", "device", "surfaces"}
+    version = raw.get("schemaVersion") if isinstance(raw, dict) else None
+    if version == "roomplan-scan/1.1":
+        fields.add("objects")
+    item = _object(raw, fields, "scan")
+    if version not in (SCHEMA_VERSION, "roomplan-scan/1.1"):
+        _fail("schemaVersion", "expected roomplan-scan/1.0 or roomplan-scan/1.1")
     revision = item["inputRevision"]
     if isinstance(revision, bool) or not isinstance(revision, int) or not 0 <= revision <= 2**53 - 1:
         _fail("inputRevision", "expected nonnegative safe integer")
     device = _object(item["device"], {"model", "systemVersion"}, "device")
-    result = {"schemaVersion": SCHEMA_VERSION, "projectId": _id(item["projectId"], "projectId"),
+    result = {"schemaVersion": version, "projectId": _id(item["projectId"], "projectId"),
               "jobId": _id(item["jobId"], "jobId"), "inputRevision": revision,
               "capturedAt": _timestamp(item["capturedAt"], "capturedAt"),
               "roomId": _id(item["roomId"], "roomId"), "roomLabel": _text(item["roomLabel"], "roomLabel"),
@@ -210,6 +213,9 @@ def validate_scan(raw: object) -> dict:
         result["surfaces"].append(normalized)
     if counts["wall"] < 3:
         _fail("surfaces", "at least three walls are needed for a closed room")
+    if version == "roomplan-scan/1.1":
+        from .objects import validate_objects
+        result["objects"] = validate_objects(item["objects"], seen)
     return result
 
 
@@ -342,7 +348,7 @@ def import_scan(raw: object) -> dict:
         "RoomPlan surfaces are sensor-derived estimates, not survey-accurate measurements; review scale and fit.",
         "RoomPlan does not identify interior/exterior faces or wall thickness. Observed planes are ASSUMED inside faces for this model only.",
         "Wall thickness is an inferred 0.12 m modeling default; centerlines offset outward 0.06 m preserve the assumed inside planes, not certified clearances.",
-        "Only one closed planar room is supported. Furniture, glass, door leaves, ceilings, stairs, and curved/nonrectangular surfaces are not reconstructed.",
+        "Only one closed planar room is supported. Glass, door leaves, ceilings, stairs geometry, and curved/nonrectangular structural surfaces are not reconstructed.",
     ]
     if corrections:
         warnings.append("Small wall endpoint gaps were corrected by bounded joins; inspect the recorded correction distances.")
@@ -452,12 +458,17 @@ def import_scan(raw: object) -> dict:
     # needed for source surfaces.
     if len(room_evidence) <= 62:
         room_evidence = [layout_id, thickness_id] + room_evidence
+    from .objects import compile_objects
+    items, omitted_objects = compile_objects(scan, floor_y, evidence, warnings)
+    if "objects" in scan:
+        warnings.append("Detected existing objects are separate locked size proxies, not textured furniture meshes or catalog products; review their dimensions and placement.")
     try:
         request = validate_request({"jobId": scan["jobId"], "projectId": scan["projectId"], "inputRevision": scan["inputRevision"],
             "geometry": {"units": "m", "coordinateSystem": "right-handed-y-up",
                          "rooms": [{"id": scan["roomId"], "label": scan["roomLabel"], "floorPolygon": centerlines,
                                     "height": height, "evidenceIds": room_evidence}],
-                         "walls": walls, "openings": openings}, "evidence": evidence})
+                         "walls": walls, "openings": openings}, "evidence": evidence,
+            **({"items": items} if "objects" in scan else {})})
     except GeometryError as error:
         raise RoomPlanError("Canonical geometry rejected the sensor-derived proposal: " + str(error)) from None
     if any(correction["kind"].startswith("opening_") for correction in corrections):
@@ -466,6 +477,7 @@ def import_scan(raw: object) -> dict:
         warnings.append("The importer applied recorded bounded geometry/alignment corrections; review every correction before relying on fit.")
     return {"status": "needs_review", "reviewRequired": True, "method": "native_roomplan_surface_import",
             "request": request, "warnings": warnings, "corrections": corrections, "floorY": floor_y,
+            **({"detectedObjectCount": len(scan["objects"]), "importedItemCount": len(items), "omittedObjects": omitted_objects} if "objects" in scan else {}),
             "coordinatePolicy": {"units": "m", "coordinateSystem": "right-handed-y-up",
                 "sourceToCanonicalTranslation": [0, -floor_y, 0], "wallThicknessMeters": WALL_THICKNESS,
                 "observedWallPlanes": "assumed_inside_faces_not_certified", "sourcePlaneLoop": inside,
@@ -500,7 +512,13 @@ def _write(path, value):
 def run(input_path, output_path, *, render=False, blender=None, preview=False,
         expected_project=None, expected_job=None, expected_revision=None):
     """Keep private source/dossier and optionally generate a fresh Blender draft."""
-    raw, body = _read(input_path)
+    bundle = None
+    if Path(input_path).suffix.lower() == ".zip":
+        from .photo_bundle import read_photo_bundle
+        bundle = read_photo_bundle(input_path)
+        raw, body = bundle["scan"], bundle["scanBytes"]
+    else:
+        raw, body = _read(input_path)
     for key, expected in (("projectId", expected_project), ("jobId", expected_job), ("inputRevision", expected_revision)):
         if expected is not None and (not isinstance(raw, dict) or raw.get(key) != expected):
             raise RoomPlanError(f"RoomPlan {key} does not match the authorized job")
@@ -515,10 +533,15 @@ def run(input_path, output_path, *, render=False, blender=None, preview=False,
     dossier = {"schemaVersion": "roomplan-result/1.0", "status": "failed", "reviewRequired": True,
                "method": "native_roomplan_surface_import", "inputSha256": hashlib.sha256(body).hexdigest(),
                "sourcePath": "scan.input.json", "reconstructionRequestPath": None, "draftManifestPath": None}
+    if bundle is not None:
+        _write_photo_sources(output, bundle, dossier)
     try:
         compiled = import_scan(raw)
+        if bundle is not None:
+            _attach_photo_evidence(output, bundle, compiled, dossier)
         dossier.update({key: compiled[key] for key in ("status", "warnings", "corrections", "floorY", "coordinatePolicy")})
         dossier.update({key: compiled["request"][key] for key in ("projectId", "jobId", "inputRevision")})
+        dossier.update({key: compiled[key] for key in ("detectedObjectCount", "importedItemCount", "omittedObjects") if key in compiled})
         _write(output / "reconstruction.request.json", compiled["request"])
         dossier["reconstructionRequestPath"] = "reconstruction.request.json"
         _write(output / "roomplan.dossier.json", dossier)
@@ -534,3 +557,53 @@ def run(input_path, output_path, *, render=False, blender=None, preview=False,
         dossier["error"] = str(error)[:2000] if isinstance(error, RoomPlanError) else "RoomPlan draft generation failed; inspect private worker configuration."
         _write(output / "roomplan.dossier.json", dossier)
         raise
+
+
+def _private_bytes(path, body):
+    path.write_bytes(body)
+    os.chmod(path, 0o600)
+
+
+def _write_photo_sources(output, bundle, dossier):
+    """Copy only individually validated members, never extract ZIP paths."""
+    _private_bytes(output / "scan.input.zip", bundle["archiveBytes"])
+    _private_bytes(output / "photos.manifest.json", bundle["manifestBytes"])
+    (output / "photos").mkdir(mode=0o700)
+    for photo in bundle["manifest"]["photos"]:
+        _private_bytes(output / "photos" / (photo["id"] + ".jpg"), bundle["files"][photo["path"]])
+    dossier.update({"photoCount": len(bundle["manifest"]["photos"]),
+                    "photoManifestPath": "photos.manifest.json", "photoRegistrationPath": None,
+                    "appearancePhotosPath": None, "photoArchivePath": "scan.input.zip",
+                    "photoArchiveSha256": bundle["sha256"]})
+
+
+def _attach_photo_evidence(output, bundle, compiled, dossier):
+    from .photo_bundle import representative_photos
+    photos = bundle["manifest"]["photos"]
+    request = compiled["request"]
+    references = {}
+    for photo in photos:
+        ident = _evidence_id(request["jobId"] + ":rgb:" + photo["id"])
+        references[photo["id"]] = ident
+        request["evidence"].append({"id": ident, "sourceUrl": None,
+            "privateAssetId": request["jobId"] + ":" + photo["path"],
+            "observedAt": photo["capturedAt"],
+            "claim": "Captured-room RGB appearance evidence; photo SHA-256 " + photo["sha256"]
+                + ". Camera pose is source ARKit tracking, not verified texture alignment or furniture identity.",
+            "dimensionStatus": None, "confirmedByUserAt": None})
+    validate_request(request)
+    registration = {"schemaVersion": "roomplan-photo-registration/1.0", "reviewRequired": True,
+        "sourceManifestPath": "photos.manifest.json", "coordinateSystem": bundle["manifest"]["coordinateSystem"],
+        "imageConvention": bundle["manifest"]["imageConvention"],
+        "sourceToCanonicalTranslation": compiled["coordinatePolicy"]["sourceToCanonicalTranslation"],
+        "posePolicy": "Camera-to-world column-major transforms remain unmodified in source ARKit space. Add the recorded translation once for canonical room coordinates. ARKit drift/relocalization may require registration review.",
+        "photos": [{**photo, "evidenceId": references[photo["id"]]} for photo in photos]}
+    _write(output / "photo-registration.json", registration)
+    selected = representative_photos(photos)
+    _write(output / "appearance.photos.json", {"photos": [
+        {"id": photo["id"], "evidenceId": references[photo["id"]], "sha256": photo["sha256"],
+         "mediaType": "image/jpeg", "scope": "captured_room", "path": photo["path"]}
+        for photo in selected]})
+    dossier.update({"photoRegistrationPath": "photo-registration.json",
+                    "appearancePhotosPath": "appearance.photos.json", "appearancePhotoCount": len(selected)})
+    compiled["warnings"].append("RGB photos are retained as captured-room appearance evidence, with original camera poses and calibration. They do not automatically create textured walls or exact furniture meshes; registration and appearance require review.")

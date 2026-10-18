@@ -26,13 +26,13 @@ python3 -m reconstruction.cli build \
   --timeout 120 --preview
 ```
 
-Validation works without Blender. `--preview` optionally renders a CPU Cycles PNG; omit it for the core export. Output directories must be fresh. Use a new job ID/directory for another revision or retry. The CLI prints one JSON result to stdout; errors go to stderr with nonzero exit status. No `bpy` pip package, GPU, texture downloads, or new website dependency is required.
+Validation works without Blender. `--preview` optionally renders a CPU Cycles PNG; omit it for the core export. Output directories must be fresh. Use a new job ID/directory for another revision or retry. The CLI prints one JSON result to stdout; errors go to stderr with nonzero exit status. No `bpy` pip package, GPU, runtime texture downloads, or new website dependency is required. Include the committed CC0 appearance assets under `public/materials/room/` when packaging the worker.
 
 ## Geometry contract
 
 The [fixture](fixtures/living-room.request.json) is a **synthetic** 4.2 × 3.5 meter centerline room, 2.7 meters high, with 0.12-meter walls, a door, and a window. It is not a captured home or a physical measurement.
 
-Inputs match [`ReconstructionRequest`](contracts.ts) and the existing [`RoomGeometry`/`Evidence` types](../backend/contracts.ts). Required top-level fields are `jobId`, `projectId`, `inputRevision`, `geometry`, and `evidence`. IDs use ASCII letters/digits/underscores/hyphens, starting with a letter or digit, at most 64 characters. Unsupported fields are rejected rather than silently dropped.
+Inputs match [`ReconstructionRequest`](contracts.ts) and the existing [`RoomGeometry`/`Evidence` types](../backend/contracts.ts). Required top-level fields are `jobId`, `projectId`, `inputRevision`, `geometry`, and `evidence`; optional `appearance` carries independently validated photo-derived finishes. IDs use ASCII letters/digits/underscores/hyphens, starting with a letter or digit, at most 64 characters. Unsupported fields are rejected rather than silently dropped.
 
 - Canonical geometry is right-handed, **Y-up meters**, with floor points `[x,z]`.
 - Wall segments and room polygons follow **wall centerlines**. Thickness extends half to either side. Net usable interior dimensions must account for that thickness: approximately 4.08 × 3.38 meters for this fixture. Upstream producers must convert measured clear dimensions deliberately.
@@ -51,8 +51,8 @@ Limits: 2 MiB JSON; 32 rooms; 512 walls; 256 openings, at most 32 per wall; 256 
 | File | Purpose |
 | --- | --- |
 | `scene.json` | Normalized validated input, including private evidence |
-| `scene.blend` | Separate editable floors/walls/opening metadata, with preview camera/lights |
-| `scene.glb` | Self-contained runtime shell with PBR materials and no textures, cameras, lights, animation, or Draco dependency |
+| `scene.blend` | Separate editable floors/walls/opening metadata, packed PBR images/HDRI, and Cycles preview rig |
+| `scene.glb` | Self-contained runtime shell with embedded PBR textures and no cameras, lights, animation, or Draco dependency |
 | `manifest.json` | Project/job/revision, versions, IDs, file sizes/SHA-256 hashes, canonical bounds, statistics, and limitations |
 | `worker.log` | Private generation diagnostics |
 | `preview.png` | Optional CPU render |
@@ -119,3 +119,19 @@ The verifier checks hashes, actual Three.js loading, finite positions, metadata,
 - Root `npm run lint` and `npm run build` passed during integration.
 
 The [address research](address/README.md) and [mobile photo capture](capture/README.md) stages now feed this worker. Calibrated multi-view reconstruction, physical accuracy, hosted jobs/storage, product viewer integration, and Quest/mobile hardware tests remain unverified or separate work. Angelina owns capture/confirmation UI, Matthew backend integration, and Silas the viewer. See [team ownership](../docs/team-ownership.md).
+
+## PBR materials and preview lighting
+
+Generator `tadaima-shell/1.1.0` adds `renderProfile: "pbr-daylight-v1"` to the manifest and saved scene. [`shading.py`](shading.py) uses portable Principled materials: real oak base color/roughness/OpenGL normal maps at a 1.2 m repeat, plus subtle plaster normals at a 1 m repeat. Every face receives metric UVs without changing the supplied geometry, apertures, or dimensions. These are styling defaults, not measured or inferred finishes of the captured home.
+
+The saved Blender scene uses a packed 1k studio HDR environment, warm area/daylight sources, Cycles indirect bounces, adaptive sampling, denoising, and AgX highlight handling. The camera fits all projected room bounds. Camera-facing walls are hidden from the **preview render** for a cutaway; their mesh data remains editable and is explicitly included in the GLB. To render from a different interior camera, restore render visibility on walls marked `previewCutaway`. The presentation ground and lighting rig are excluded from the exported room.
+
+Images are decoded, converted to PNG, packed into the `.blend`, and embedded into the GLB. The files remain portable after transfer; no texture URLs or the original checkout are needed to view them. Blender node graphs and Cycles lighting are not exported as a browser shader or baked illumination. The web viewer supplies its own HDR reflections, lights and shadows, while retaining the exported PBR maps. Baked room shadows would be inappropriate for editable furniture and explode mode.
+
+The synthetic fixture still has five meshes / 144 triangles; embedded images increase its GLB from approximately 12 KB to **6.04 MB**. The interactive demo uses the original 1k JPEG maps separately, totaling **4.20 MB including the HDRI**. Asset authors, original URLs, physical tile sizes, CC0 license, and checksums are recorded in [`public/materials/room/sources.json`](../public/materials/room/sources.json). These new shared assets are consumed only by reconstruction shading and the spatial room workspace; no shared contract, dependency, or root configuration changes are required.
+
+The Node verifier now decodes embedded 8-bit RGB/RGBA PNG pixels and checks PBR bindings/UVs. Its bounded decoder rejects unsupported PNG encodings explicitly. This verifies image data and loader compatibility, not GPU appearance. Reopened-Blender checks additionally verify packed assets, path-tracing setup, camera framing, and unchanged topology/apertures. Run the decoder regression checks with `node --test reconstruction/tests/test-png-decoder.mjs`.
+
+## Photo-derived appearance and window daylight
+
+Generator `tadaima-shell/1.2.0` / `pbr-window-daylight-v2` adds optional per-floor/wall photo estimates and window-sized, geometry-positioned daylight sources. Both address and capture pipelines expose an opt-in appearance stage, including keyless Codex handoffs and strict photo/hash/revision checks. The browser reads the same profile and can open local reconstruction JSON. Unlisted finishes retain defaults; unverified windows are not invented. See [photo appearance setup, contract, limitations and validation](../docs/photo-appearance.md). The earlier PBR section describes version 1.1.0; current window daylight supersedes its fixed key/sun rig.

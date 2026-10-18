@@ -1,6 +1,7 @@
 import SwiftUI
 import RoomPlan
 import UIKit
+import ImageIO
 
 @main
 struct TadaimaScanApp: App {
@@ -19,40 +20,77 @@ struct ScanScreen: View {
 
     var body: some View {
         NavigationStack {
-            VStack(alignment: .leading, spacing: 16) {
-                Text("A room scan. No tape measure.").font(.title2.weight(.semibold))
-                Text("Move slowly and follow the on-screen RoomPlan guidance. Scan one room, then review its model.")
-                    .font(.subheadline).foregroundStyle(.secondary)
-                if let view = model.captureView {
-                    NativeRoomView(view: view).id(model.scanID)
-                        .frame(minHeight: 240, maxHeight: .infinity)
-                        .clipShape(RoundedRectangle(cornerRadius: 16))
-                } else if !model.supported {
-                    ContentUnavailableView("LiDAR iPhone required", systemImage: "viewfinder",
-                        description: Text("Use an iPhone 14 Pro or another RoomPlan-supported LiDAR device. The simulator cannot scan a room."))
-                } else {
-                    ContentUnavailableView("Ready to scan", systemImage: "viewfinder",
-                        description: Text("RoomPlan uses the camera and LiDAR. No photos or scans are uploaded by this app."))
+            GeometryReader { layout in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text("A room scan. No tape measure.").font(.title2.weight(.semibold))
+                        Text("Move slowly. Include walls, floors and furniture from several angles. Pause briefly to save clear appearance photos.")
+                            .font(.subheadline).foregroundStyle(.secondary)
+                        if let view = model.captureView {
+                            NativeRoomView(view: view).id(model.scanID)
+                                .frame(height: max(240, layout.size.height * 0.44))
+                                .clipShape(RoundedRectangle(cornerRadius: 16))
+                        } else if !model.supported {
+                            ContentUnavailableView("LiDAR iPhone required", systemImage: "viewfinder",
+                                description: Text("Use an iPhone 14 Pro or another RoomPlan-supported LiDAR device. The simulator cannot scan a room."))
+                        } else {
+                            ContentUnavailableView("Ready to scan", systemImage: "viewfinder",
+                                description: Text("RoomPlan uses the camera and LiDAR. Photos and scans stay local until you share them."))
+                        }
+                        if model.phase == .idle || model.phase == .failed {
+                            Toggle("Save appearance photos", isOn: $model.recordAppearancePhotos)
+                            Text("Automatically saves up to 32 photos with camera positions. You can also capture a photo while scanning.")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                        if model.phase == .scanning, model.recordAppearancePhotos {
+                            HStack {
+                                Text("\(model.photoCount)/32 photos saved").font(.subheadline)
+                                Spacer()
+                                Button("Capture photo") { model.capturePhoto() }.buttonStyle(.bordered)
+                            }
+                            if let detail = model.photoMessage {
+                                Text(detail).font(.caption).foregroundStyle(.secondary)
+                                    .accessibilityAddTraits(.updatesFrequently)
+                            }
+                        }
+                        if model.phase == .review || model.phase == .exporting {
+                            if let scanName = model.scanName {
+                                Text(scanName).font(.headline).textSelection(.enabled)
+                            }
+                            TextField("Room name", text: $model.roomLabel)
+                                .textFieldStyle(.roundedBorder).disabled(model.isBusy)
+                                .accessibilityLabel("Room name")
+                            Text("\(model.surfaceCount) surfaces, \(model.objectCount) objects and \(model.photoCount) photos. Furniture shapes are size proxies. Photos preserve real appearance; textures are not applied automatically.")
+                                .font(.footnote).foregroundStyle(.secondary)
+                            if !model.photos.isEmpty {
+                                ScrollView(.horizontal) {
+                                    LazyHStack(spacing: 8) {
+                                        ForEach(model.photos, id: \.metadata.id) { photo in
+                                            if let image = photoThumbnail(photo.jpeg) {
+                                                Image(uiImage: image).resizable().scaledToFill()
+                                                    .frame(width: 88, height: 66).clipped()
+                                                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                                                    .accessibilityLabel("Captured room appearance photo")
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        if let message = model.message {
+                            Text(message).font(.footnote).foregroundStyle(.orange)
+                                .accessibilityAddTraits(.updatesFrequently)
+                        }
+                        if model.isBusy {
+                            HStack { ProgressView(); Text(progressMessage).font(.subheadline) }
+                        }
+                        controls
+                        Text("Share scan + photos keeps geometry, JPEGs and camera calibration together. JSON and USDZ export geometry only. No automatic upload.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                    .padding()
                 }
-                if model.phase == .review || model.phase == .exporting {
-                    TextField("Room name", text: $model.roomLabel)
-                        .textFieldStyle(.roundedBorder).disabled(model.isBusy)
-                        .accessibilityLabel("Room name")
-                    Text("\(model.surfaceCount) structural surfaces captured. Review the result; sensor estimates can miss details or need correction.")
-                        .font(.footnote).foregroundStyle(.secondary)
-                }
-                if let message = model.message {
-                    Text(message).font(.footnote).foregroundStyle(.orange)
-                        .accessibilityAddTraits(.updatesFrequently)
-                }
-                if model.isBusy {
-                    HStack { ProgressView(); Text(progressMessage).font(.subheadline) }
-                }
-                controls
-                Text("Local JSON is the Blender import bridge. USDZ is an optional native reference model. Sharing is your choice; there is no automatic upload.")
-                    .font(.caption).foregroundStyle(.secondary)
             }
-            .padding()
             .navigationTitle("tadaima / scan")
             .navigationBarTitleDisplayMode(.inline)
             .sheet(item: $share) { item in ScanShareSheet(url: item.url) }
@@ -60,6 +98,19 @@ struct ScanScreen: View {
                 if phase == .background { share = nil; model.backgrounded() }
             }
         }
+    }
+
+    private func photoThumbnail(_ data: Data) -> UIImage? {
+        guard let source = CGImageSourceCreateWithData(data as CFData,
+            [kCGImageSourceShouldCache: false] as CFDictionary),
+              let pixels = CGImageSourceCreateThumbnailAtIndex(source, 0, [
+                kCGImageSourceCreateThumbnailFromImageAlways: true,
+                kCGImageSourceThumbnailMaxPixelSize: 264,
+                kCGImageSourceShouldCacheImmediately: true
+              ] as CFDictionary) else { return nil }
+        // This app captures in portrait; rotate only the display copy. Exported
+        // sensor pixels and calibration remain unchanged for reconstruction.
+        return UIImage(cgImage: pixels, scale: 1, orientation: .right)
     }
 
     private var progressMessage: String {
@@ -83,16 +134,25 @@ struct ScanScreen: View {
                 .buttonStyle(.borderedProminent).disabled(!model.supported)
         case .scanning:
             HStack {
-                Button("Finish & review") { model.finish() }.buttonStyle(.borderedProminent)
+                Button("Finish & review") { Task { await model.finish() } }.buttonStyle(.borderedProminent)
                 Button("Cancel scan", role: .cancel) { model.rescan() }.buttonStyle(.bordered)
             }
         case .requestingPermission, .processing:
             Button("Cancel scan", role: .cancel) { model.rescan() }.buttonStyle(.bordered)
         case .review:
             VStack(alignment: .leading, spacing: 10) {
+                if model.photoCount > 0 {
+                    Button("Share scan + photos") {
+                        Task {
+                            if let url = await model.shareFile(includeUSDZ: false, includePhotos: true) {
+                                share = SharedScan(url: url)
+                            }
+                        }
+                    }.buttonStyle(.borderedProminent)
+                }
                 HStack {
                     Button("Share scan JSON") { Task { if let url = await model.shareFile(includeUSDZ: false) { share = SharedScan(url: url) } } }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(.bordered)
                     Button("Share USDZ") { Task { if let url = await model.shareFile(includeUSDZ: true) { share = SharedScan(url: url) } } }
                         .buttonStyle(.bordered)
                 }

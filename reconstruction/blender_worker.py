@@ -21,19 +21,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from reconstruction import GENERATOR_VERSION
 from reconstruction.geometry import triangulate_polygon, validate_request, wall_cells
 from reconstruction.joins import wall_join_slopes
+from reconstruction.shading import RENDER_PROFILE, add_preview_setup, metric_uvs, pbr_material, room_materials
 
 FLOOR_THICKNESS = 0.08
-
-
-def material(name: str, rgba: tuple[float, float, float, float]):
-    result = bpy.data.materials.new(name)
-    result.use_nodes = True
-    result.diffuse_color = rgba
-    shader = result.node_tree.nodes.get("Principled BSDF")
-    shader.inputs["Base Color"].default_value = rgba
-    shader.inputs["Roughness"].default_value = 0.85
-    shader.inputs["Metallic"].default_value = 0.0
-    return result
 
 
 def mesh_object(name, vertices, faces, collection, mat):
@@ -166,45 +156,38 @@ def build_opening(opening, wall_obj, thickness, collection):
     return obj
 
 
+def build_existing_furniture(item, collection, mat):
+    """Editable sensor bounding box; deliberately not a recovered product mesh."""
+    width, height, depth = item["dimensions"]
+    vertices = [(x * width / 2, z * depth / 2, y * height)
+                for y in (0, 1) for z in (-1, 1) for x in (-1, 1)]
+    faces = [(0, 1, 3, 2), (4, 6, 7, 5), (0, 4, 5, 1),
+             (2, 3, 7, 6), (0, 2, 6, 4), (1, 5, 7, 3)]
+    obj = mesh_object("Existing_" + item["id"], vertices, faces, collection, mat)
+    x, y, z = item["position"]
+    obj.location = (x, -z, y)
+    # A right-handed +Y rotation maps +X to -Z. The canonical axis
+    # conversion maps this to Blender +Z, matching Three.js rotation.y.
+    obj.rotation_euler.z = item["rotationY"]
+    identify(obj, {**item, "evidenceIds": item.get("evidenceIds", [])}, "existing_furniture")
+    obj["label"] = item["label"]
+    obj["roomId"] = item["roomId"]
+    obj["origin"] = "existing_owned"
+    obj["locked"] = item["locked"]
+    obj["dimensionsJson"] = json.dumps(item["dimensions"], separators=(",", ":"))
+    obj["proxyGeometry"] = "sensor_bounding_box"
+    obj["finish"] = "paint"
+    obj["appearanceStatus"] = "sensor_proxy"
+    metric_uvs(obj, 1)
+    return obj
+
+
 def bounds_of(objects):
     points = [obj.matrix_world @ Vector(corner) for obj in objects if obj.type == "MESH" for corner in obj.bound_box]
     # Blender (x,y,z) -> canonical application (x,z,-y).
     canonical = [(p.x, p.z, -p.y) for p in points]
     return {"min": [min(p[i] for p in canonical) for i in range(3)],
             "max": [max(p[i] for p in canonical) for i in range(3)]}
-
-
-def add_preview_setup(scene, bounds):
-    low, high = bounds["min"], bounds["max"]
-    target = Vector(((low[0] + high[0]) / 2, -(low[2] + high[2]) / 2, (low[1] + high[1]) / 3))
-    span = max(high[0] - low[0], high[2] - low[2], high[1] - low[1])
-    data = bpy.data.cameras.new("PreviewCamera")
-    camera = bpy.data.objects.new("PreviewCamera", data)
-    scene.collection.objects.link(camera)
-    camera.location = target + Vector((span * 1.3, -span * 1.5, span * 1.6))
-    camera.rotation_euler = (target - camera.location).to_track_quat("-Z", "Y").to_euler()
-    data.type = "ORTHO"
-    data.ortho_scale = span * 1.7
-    scene.camera = camera
-    light_data = bpy.data.lights.new("PreviewArea", "AREA")
-    light = bpy.data.objects.new("PreviewArea", light_data)
-    scene.collection.objects.link(light)
-    light.location = target + Vector((span, -span / 2, span * 2))
-    light.rotation_euler = (target - light.location).to_track_quat("-Z", "Y").to_euler()
-    light_data.energy = 1800
-    light_data.shape = "DISK"
-    light_data.size = span * 1.5
-    scene.world.use_nodes = True
-    scene.world.node_tree.nodes["Background"].inputs["Color"].default_value = (0.6, 0.65, 0.75, 1)
-    scene.world.node_tree.nodes["Background"].inputs["Strength"].default_value = 0.5
-    scene.render.engine = "CYCLES"
-    scene.cycles.device = "CPU"
-    scene.cycles.samples = 24
-    scene.cycles.seed = 0
-    scene.render.resolution_x = 960
-    scene.render.resolution_y = 720
-    scene.render.resolution_percentage = 100
-    scene.render.image_settings.file_format = "PNG"
 
 
 def generate(request, output: Path, preview: bool):
@@ -230,17 +213,34 @@ def generate(request, output: Path, preview: bool):
         collection = bpy.data.collections.new(name)
         scene.collection.children.link(collection)
         collections[name] = collection
-    floor_mat = material("Floor_PBR", (0.53, 0.4, 0.26, 1))
-    wall_mat = material("Wall_PBR", (0.84, 0.82, 0.76, 1))
-    objects = [build_floor(room, collections["Floors"], floor_mat) for room in geometry["rooms"]]
+    materials, appearance_summary = room_materials(geometry, request.get("appearance"))
+    scene["appearanceSummaryJson"] = json.dumps(appearance_summary, separators=(",", ":"))
+    objects = [build_floor(room, collections["Floors"], materials[room["id"]][0]) for room in geometry["rooms"]]
     for wall in geometry["walls"]:
         openings = [o for o in geometry["openings"] if o["wallId"] == wall["id"]]
-        obj = build_wall(wall, openings, geometry["walls"], geometry["openings"], collections["Walls"], wall_mat)
+        obj = build_wall(wall, openings, geometry["walls"], geometry["openings"], collections["Walls"], materials[wall["id"]][0])
         objects.append(obj)
         objects.extend(build_opening(o, obj, wall["thickness"], collections["Openings"]) for o in openings)
     bpy.context.view_layer.update()
+    for obj in objects:
+        if obj.type == "MESH":
+            material, tile, rotation = materials[obj["entityId"]]
+            obj["finish"] = material["finish"]
+            obj["appearanceStatus"] = material["appearanceStatus"]
+            metric_uvs(obj, tile, rotation)
+    if request.get("items"):
+        collection = bpy.data.collections.new("ExistingFurniture")
+        scene.collection.children.link(collection)
+        # Neutral proxy finish is independent from inferred room finishes.
+        material = pbr_material("ExistingFurniture_Proxy", (.31, .38, .40, 1),
+                                normal="plaster-normal.jpg", normal_strength=.035,
+                                roughness_value=.82)
+        material["finish"] = "paint"
+        material["appearanceStatus"] = "sensor_proxy"
+        objects.extend(build_existing_furniture(item, collection, material) for item in request["items"])
+        bpy.context.view_layer.update()
     bounds = bounds_of(objects)
-    add_preview_setup(scene, bounds)
+    lighting_summary = add_preview_setup(scene, bounds, objects, geometry)
     bpy.context.view_layer.update()
     bpy.ops.object.select_all(action="DESELECT")
     for obj in objects:
@@ -251,7 +251,9 @@ def generate(request, output: Path, preview: bool):
     result = bpy.ops.export_scene.gltf(
         filepath=str(output / "scene.glb"), export_format="GLB", check_existing=False,
         use_selection=True, export_yup=True, export_extras=True, export_materials="EXPORT",
-        export_normals=True, export_texcoords=False, export_animations=False,
+        export_normals=True, export_texcoords=True, export_tangents=True, export_animations=False,
+        export_image_format="AUTO",
+        use_renderable=False,
         export_cameras=False, export_lights=False, export_draco_mesh_compression_enable=False,
         export_unused_images=False, export_unused_textures=False,
     )
@@ -259,6 +261,9 @@ def generate(request, output: Path, preview: bool):
         raise RuntimeError("glTF exporter did not finish")
     metadata = {
         "blenderVersion": bpy.app.version_string,
+        "renderProfile": RENDER_PROFILE,
+        "lighting": lighting_summary,
+        "appearance": appearance_summary,
         "bounds": bounds,
         "objects": [{"id": obj["entityId"], "role": obj["role"], "name": obj.name,
                      "evidenceIds": json.loads(obj["evidenceIdsJson"])} for obj in objects],

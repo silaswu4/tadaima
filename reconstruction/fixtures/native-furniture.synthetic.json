@@ -1,0 +1,385 @@
+{
+  "capturedAt" : "2026-10-18T01:00:00Z",
+  "device" : {
+    "model" : "synthetic-test-no-device",
+    "systemVersion" : "test"
+  },
+  "inputRevision" : 0,
+  "jobId" : "synthetic-swift-scan",
+  "objects" : [
+    {
+      "category" : "sofa",
+      "confidence" : "high",
+      "dimensions" : [
+        1.8,
+        0.9,
+        0.8
+      ],
+      "id" : "synthetic-sofa",
+      "transform" : [
+        0,
+        0,
+        1,
+        0,
+        0,
+        1,
+        0,
+        0,
+        -1,
+        0,
+        0,
+        0,
+        1,
+        0.45,
+        1.75,
+        1
+      ]
+    },
+    {
+      "category" : "table",
+      "confidence" : "medium",
+      "dimensions" : [
+        1,
+        0.7,
+        0.6
+      ],
+      "id" : "synthetic-table",
+      "transform" : [
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        -0,
+        0,
+        1,
+        0,
+        2.5,
+        1.1,
+        1.75,
+        1
+      ]
+    }
+  ],
+  "projectId" : "synthetic-swift",
+  "roomId" : "synthetic-swift-room",
+  "roomLabel" : "Synthetic Swift 4.2 by 3.5 meter protocol fixture",
+  "schemaVersion" : "roomplan-scan/1.1",
+  "surfaces" : [
+    {
+      "category" : "wall",
+      "confidence" : "high",
+      "dimensions" : [
+        4.2,
+        2.7,
+        0
+      ],
+      "id" : "synthetic-wall-a",
+      "isCurved" : false,
+      "parentId" : null,
+      "polygonCorners" : [
+        [
+          -2.1,
+          -1.35,
+          0
+        ],
+        [
+          2.1,
+          -1.35,
+          0
+        ],
+        [
+          2.1,
+          1.35,
+          0
+        ],
+        [
+          -2.1,
+          1.35,
+          0
+        ]
+      ],
+      "transform" : [
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        -0,
+        0,
+        1,
+        0,
+        2.1,
+        1.35,
+        0,
+        1
+      ]
+    },
+    {
+      "category" : "wall",
+      "confidence" : "high",
+      "dimensions" : [
+        3.5,
+        2.7,
+        0
+      ],
+      "id" : "synthetic-wall-b",
+      "isCurved" : false,
+      "parentId" : null,
+      "polygonCorners" : [
+        [
+          -1.75,
+          -1.35,
+          0
+        ],
+        [
+          1.75,
+          -1.35,
+          0
+        ],
+        [
+          1.75,
+          1.35,
+          0
+        ],
+        [
+          -1.75,
+          1.35,
+          0
+        ]
+      ],
+      "transform" : [
+        0,
+        0,
+        1,
+        0,
+        0,
+        1,
+        0,
+        0,
+        -1,
+        0,
+        0,
+        0,
+        4.2,
+        1.35,
+        1.75,
+        1
+      ]
+    },
+    {
+      "category" : "wall",
+      "confidence" : "high",
+      "dimensions" : [
+        4.2,
+        2.7,
+        0
+      ],
+      "id" : "synthetic-wall-c",
+      "isCurved" : false,
+      "parentId" : null,
+      "polygonCorners" : [
+        [
+          -2.1,
+          -1.35,
+          0
+        ],
+        [
+          2.1,
+          -1.35,
+          0
+        ],
+        [
+          2.1,
+          1.35,
+          0
+        ],
+        [
+          -2.1,
+          1.35,
+          0
+        ]
+      ],
+      "transform" : [
+        -1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        -0,
+        0,
+        -1,
+        0,
+        2.1,
+        1.35,
+        3.5,
+        1
+      ]
+    },
+    {
+      "category" : "wall",
+      "confidence" : "high",
+      "dimensions" : [
+        3.5,
+        2.7,
+        0
+      ],
+      "id" : "synthetic-wall-d",
+      "isCurved" : false,
+      "parentId" : null,
+      "polygonCorners" : [
+        [
+          -1.75,
+          -1.35,
+          0
+        ],
+        [
+          1.75,
+          -1.35,
+          0
+        ],
+        [
+          1.75,
+          1.35,
+          0
+        ],
+        [
+          -1.75,
+          1.35,
+          0
+        ]
+      ],
+      "transform" : [
+        0,
+        0,
+        -1,
+        0,
+        0,
+        1,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        1.35,
+        1.75,
+        1
+      ]
+    },
+    {
+      "category" : "door",
+      "confidence" : "high",
+      "dimensions" : [
+        0.9,
+        2.1,
+        0
+      ],
+      "id" : "synthetic-door",
+      "isCurved" : false,
+      "parentId" : "synthetic-wall-a",
+      "polygonCorners" : [
+        [
+          -0.45,
+          -1.05,
+          0
+        ],
+        [
+          0.45,
+          -1.05,
+          0
+        ],
+        [
+          0.45,
+          1.05,
+          0
+        ],
+        [
+          -0.45,
+          1.05,
+          0
+        ]
+      ],
+      "transform" : [
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        -0,
+        0,
+        1,
+        0,
+        1.2,
+        1.05,
+        0,
+        1
+      ]
+    },
+    {
+      "category" : "window",
+      "confidence" : "high",
+      "dimensions" : [
+        1.2,
+        1.1,
+        0
+      ],
+      "id" : "synthetic-window",
+      "isCurved" : false,
+      "parentId" : "synthetic-wall-b",
+      "polygonCorners" : [
+        [
+          -0.6,
+          -0.55,
+          0
+        ],
+        [
+          0.6,
+          -0.55,
+          0
+        ],
+        [
+          0.6,
+          0.55,
+          0
+        ],
+        [
+          -0.6,
+          0.55,
+          0
+        ]
+      ],
+      "transform" : [
+        0,
+        0,
+        1,
+        0,
+        0,
+        1,
+        0,
+        0,
+        -1,
+        0,
+        0,
+        0,
+        4.2,
+        1.5,
+        1.75,
+        1
+      ]
+    }
+  ]
+}

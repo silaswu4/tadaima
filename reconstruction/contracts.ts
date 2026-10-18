@@ -1,4 +1,4 @@
-import type { Evidence, RoomGeometry } from "@/backend/contracts";
+import type { Evidence, PlacedItem, RoomAppearance, RoomGeometry } from "@/backend/contracts";
 
 /** Input to the local headless worker. Geometry uses wall centerlines in meters. */
 export interface ReconstructionRequest {
@@ -7,6 +7,9 @@ export interface ReconstructionRequest {
   inputRevision: number;
   /** Structurally validated geometry; source accuracy/review status remains upstream. */
   geometry: RoomGeometry;
+  appearance?: RoomAppearance;
+  /** Optional detected existing furniture, kept separate from structural meshes. */
+  items?: PlacedItem[];
   evidence: Evidence[];
 }
 
@@ -50,7 +53,7 @@ export interface ReconstructionManifest extends ReconstructionResult {
     blend: ReconstructionArtifactFile;
     glb: ReconstructionArtifactFile;
   };
-  objects: Array<{ id: string; role: "room_floor" | "wall" | "opening"; name: string; evidenceIds: string[] }>;
+  objects: Array<{ id: string; role: "room_floor" | "wall" | "opening" | "existing_furniture"; name: string; evidenceIds: string[] }>;
   statistics: { meshCount: number; triangleCount: number; entityCount: number };
   warnings: string[];
   preview?: { fileName: string; mediaType: string; byteLength: number; sha256: string };
