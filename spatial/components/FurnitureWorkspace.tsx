@@ -7,6 +7,7 @@ import { makeWorkspaceDemo } from "../room/workspace-fixture";
 import { makePhotoReferencePlan } from "../room/photo-reference";
 import { MAX_ROOM_IMPORT_BYTES, parseRoomImport } from "../room/import-room";
 import { planWindowDaylight } from "../room/window-daylight";
+import type { CapturedRoomBinding } from "../room/textured-model";
 import type { WorkspaceItem, WorkspaceScene } from "../room/workspace-scene";
 import "./FurnitureWorkspace.css";
 
@@ -18,6 +19,11 @@ export default function FurnitureWorkspace() {
   const canvas = useRef<HTMLCanvasElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const modelInput = useRef<HTMLInputElement>(null);
+  const capturedInput = useRef<HTMLInputElement>(null);
+  const [capturedModel, setCapturedModel] = useState<ArrayBuffer | null>(null);
+  const [capturedLoaded, setCapturedLoaded] = useState(false);
+  const [capturedView, setCapturedView] = useState(false);
+  const [capturedBinding, setCapturedBinding] = useState<CapturedRoomBinding | null>(null);
   const [texturedModel, setTexturedModel] = useState<ArrayBuffer | null>(null);
   const [photoModelLoaded, setPhotoModelLoaded] = useState(false);
   const importGeneration = useRef(0);
@@ -32,7 +38,7 @@ export default function FurnitureWorkspace() {
   const [ready, setReady] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const viewRef = useRef<{ exploded: boolean; selectedId: string | null }>({ exploded: false, selectedId: null });
+  const viewRef = useRef<{ exploded: boolean; selectedId: string | null; capturedView: boolean }>({ exploded: false, selectedId: null, capturedView: false });
 
   useEffect(() => {
     let alive = true;
@@ -62,6 +68,12 @@ export default function FurnitureWorkspace() {
             setPhotoModelLoaded(loaded);
             if (message) setImportError(message);
           },
+          onCapturedModel(loaded, message) {
+            if (!alive) return;
+            setCapturedLoaded(loaded);
+            if (!loaded) setCapturedView(false);
+            if (message) setImportError(message);
+          },
           onError(message) {
             if (!alive) return;
             setError(message);
@@ -71,6 +83,9 @@ export default function FurnitureWorkspace() {
         }, {
           plan,
           texturedModel: texturedModel ?? undefined,
+          capturedModel: capturedModel ?? undefined,
+          capturedBinding: capturedBinding ?? undefined,
+          capturedView: viewRef.current.capturedView,
           lite: window.matchMedia("(max-width: 767px), (pointer: coarse)").matches,
           reducedMotion: window.matchMedia("(prefers-reduced-motion: reduce)").matches,
         });
@@ -88,14 +103,15 @@ export default function FurnitureWorkspace() {
       if (sceneRef.current === current) sceneRef.current = null;
       current?.dispose();
     };
-  }, [plan, texturedModel]);
+  }, [plan, texturedModel, capturedModel, capturedBinding]);
 
   // Synchronize React's committed preview state with the external renderer.
   // The state updater stays pure even when React checks it twice in Strict Mode.
   useEffect(() => {
-    viewRef.current = { exploded, selectedId };
+    viewRef.current = { exploded, selectedId, capturedView };
+    sceneRef.current?.setCapturedView(capturedView);
     sceneRef.current?.setExploded(exploded);
-  }, [exploded, selectedId]);
+  }, [exploded, selectedId, capturedView]);
 
   const selected = items.find((item) => item.id === selectedId) ?? null;
 
@@ -105,7 +121,8 @@ export default function FurnitureWorkspace() {
   }
 
   function resetPresentation() {
-    viewRef.current = { exploded: false, selectedId: null };
+    viewRef.current = { exploded: false, selectedId: null, capturedView: false };
+    setCapturedView(false);
     setExploded(false); setSelectedId(null); setItems([]); setReady(false); setLoading(true);
   }
   async function importRoom(file?: File) {
@@ -113,9 +130,13 @@ export default function FurnitureWorkspace() {
     const generation = ++importGeneration.current;
     try {
       if (file.size > MAX_ROOM_IMPORT_BYTES) throw new Error("Choose a room file smaller than 2 MiB.");
-      const next = parseRoomImport(await file.text());
+      const body = await file.arrayBuffer();
+      const source = new TextDecoder("utf-8", { fatal: true }).decode(body);
+      const next = parseRoomImport(source);
+      const hash = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", body)), (byte) => byte.toString(16).padStart(2, "0")).join("");
+      const binding = { jobId: JSON.parse(source).jobId as string, inputSha256: hash };
       if (generation !== importGeneration.current) return;
-      resetPresentation(); setTexturedModel(null); setPhotoModelLoaded(false); setImported(next); setImportError("");
+      resetPresentation(); setCapturedModel(null); setCapturedLoaded(false); setCapturedBinding(binding); setTexturedModel(null); setPhotoModelLoaded(false); setImported(next); setImportError("");
     } catch (cause) {
       if (generation === importGeneration.current) setImportError(cause instanceof Error ? cause.message : "The room file could not be opened.");
     }
@@ -132,6 +153,20 @@ export default function FurnitureWorkspace() {
       resetPresentation(); setPhotoModelLoaded(false); setTexturedModel(bytes); setImportError("");
     } catch (cause) {
       if (generation === importGeneration.current) setImportError(cause instanceof Error ? cause.message : "The photo model could not be opened.");
+    }
+  }
+  async function importCapturedModel(file?: File) {
+    if (!file || !imported || !capturedBinding) return;
+    const generation = ++importGeneration.current;
+    try {
+      const { MAX_TEXTURED_MODEL_BYTES, validateLocalCapturedGlb } = await import("../room/textured-model");
+      if (file.size > MAX_TEXTURED_MODEL_BYTES) throw new Error("Choose a captured-room GLB smaller than 64 MiB.");
+      const bytes = await file.arrayBuffer();
+      validateLocalCapturedGlb(bytes, imported, capturedBinding);
+      if (generation !== importGeneration.current) return;
+      setCapturedLoaded(false); setCapturedModel(bytes); setCapturedView(true); setImportError("");
+    } catch (cause) {
+      if (generation === importGeneration.current) setImportError(cause instanceof Error ? cause.message : "The captured room could not be opened.");
     }
   }
   const hasWindowDaylight = planWindowDaylight(plan.geometry).length > 0;
@@ -163,13 +198,17 @@ export default function FurnitureWorkspace() {
             <button type="button" onClick={() => modelInput.current?.click()}>Open textured model</button>
             <input ref={modelInput} type="file" accept="model/gltf-binary,.glb" aria-label="Open local photo-textured GLB"
               onChange={(event) => { void importPhotoModel(event.target.files?.[0]); event.target.value = ""; }} />
+            <button type="button" onClick={() => capturedInput.current?.click()}>Open captured room</button>
+            <input ref={capturedInput} type="file" accept="model/gltf-binary,.glb" aria-label="Open local detailed captured-room GLB"
+              onChange={(event) => { void importCapturedModel(event.target.files?.[0]); event.target.value = ""; }} />
+            {capturedLoaded ? <button type="button" aria-pressed={capturedView} onClick={() => setCapturedView((value) => !value)}>{capturedView ? "Show editable layout" : "Show captured room"}</button> : null}
             {texturedModel ? <button type="button" onClick={() => { importGeneration.current++; resetPresentation(); setTexturedModel(null); setPhotoModelLoaded(false); setImportError(""); }}>Remove photo model</button> : null}
           </> : null}
-          <button type="button" aria-pressed={imported ? undefined : photoReference} onClick={() => { importGeneration.current++; resetPresentation(); setTexturedModel(null); setPhotoModelLoaded(false); setImported(null); setPhotoReference((value) => imported ? true : !value); }}>
+          <button type="button" aria-pressed={imported ? undefined : photoReference} onClick={() => { importGeneration.current++; resetPresentation(); setTexturedModel(null); setPhotoModelLoaded(false); setCapturedModel(null); setCapturedLoaded(false); setCapturedBinding(null); setImported(null); setPhotoReference((value) => imported ? true : !value); }}>
             {imported ? "Back to demo" : "Photo reference finishes"}
           </button>
         </div>
-        <p className="furniture-fileHelp">Open a reconstruction.request.json or scene.json file (up to 2 MiB). It stays in this browser. Then open its matching photo-textured scene.glb (up to 64 MiB) to see captured appearance. Files stay local; furniture remains selectable and can explode.</p>
+        <p className="furniture-fileHelp">Open a reconstruction.request.json or scene.json file (up to 2 MiB). It stays in this browser. Then open its matching photo-textured scene.glb (up to 64 MiB) to see captured appearance. For a detailed surface scan, choose Open captured room with its matching captured-room.glb. Files stay local. The captured view shows observed shape and appearance; the editable layout keeps furniture proxies selectable and able to explode.</p>
         {importError ? <p className="furniture-importError" role="alert">{importError}</p> : null}
       </section>
 
@@ -178,12 +217,12 @@ export default function FurnitureWorkspace() {
           <div className="furniture-toolbar">
             <div className="furniture-viewState" aria-live="polite">
               <span className={exploded ? "furniture-stateDot furniture-stateDotExploded" : "furniture-stateDot"} aria-hidden="true" />
-              {exploded ? "Inventory layout" : "Room layout"}
+              {capturedView && capturedLoaded ? "Captured room surfaces" : exploded ? "Inventory layout" : "Room layout"}
             </div>
             <div className="furniture-viewActions">
               <button type="button" className="furniture-reset" disabled={!ready}
                 onClick={() => sceneRef.current?.resetCamera()}>Reset view</button>
-              <button type="button" className="furniture-explode" disabled={!ready || !items.length}
+              <button type="button" className="furniture-explode" disabled={!ready || !items.length || capturedView}
                 aria-pressed={exploded} onClick={() => setExploded((value) => !value)}>
                 {exploded ? "Return furniture" : "Explode furniture"}
               </button>
@@ -192,25 +231,25 @@ export default function FurnitureWorkspace() {
 
           <div className="furniture-viewport" aria-busy={loading}>
             <canvas ref={canvas} className="furniture-canvas" role="img"
-              aria-label={imported ? "Interactive imported room and captured furniture draft. Select an item in the list to inspect it." : "Isometric demo room with nine furniture pieces. Select a piece in the item list for its details."}
+              aria-label={capturedView ? "Observed captured room surfaces. Missing areas were not scanned; furniture is not individually editable in this reference." : imported ? "Interactive imported room and captured furniture draft. Select an item in the list to inspect it." : "Isometric demo room with nine furniture pieces. Select a piece in the item list for its details."}
               aria-describedby="furniture-cameraHelp" />
             {loading ? <p className="furniture-loading" role="status">Loading room and furniture…</p> : null}
             {error ? <div className="furniture-error" role="alert"><strong>Room preview unavailable</strong><p>{error}</p></div> : null}
-            <div className="furniture-viewBadge" aria-hidden="true">{exploded ? "02 / pieces" : "01 / together"}</div>
+            <div className="furniture-viewBadge" aria-hidden="true">{capturedView && capturedLoaded ? "03 / captured" : exploded ? "02 / pieces" : "01 / together"}</div>
           </div>
           <div className="furniture-appearanceNote" aria-live="polite">
-            <strong>{photoModelLoaded ? "Captured photo textures" : appearance ? "Photo-estimated finishes" : "Sample finishes"}</strong>
-            <span>{photoModelLoaded ? "Visible photo patches are projected onto the scan geometry. Unseen areas keep fallback materials; furniture shape remains a size proxy." : appearance ? photoScope : "Generic oak and plaster, unrelated to the room photos."} {photoSource ? <a href={photoSource} target="_blank" rel="noreferrer">View reference photo</a> : null}</span>
+            <strong>{capturedView && capturedLoaded ? "Observed room surface scan" : photoModelLoaded ? "Captured photo textures" : appearance ? "Photo-estimated finishes" : "Sample finishes"}</strong>
+            <span>{capturedView && capturedLoaded ? "Actual captured surface geometry with projected photos. Gaps and rough edges reflect missing sensor coverage; this is a partial reference, not a complete exact replica. Return to the editable layout to select or explode furniture proxies." : photoModelLoaded ? "Visible photo patches are projected onto the scan geometry. Unseen areas keep fallback materials; furniture shape remains a size proxy." : appearance ? photoScope : "Generic oak and plaster, unrelated to the room photos."} {photoSource ? <a href={photoSource} target="_blank" rel="noreferrer">View reference photo</a> : null}</span>
             {appearance && !photoModelLoaded ? <span>Only cited surfaces use photo estimates; other finishes use sample materials.</span> : null}
-            <span>{hasWindowDaylight ? "Daylight follows exterior windows in the model. Light strength and downward shadow angle are approximations; sun direction and weather are unknown." : "No exterior windows are established in this draft. A generic studio light keeps it visible; daylight is not reconstructed."}</span>
+            {!capturedView ? <span>{hasWindowDaylight ? "Daylight follows exterior windows in the model. Light strength and downward shadow angle are approximations; sun direction and weather are unknown." : "No exterior windows are established in this draft. A generic studio light keeps it visible; daylight is not reconstructed."}</span> : <span>Photo colors preserve captured lighting; this view uses unlit materials.</span>}
           </div>
-          <p id="furniture-cameraHelp" className="furniture-cameraHelp">Drag to orbit. Scroll or pinch to zoom. Right-drag or use two fingers to pan. Select an exploded piece for a closer view; Reset view restores the overview.</p>
+          <p id="furniture-cameraHelp" className="furniture-cameraHelp">{capturedView ? "Drag to look around the observed room. Scroll or pinch to zoom; right-drag or use two fingers to pan. Reset view returns inside the room. Switch to the editable layout for furniture selection." : "Drag to orbit. Scroll or pinch to zoom. Right-drag or use two fingers to pan. Select an exploded piece for a closer view; Reset view restores the overview."}</p>
         </section>
 
         <aside className="furniture-sidebar" aria-label="Furniture inventory">
           <section className="furniture-selection" aria-labelledby="furniture-selectedHeading" aria-live="polite">
             <p id="furniture-selectedHeading" className="furniture-sectionLabel">selected piece</p>
-            {selected ? <>
+            {capturedView ? <><h2>Captured surfaces.</h2><p className="furniture-selectionHelp">The room and existing furniture share one observed surface reference. Show editable layout to inspect individual detected furniture proxies.</p></> : selected ? <>
               <h2>{selected.label}</h2>
               <p className="furniture-modelLabel">{selected.representation === "photo_textured_proxy" ? "Photo-textured size proxy" : selected.representation === "detected_size_proxy" ? "Detected size proxy" : selected.modelAvailable ? "Demo model" : "Demo proxy"}</p>
               <dl className="furniture-dimensions">
@@ -227,10 +266,10 @@ export default function FurnitureWorkspace() {
           </section>
 
           <section className="furniture-inventory" aria-labelledby="furniture-inventoryHeading">
-            <div className="furniture-inventoryTitle"><h2 id="furniture-inventoryHeading">In this room</h2><span>{items.length ? `${items.length} pieces` : imported ? "room shell" : "demo collection"}</span></div>
+            <div className="furniture-inventoryTitle"><h2 id="furniture-inventoryHeading">{capturedView ? "Editable layout proxies" : "In this room"}</h2><span>{items.length ? `${items.length} pieces` : imported ? "room shell" : "demo collection"}</span></div>
             {items.length ? <ol className="furniture-itemList">{items.map((item, index) => (
               <li key={item.id}><button type="button" className="furniture-item"
-                aria-pressed={selectedId === item.id} onClick={() => selectItem(item.id)}>
+                disabled={capturedView} aria-pressed={selectedId === item.id} onClick={() => selectItem(item.id)}>
                 <span className="furniture-itemNumber" aria-hidden="true">{String(index + 1).padStart(2, "0")}</span>
                 <span className="furniture-itemText"><span>{item.label}</span>{!item.modelAvailable ? <small>{item.representation === "detected_size_proxy" ? "Detected size proxy" : "Demo proxy"}</small> : null}</span>
                 <span className="furniture-itemMark" aria-hidden="true">{selectedId === item.id ? "−" : "+"}</span>

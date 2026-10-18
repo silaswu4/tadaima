@@ -53,6 +53,26 @@ async function verify(directory, validatorModule) {
   const bytes = await readFile(resolve(directory, "scene.glb"));
   const embedded = inspectEmbeddedImages(bytes);
   const textured = embedded.images.length > 0;
+  const captured = manifest.captureRepresentation === "observed_surface_mesh";
+  const surface = manifest.surfaceReconstruction;
+  if (captured) {
+    assert.equal(manifest.renderProfile, "captured-surface-rgb-v1");
+    assert.equal(surface?.schemaVersion, "roomplan-surface-mesh/1.0");
+    assert.deepEqual(JSON.parse(await readFile(resolve(directory, "surface-reconstruction.json"), "utf8")), surface);
+    for (const key of ["projectId", "jobId", "inputRevision", "inputSha256"]) assert.equal(surface[key], manifest[key]);
+    assert.match(surface.meshSha256, /^[0-9a-f]{64}$/);
+    assert.match(surface.sourceArchiveSha256, /^[0-9a-f]{64}$/);
+    assert.equal(surface.triangleCount, manifest.statistics.triangleCount);
+    assert.equal(surface.observedTriangleCount + surface.unobservedTriangleCount, surface.triangleCount);
+    assert(surface.vertexCount > 0 && surface.vertexCount <= 200000 && surface.triangleCount > 0 && surface.triangleCount <= 300000);
+    assert.equal(surface.triangleSourceIndices.length, surface.triangleCount);
+    assert.equal(surface.photoCount, surface.photoSources.length);
+    for (const index of surface.triangleSourceIndices) assert(Number.isInteger(index) && index >= -1 && index < surface.photoCount);
+    assert.equal(surface.triangleSourceIndices.filter((index) => index >= 0).length, surface.observedTriangleCount);
+    assert(surface.coverage >= 0 && surface.coverage <= 1);
+    assert(manifest.objects.every((entry) => entry.role === "captured_surface"), "Reference GLB must exclude planning boxes");
+    assert(embedded.images.every((image) => image.width <= 1024 && image.height <= 1024));
+  }
   const windowProfile = manifest.renderProfile === "pbr-window-daylight-v2";
   const sourceSurfaces = new Map((source.appearance?.surfaces ?? []).map((surface) => [surface.entityId, surface]));
   const photoEntities = new Map((manifest.photoTexturing?.entities ?? []).map((entry) => [entry.entityId, entry]));
@@ -72,6 +92,7 @@ async function verify(directory, validatorModule) {
   const gltf = await new GLTFLoader().parseAsync(data, "");
   gltf.scene.updateMatrixWorld(true);
   const entities = new Map();
+  let testedTriangles = 0, observedTriangles = 0;
   gltf.scene.traverse((object) => {
     if (object.userData.entityId) {
       assert(!entities.has(object.userData.entityId), "Duplicate exported entity ID");
@@ -82,7 +103,30 @@ async function verify(directory, validatorModule) {
       for (const material of materials) material.side = DoubleSide;
       const positions = object.geometry.getAttribute("position");
       for (const number of positions.array) assert(Number.isFinite(number), "Nonfinite vertex");
-      if (textured) {
+      if (captured) {
+        let owner = object;
+        while (owner && !owner.userData.entityId) owner = owner.parent;
+        assert.equal(owner?.userData.role, "captured_surface", "All visible geometry must be observed surfaces");
+        const uv = object.geometry.getAttribute("uv");
+        assert(uv && uv.count === positions.count && uv.itemSize === 2);
+        for (const number of uv.array) assert(Number.isFinite(number), "Nonfinite observed-surface UV");
+        const triangles = (object.geometry.index?.count ?? positions.count) / 3;
+        assert(Number.isInteger(triangles), "Observed surfaces must remain triangles");
+        testedTriangles += triangles;
+        for (const material of materials) {
+          if (material.userData.appearanceSource === "observed_camera_rgb") {
+            assert(material.isMeshBasicMaterial, "Observed camera RGB must use KHR_materials_unlit");
+            assert(material.map?.image?.data?.length > 0, "Observed RGB must actually decode");
+            assert(surface.photoSources.some((photo) => photo.photoId === material.userData.photoId
+              && photo.evidenceId === material.userData.evidenceId), "Unbound observed material source");
+            if (materials.length === 1) observedTriangles += triangles;
+          } else {
+            assert.equal(material.userData.appearanceSource, "unobserved_plain_fallback");
+            assert(material.isMeshStandardMaterial && !material.map && material.metalness === 0,
+              "Unobserved faces must retain plain neutral PBR");
+          }
+        }
+      } else if (textured) {
         const uv = object.geometry.getAttribute("uv");
         assert(uv && uv.itemSize === 2 && uv.count === positions.count, "Textured mesh needs complete UVs");
         for (const number of uv.array) assert(Number.isFinite(number), "Nonfinite UV");
@@ -123,13 +167,26 @@ async function verify(directory, validatorModule) {
     }
   });
   assert.equal(entities.size, manifest.objects.length, "Lost entity metadata");
+  if (captured) {
+    assert.equal(testedTriangles, surface.triangleCount, "Observed triangle topology changed during export");
+    assert.equal(observedTriangles, surface.observedTriangleCount, "Observed triangle/material coverage mismatch");
+    assert.equal(gltf.scene.userData.captureRepresentation, "observed_surface_mesh");
+    assert.equal(gltf.scene.userData.inputSha256, manifest.inputSha256);
+    assert.equal(gltf.scene.userData.sourceRequestSha256, manifest.sourceRequestSha256);
+    for (const object of entities.values()) {
+      const refs = JSON.parse(object.userData.evidenceIdsJson);
+      assert(refs.every((id) => surface.photoSources.some((photo) => photo.evidenceId === id)));
+      assert.equal(object.userData.meshSha256, surface.meshSha256);
+      assert.equal(object.userData.representation, "observed_surface_mesh");
+    }
+  }
   for (const expected of manifest.objects) {
     const object = entities.get(expected.id);
     assert(object, "Missing entity: " + expected.id);
     assert.equal(object.userData.role, expected.role);
     assert.deepEqual(JSON.parse(object.userData.evidenceIdsJson), expected.evidenceIds);
   }
-  for (const item of source.items ?? []) {
+  for (const item of captured ? [] : source.items ?? []) {
     const object = entities.get(item.id);
     assert(object?.isMesh && object.userData.role === "existing_furniture", "Existing furniture must be a separate editable mesh");
     assert.equal(object.userData.origin, "existing_owned");
@@ -168,7 +225,7 @@ async function verify(directory, validatorModule) {
     }
   }
   // Cast across only the corresponding wall, not the opposite room wall.
-  for (const opening of source.geometry.openings) {
+  for (const opening of captured ? [] : source.geometry.openings) {
     const wall = source.geometry.walls.find((item) => item.id === opening.wallId);
     const length = Math.hypot(wall.end[0] - wall.start[0], wall.end[1] - wall.start[1]);
     const dx = (wall.end[0] - wall.start[0]) / length;
@@ -182,8 +239,10 @@ async function verify(directory, validatorModule) {
     assert(marker.getWorldPosition(new Vector3()).distanceTo(center) < 1e-5, "Opening marker transform mismatch");
   }
   const report = { valid: true, loader: "Three.js GLTFLoader", entityCount: entities.size,
-    meshCount: manifest.statistics.meshCount, bounds: actual, testedApertures: source.geometry.openings.length,
-    testedExistingFurniture: source.items?.length ?? 0,
+    meshCount: manifest.statistics.meshCount, bounds: actual, testedApertures: captured ? 0 : source.geometry.openings.length,
+    testedExistingFurniture: captured ? 0 : source.items?.length ?? 0,
+    ...(captured ? {captureRepresentation: "observed_surface_mesh", testedObservedTriangles: testedTriangles,
+      observedTriangles, unobservedTriangles: surface.unobservedTriangleCount} : {}),
     glbByteLength: bytes.length, embeddedPngImages: embedded.images,
     loaderDecodedImageCount: decodedImages.length - decodedBefore,
     renderingVerified: false };

@@ -164,3 +164,16 @@ Run the focused resource/import/placement regressions:
 ```bash
 node --experimental-strip-types --test spatial/tests/test-textured-model.mjs spatial/tests/test-captured-furniture.mjs spatial/tests/test-explode.mjs spatial/tests/test-room-appearance.mjs
 ```
+
+
+### Observed surface reference
+
+For scans that include ARKit surface geometry and photos, open the matching reconstruction JSON with **Open room file**, then use **Open captured room** for `captured-room.glb`. This is a separate view of the sensor's actual partial surface mesh, including furniture contours; it does not replace the editable layout with falsely detailed furniture assets. **Show editable layout** restores the procedural or photo-projected planning scene, previous selection and explode state. **Show captured room** returns to the reference. Inventory selection and explode are disabled in the reference because scan chunks are not individual furniture objects.
+
+The initial camera uses the first captured camera pose when available; otherwise it is placed inside the room at eye level, avoiding a ceiling blocking the overview. Reset returns to that view. Photo-bearing surfaces render unlit and double-sided because RGB images already include captured lighting. Unobserved regions remain fallback surfaces; holes and rough geometry reflect missing sensor coverage. This is not a watertight replica, an individually segmented furniture model, or measured reflectance.
+
+The browser binds the GLB's scene extras `captureRepresentation: "observed_surface_mesh"`, `projectId`, text `inputRevision`, `jobId`, and `sourceRequestSha256` or `inputSha256` to the exact opened JSON bytes. Only semantic `captured_surface` nodes with unique `mesh-<lowercase UUID>` IDs are accepted; a node may own multiple material primitive meshes. Geometry must be finite and rigidly transformed, with bounded triangle indices and no unidentified meshes. Imports retain the existing embedded-resource preflight (64 MiB file, PNG/JPEG, 64 million decoded pixels, no URLs) and add total 900k exported vertex / 300k triangle budgets (up to three UV-seam vertices per source triangle). Nothing is uploaded. Opening a new reconstruction JSON clears both local models.
+
+```bash
+node --experimental-strip-types --test spatial/tests/test-captured-model.mjs spatial/tests/test-textured-model.mjs spatial/tests/test-captured-furniture.mjs spatial/tests/test-explode.mjs spatial/tests/test-room-appearance.mjs
+```

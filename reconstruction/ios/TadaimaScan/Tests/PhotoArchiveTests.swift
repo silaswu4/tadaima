@@ -29,10 +29,24 @@ struct PhotoArchiveTests {
             let identity = try JSONSerialization.jsonObject(with: source) as! [String: Any]
             let bundle = try ScanPhotoArchive.encode(scanData: source,
                 projectId: identity["projectId"] as! String, jobId: identity["jobId"] as! String,
-                inputRevision: identity["inputRevision"] as! Int, photos: [first, second])
+                inputRevision: identity["inputRevision"] as! Int, photos: [first, second],
+                mesh: arguments.contains("--with-mesh") ? syntheticMesh(projectId: identity["projectId"] as! String,
+                    jobId: identity["jobId"] as! String) : nil)
             try bundle.write(to: URL(fileURLWithPath: arguments[outputIndex + 1]), options: .atomic)
         }
 
+        let mesh = syntheticMesh(projectId: "synthetic-test", jobId: "synthetic-scan")
+        let meshArchive = try ScanPhotoArchive.encode(scanData: scan, projectId: "synthetic-test",
+            jobId: "synthetic-scan", inputRevision: 0, photos: [first], mesh: mesh)
+        precondition(meshArchive.range(of: Data("roomplan-photo-bundle/1.1".utf8)) != nil)
+        precondition(meshArchive.range(of: Data("mesh.json".utf8)) != nil)
+        precondition(archive.range(of: Data("roomplan-photo-bundle/1.0".utf8)) != nil)
+        precondition(archive.range(of: Data("mesh.json".utf8)) == nil)
+        try rejects("mesh identity mismatch") {
+            try ScanPhotoArchive.encode(scanData: scan, projectId: "synthetic-test",
+                jobId: "synthetic-scan", inputRevision: 0, photos: [first],
+                mesh: syntheticMesh(projectId: "wrong-project", jobId: "synthetic-scan"))
+        }
         try rejects("no photos") { try encode([]) }
         try rejects("too many photos") { try encode(Array(repeating: first, count: ScanPhotoLimits.maximumPhotos + 1)) }
         try rejects("duplicate identifiers") { try encode([first, first]) }
@@ -79,6 +93,14 @@ struct PhotoArchiveTests {
             try encode([first], scanData: Data(#"{"projectId":"synthetic-test","jobId":"synthetic-scan","inputRevision":false}"#.utf8))
         }
         print("PASS: deterministic bounded ZIP export, actual image hashes and dimensions, private paths, tracking, camera matrices, calibration, scan identity and malformed JPEG rejection")
+    }
+
+    private static func syntheticMesh(projectId: String, jobId: String) -> ScanMeshPacket {
+        ScanMeshPacket(projectId: projectId, jobId: jobId, inputRevision: 0, anchors: [
+            ScanMeshAnchorPacket(id: "mesh-00000000-0000-4000-8000-000000000001",
+                transform: [1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1],
+                vertices: [[0,0,0], [1,0,0], [0,1,0]], faces: [[0,1,2]], classifications: [0])
+        ])
     }
 
     private static func rejects(_ label: String, _ action: () throws -> Data) throws {

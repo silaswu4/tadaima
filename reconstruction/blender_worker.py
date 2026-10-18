@@ -15,7 +15,7 @@ import sys
 
 import bmesh
 import bpy
-from mathutils import Vector
+from mathutils import Matrix, Vector
 
 # Blender does not import the host Python environment or execute input code.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -191,7 +191,8 @@ def bounds_of(objects):
             "max": [max(p[i] for p in canonical) for i in range(3)]}
 
 
-def generate(request, output: Path, preview: bool, photo_source: Path | None = None):
+def generate(request, output: Path, preview: bool, photo_source: Path | None = None,
+             source_request_sha256: str | None = None):
     if bpy.app.version < (4, 5, 0):
         raise RuntimeError("Blender 4.5 LTS or newer is required")
     scene = bpy.context.scene
@@ -208,6 +209,7 @@ def generate(request, output: Path, preview: bool, photo_source: Path | None = N
     scene["generatorVersion"] = GENERATOR_VERSION
     scene["inputSha256"] = hashlib.sha256((json.dumps(request, sort_keys=True, indent=2,
         ensure_ascii=False, allow_nan=False) + "\n").encode("utf-8")).hexdigest()
+    scene["sourceRequestSha256"] = source_request_sha256 or scene["inputSha256"]
     scene["coordinateSystem"] = "Blender Z-up; glTF export Y-up"
     scene["wallAlignment"] = "centerline"
     geometry = request["geometry"]
@@ -243,14 +245,52 @@ def generate(request, output: Path, preview: bool, photo_source: Path | None = N
         objects.extend(build_existing_furniture(item, collection, material) for item in request["items"])
         bpy.context.view_layer.update()
     photo_summary = None
+    surface_summary = None
+    staged_source = json.loads(photo_source.read_text()) if photo_source is not None else None
     if photo_source is not None:
-        from reconstruction.photo_texturing import apply_photo_textures
-        photo_summary = apply_photo_textures(objects, photo_source, output)
-        scene["photoTexturingSummaryJson"] = json.dumps(photo_summary, separators=(",", ":"))
-        (output / "photo-texturing.json").write_text(json.dumps(photo_summary, indent=2,
-                                                              allow_nan=False) + "\n")
+        if staged_source.get("mesh") is not None:
+            from reconstruction.surface_mesh import build_surface_mesh
+            planning_objects = objects
+            objects, surface_summary = build_surface_mesh(photo_source, output)
+            for obj in planning_objects:
+                obj.hide_render = True
+                obj.hide_set(True)
+                obj["planningProxyOnly"] = True
+            scene["captureRepresentation"] = "observed_surface_mesh"
+            scene["surfaceReconstructionSummaryJson"] = json.dumps(surface_summary, separators=(",", ":"))
+            (output / "surface-reconstruction.json").write_text(json.dumps(surface_summary, indent=2,
+                                                                         allow_nan=False) + "\n")
+        else:
+            from reconstruction.photo_texturing import apply_photo_textures
+            photo_summary = apply_photo_textures(objects, photo_source, output)
+            scene["photoTexturingSummaryJson"] = json.dumps(photo_summary, separators=(",", ":"))
+            (output / "photo-texturing.json").write_text(json.dumps(photo_summary, indent=2,
+                                                                  allow_nan=False) + "\n")
     bounds = bounds_of(objects)
     lighting_summary = add_preview_setup(scene, bounds, objects, geometry)
+    if surface_summary is not None:
+        # Inspect the captured room from a real capture position. An exterior
+        # isometric camera can otherwise look only at its observed ceiling.
+        first = staged_source["photos"][0]
+        values = first["cameraToWorld"]
+        native = Matrix([[values[column * 4 + row] for column in range(4)] for row in range(4)])
+        translation = staged_source["sourceToCanonicalTranslation"]
+        for axis in range(3):
+            native[axis][3] += translation[axis]
+        axes = Matrix(((1, 0, 0, 0), (0, 0, -1, 0), (0, 1, 0, 0), (0, 0, 0, 1)))
+        scene.camera.matrix_world = axes @ native
+        position = [native[axis][3] for axis in range(3)]
+        scene["captureCameraPosition"] = position
+        scene["captureCameraTarget"] = [position[axis] - native[axis][2] for axis in range(3)]
+        scene.camera.data.sensor_fit = "HORIZONTAL"
+        scene.camera.data.sensor_width = 36
+        scene.camera.data.lens = first["intrinsics"][0] * 36 / first["width"]
+        scene.render.resolution_x = min(960, first["width"])
+        scene.render.resolution_y = round(scene.render.resolution_x * first["height"] / first["width"])
+        scene["renderProfile"] = "captured-surface-rgb-v1"
+        ground = bpy.data.objects.get("PreviewGround")
+        if ground is not None:
+            ground.hide_render = True
     bpy.context.view_layer.update()
     bpy.ops.object.select_all(action="DESELECT")
     for obj in objects:
@@ -261,7 +301,7 @@ def generate(request, output: Path, preview: bool, photo_source: Path | None = N
     result = bpy.ops.export_scene.gltf(
         filepath=str(output / "scene.glb"), export_format="GLB", check_existing=False,
         use_selection=True, export_yup=True, export_extras=True, export_materials="EXPORT",
-        export_normals=True, export_texcoords=True, export_tangents=True, export_animations=False,
+        export_normals=True, export_texcoords=True, export_tangents=surface_summary is None, export_animations=False,
         export_image_format="AUTO",
         use_renderable=False,
         export_cameras=False, export_lights=False, export_draco_mesh_compression_enable=False,
@@ -271,7 +311,7 @@ def generate(request, output: Path, preview: bool, photo_source: Path | None = N
         raise RuntimeError("glTF exporter did not finish")
     metadata = {
         "blenderVersion": bpy.app.version_string,
-        "renderProfile": RENDER_PROFILE,
+        "renderProfile": "captured-surface-rgb-v1" if surface_summary is not None else RENDER_PROFILE,
         "lighting": lighting_summary,
         "appearance": appearance_summary,
         "bounds": bounds,
@@ -283,6 +323,9 @@ def generate(request, output: Path, preview: bool, photo_source: Path | None = N
     }
     if photo_summary is not None:
         metadata["photoTexturing"] = photo_summary
+    if surface_summary is not None:
+        metadata["surfaceReconstruction"] = surface_summary
+        metadata["captureRepresentation"] = "observed_surface_mesh"
     (output / "worker-result.json").write_text(json.dumps(metadata, indent=2) + "\n")
     if preview:
         scene.render.filepath = str(output / "preview.png")
@@ -295,9 +338,10 @@ def main():
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--preview", action="store_true")
     parser.add_argument("--photo-source", type=Path)
+    parser.add_argument("--source-request-sha256")
     args = parser.parse_args(sys.argv[sys.argv.index("--") + 1:])
     request = validate_request(json.loads(args.request.read_text()))
-    generate(request, args.output, args.preview, args.photo_source)
+    generate(request, args.output, args.preview, args.photo_source, args.source_request_sha256)
 
 
 if __name__ == "__main__":

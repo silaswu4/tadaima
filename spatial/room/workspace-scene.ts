@@ -10,7 +10,7 @@ import { createRoomLighting, setMetricSurfaceUVs } from "./lighting";
 import { RectAreaLightUniformsLib } from "three/addons/lights/RectAreaLightUniformsLib.js";
 import { insideFloor, planWindowDaylight } from "./window-daylight";
 import { createFurnitureProxy, placeFurnitureModel } from "./furniture-model";
-import { bindTexturedRoom, validateLocalTexturedGlb } from "./textured-model";
+import { bindCapturedRoom, bindTexturedRoom, validateLocalCapturedGlb, validateLocalTexturedGlb, type CapturedRoomBinding } from "./textured-model";
 
 export type WorkspaceItem = {
   id: string;
@@ -27,6 +27,7 @@ export type WorkspaceScene = {
   setExploded(value: boolean): void;
   selectItem(id: string | null): void;
   resetCamera(): void;
+  setCapturedView(active: boolean): void;
   dispose(): void;
 };
 type Callbacks = {
@@ -34,6 +35,7 @@ type Callbacks = {
   onSelect(id: string | null): void;
   onError(message: string): void;
   onPhotoModel?(loaded: boolean, message?: string): void;
+  onCapturedModel?(loaded: boolean, message?: string): void;
 };
 
 /** Release GPU resources, including embedded ImageBitmaps from loaded GLBs. */
@@ -63,7 +65,7 @@ function release(root: THREE.Object3D) {
 export function createFurnitureWorkspace(
   canvas: HTMLCanvasElement,
   callbacks: Callbacks,
-  options: { lite?: boolean; reducedMotion?: boolean; plan?: RoomPlan; texturedModel?: ArrayBuffer } = {},
+  options: { lite?: boolean; reducedMotion?: boolean; plan?: RoomPlan; texturedModel?: ArrayBuffer; capturedModel?: ArrayBuffer; capturedBinding?: CapturedRoomBinding; capturedView?: boolean } = {},
 ): WorkspaceScene {
   // Snapshot canonical input; presentation transforms belong only to Object3Ds.
   const plan = structuredClone(options.plan ?? makeWorkspaceDemo());
@@ -207,6 +209,9 @@ export function createFurnitureWorkspace(
   const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
   let photoFurniture: Map<string, THREE.Group> | null = null;
   let controller: ExplodeController | null = null;
+  let capturedReference: THREE.Group | null = null;
+  let capturedView = false;
+  let observedCamera: { position: [number, number, number]; target: [number, number, number] } | null = null;
   let selectedId: string | null = null;
   let exploded = false;
   let disposed = false;
@@ -215,7 +220,46 @@ export function createFurnitureWorkspace(
   let previousTime = performance.now();
   let cameraMove: { start: number; position: THREE.Vector3; target: THREE.Vector3; endPosition: THREE.Vector3; endTarget: THREE.Vector3 } | null = null;
 
+  function capturedCamera() {
+    cameraMove = null;
+    if (observedCamera) {
+      camera.position.fromArray(observedCamera.position);
+      controls.target.fromArray(observedCamera.target);
+      controls.update();
+      return;
+    }
+    const room = plan.geometry.rooms[0];
+    const points = room.floorPolygon;
+    const center = points.reduce((value, point) => value.add(new THREE.Vector3(point[0], 0, point[1])), new THREE.Vector3()).divideScalar(points.length);
+    if (!insideFloor([center.x, center.z], plan.geometry)) {
+      for (let index = 0; index < points.length; index++) {
+        const a = points[index], b = points[(index + 1) % points.length];
+        const dx = b[0] - a[0], dz = b[1] - a[1], length = Math.hypot(dx, dz);
+        if (!length) continue;
+        const candidates = [-1, 1].map((sign) => new THREE.Vector3((a[0] + b[0]) / 2 - sign * dz / length * .15, 0, (a[1] + b[1]) / 2 + sign * dx / length * .15));
+        const inside = candidates.find((point) => insideFloor([point.x, point.z], plan.geometry));
+        if (inside) { center.copy(inside); break; }
+      }
+    }
+    center.y = Math.min(1.5, Math.max(.5, (roomBounds.max.y - roomBounds.min.y) * .58));
+    camera.position.copy(center);
+    controls.target.copy(center).add(new THREE.Vector3(.45, -.04, -.65));
+    controls.update();
+  }
+  function setCapturedView(active: boolean) {
+    const next = active && !!capturedReference;
+    if (next === capturedView) return;
+    capturedView = next;
+    shell.visible = !next;
+    ground.visible = !next;
+    for (const root of roots.values()) root.visible = !next;
+    if (capturedReference) capturedReference.visible = next;
+    controls.minDistance = next ? .1 : 2;
+    controls.maxPolarAngle = next ? Math.PI - .05 : Math.PI / 2 - .04;
+    if (next) capturedCamera(); else fit(false, true);
+  }
   function fit(animate: boolean, reset = false, focus?: THREE.Box3) {
+    if (capturedView) { if (reset) capturedCamera(); return; }
     const bounds = focus?.clone() ?? assembledBounds.clone();
     if (!focus && exploded && controller) bounds.union(controller.inventoryBounds);
     const target = bounds.getCenter(new THREE.Vector3());
@@ -277,6 +321,7 @@ export function createFurnitureWorkspace(
     pointerDown = { x: event.clientX, y: event.clientY, id: event.pointerId };
   }
   function up(event: PointerEvent) {
+    if (capturedView) { pointerDown = null; return; }
     const start = pointerDown;
     pointerDown = null;
     if (!start || start.id !== event.pointerId || event.button !== 0 || Math.hypot(event.clientX - start.x, event.clientY - start.y) > 6) return;
@@ -291,6 +336,25 @@ export function createFurnitureWorkspace(
   canvas.addEventListener("pointerdown", down);
   canvas.addEventListener("pointerup", up);
   canvas.addEventListener("pointercancel", cancelPointer);
+
+  async function prepareCapturedModel() {
+    if (!options.capturedModel || !options.capturedBinding) return;
+    let loaded: THREE.Object3D | null = null;
+    try {
+      validateLocalCapturedGlb(options.capturedModel, plan, options.capturedBinding);
+      loaded = (await loader.parseAsync(options.capturedModel, "")).scene;
+      if (disposed) { release(loaded); return; }
+      const bound = bindCapturedRoom(loaded, plan, options.capturedBinding);
+      capturedReference = bound.reference;
+      observedCamera = bound.cameraPose;
+      capturedReference.visible = false;
+      scene.add(capturedReference);
+      callbacks.onCapturedModel?.(true);
+    } catch (cause) {
+      if (loaded) release(loaded);
+      if (!disposed) callbacks.onCapturedModel?.(false, cause instanceof Error ? cause.message : "The captured room could not be opened.");
+    }
+  }
 
   async function preparePhotoModel() {
     if (!options.texturedModel) return;
@@ -375,16 +439,16 @@ export function createFurnitureWorkspace(
     padOpacity = options.reducedMotion ? (exploded ? 1 : 0)
       : THREE.MathUtils.damp(padOpacity, exploded ? 1 : 0, 6, delta / 1000);
     inventoryMaterial.opacity = padOpacity;
-    inventoryPad.visible = padOpacity > .005;
+    inventoryPad.visible = !capturedView && padOpacity > .005;
     const selected = selectedId ? roots.get(selectedId) : null;
-    selection.visible = !!selected;
+    selection.visible = !capturedView && !!selected;
     if (selected) selection.box.setFromObject(selected, true).expandByScalar(.025);
     renderer.render(scene, camera);
     raf = requestAnimationFrame(frame);
   }
   resize();
   raf = requestAnimationFrame(frame);
-  const ready = preparePhotoModel().then(() => {
+  const ready = Promise.all([preparePhotoModel(), prepareCapturedModel()]).then(() => {
     if (disposed) return [[], undefined] as [Array<WorkspaceItem | null>, void];
     return Promise.all([Promise.all(plan.items.map(loadItem)), lighting.ready]);
   }).then(([items]) => {
@@ -424,6 +488,7 @@ export function createFurnitureWorkspace(
     shadowCamera.far = Math.max(shadowCamera.near + 1, -lightBounds.min.z + 2);
     shadowCamera.updateProjectionMatrix();
     fit(false, true);
+    if (options.capturedView) setCapturedView(true);
     callbacks.onReady(items.filter((item): item is WorkspaceItem => item !== null));
   }).catch(() => {
     if (!disposed) {
@@ -458,6 +523,7 @@ export function createFurnitureWorkspace(
       fit(true);
     },
     selectItem,
+    setCapturedView,
     resetCamera() { if (!disposed) fit(true, true); },
     dispose,
   };

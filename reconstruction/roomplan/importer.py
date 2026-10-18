@@ -554,6 +554,8 @@ def run(input_path, output_path, *, render=False, blender=None, preview=False,
             dossier["draftManifestPath"] = "draft/manifest.json"
             if "photoTexturing" in result:
                 dossier["photoTexturingPath"] = "draft/photo-texturing.json"
+            if "surfaceReconstruction" in result:
+                dossier["surfaceReconstructionPath"] = "draft/surface-reconstruction.json"
         _write(output / "roomplan.dossier.json", dossier)
         return dossier
     except Exception as error:
@@ -575,6 +577,11 @@ def _write_photo_sources(output, bundle, dossier):
     (output / "photos").mkdir(mode=0o700)
     for photo in bundle["manifest"]["photos"]:
         _private_bytes(output / "photos" / (photo["id"] + ".jpg"), bundle["files"][photo["path"]])
+    if bundle.get("mesh") is not None:
+        _private_bytes(output / "mesh.input.json", bundle["files"]["mesh.json"])
+        dossier.update({"surfaceMeshPath": "mesh.input.json",
+                        "surfaceMeshSha256": bundle["manifest"]["mesh"]["sha256"],
+                        "surfaceMeshAnchorCount": len(bundle["mesh"]["anchors"])})
     dossier.update({"photoCount": len(bundle["manifest"]["photos"]),
                     "photoManifestPath": "photos.manifest.json", "photoRegistrationPath": None,
                     "appearancePhotosPath": None, "photoArchivePath": "scan.input.zip",

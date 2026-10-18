@@ -1,5 +1,7 @@
 # Automatic Captured-Photo Texturing
 
+**Detailed scans:** generator 1.5.0 detects mesh-bearing bundle 1.1 and preserves observed surfaces instead of projecting onto boxes. Use **Open captured room** for that GLB. See [capturing the original room](high-fidelity-scan.md) for the default two-pass flow. The remainder of this guide describes photo-only bundle 1.0.
+
 Generator `tadaima-shell/1.4.0` automatically projects calibrated scan photos onto the visible floors, walls and existing furniture proxies when rendering a native scan+photos ZIP. It uses actual captured RGB pixels without a model key or generated replacement imagery. Geometry, object IDs, sensor dimensions, placement, openings and editability remain unchanged.
 
 ## Use

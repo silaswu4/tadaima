@@ -38,7 +38,7 @@ function imageDimensions(bytes: Uint8Array, mime: unknown): [number, number] {
 }
 
 /** Inspect before GLTFLoader can create image URLs or request any resources. */
-export function validateLocalTexturedGlb(bytes: ArrayBuffer): void {
+export function validateLocalTexturedGlb(bytes: ArrayBuffer): Record<string, unknown> {
   if (bytes.byteLength < 28 || bytes.byteLength > MAX_TEXTURED_MODEL_BYTES) fail("choose a GLB smaller than 64 MiB.");
   const view = new DataView(bytes);
   if (view.getUint32(0, true) !== 0x46546C67 || view.getUint32(4, true) !== 2 || view.getUint32(8, true) !== bytes.byteLength) fail("choose a complete glTF 2 GLB.");
@@ -97,10 +97,11 @@ export function validateLocalTexturedGlb(bytes: ArrayBuffer): void {
   }
   for (const root of roots) visit(root);
   if (visited.size !== nodes.length) fail("model contains unreachable nodes.");
-  array(raw.meshes, 2048).forEach((entry) => array(record(entry).primitives, 32).forEach((entry) => {
+  array(raw.meshes, 2048).forEach((entry) => array(record(entry).primitives, 64).forEach((entry) => {
     const primitive = record(entry);
     if (primitive.targets || (primitive.mode !== undefined && primitive.mode !== 4)) fail("only static triangle meshes are supported.");
   }));
+  return raw;
 }
 
 function near(actual: number, expected: number, tolerance = .003) { return Number.isFinite(actual) && Math.abs(actual - expected) <= tolerance; }
@@ -212,4 +213,113 @@ export function bindTexturedRoom(model: THREE.Object3D, plan: RoomPlan) {
     furniture.set(item.id, root);
   }
   return { shell, furniture, walls, projectedEntities: projected };
+}
+
+
+export type CapturedRoomBinding = { jobId: string; inputSha256: string };
+const MAX_CAPTURED_VERTICES = 900_000;
+const MAX_CAPTURED_TRIANGLES = 300_000;
+
+/** A captured camera pose is optional, but both points must be finite metric triples. */
+export function capturedCameraPose(metadata: Record<string, unknown>): { position: [number, number, number]; target: [number, number, number] } | null {
+  if (metadata.captureCameraPosition === undefined && metadata.captureCameraTarget === undefined) return null;
+  function point(value: unknown): [number, number, number] {
+    if (!Array.isArray(value) || value.length !== 3 || !value.every((axis) => typeof axis === "number" && Number.isFinite(axis) && Math.abs(axis) <= 1000)) fail("captured camera position and target must be finite metric triples.");
+    return [...value] as [number, number, number];
+  }
+  const position = point(metadata.captureCameraPosition), target = point(metadata.captureCameraTarget);
+  const distance = Math.hypot(...target.map((axis, index) => axis - position[index]));
+  if (distance < .01 || distance > 100) fail("captured camera must have a finite viewing direction.");
+  return { position, target };
+}
+
+/** The observed mesh is a separate, local reference, never editable furniture. */
+export function validateLocalCapturedGlb(bytes: ArrayBuffer, plan: RoomPlan, binding: CapturedRoomBinding) {
+  const raw = validateLocalTexturedGlb(bytes);
+  const metadata = record(record(array(raw.scenes, 1)[0]).extras);
+  if (metadata.captureRepresentation !== "observed_surface_mesh" || metadata.projectId !== plan.projectId
+    || metadata.inputRevision !== String(plan.revision) || metadata.jobId !== binding.jobId
+    || (metadata.sourceRequestSha256 !== binding.inputSha256 && metadata.inputSha256 !== binding.inputSha256)) fail("captured room does not match the opened room file.");
+  capturedCameraPose(metadata);
+  const accessors = array(raw.accessors, 10000).map(record);
+  let vertices = 0, triangles = 0;
+  for (const mesh of array(raw.meshes, 2048)) for (const value of array(record(mesh).primitives, 64)) {
+    const primitive = record(value), attributes = record(primitive.attributes);
+    const position = accessors[integer(attributes.POSITION, accessors.length - 1)];
+    if (position.type !== "VEC3" || position.componentType !== 5126) fail("captured positions must be float vectors.");
+    vertices += integer(position.count, MAX_CAPTURED_VERTICES);
+    const count = primitive.indices === undefined ? position.count : accessors[integer(primitive.indices, accessors.length - 1)].count;
+    const size = integer(count, MAX_CAPTURED_TRIANGLES * 3);
+    if (size % 3) fail("captured mesh has incomplete triangles.");
+    triangles += size / 3;
+  }
+  if (!vertices || vertices > MAX_CAPTURED_VERTICES || !triangles || triangles > MAX_CAPTURED_TRIANGLES) fail("captured mesh exceeds the 900k exported vertex / 300k triangle budget.");
+  return metadata;
+}
+
+export function bindCapturedRoom(model: THREE.Object3D, plan: RoomPlan, binding: CapturedRoomBinding) {
+  const metadata = model.userData;
+  if (metadata.captureRepresentation !== "observed_surface_mesh" || metadata.projectId !== plan.projectId
+    || metadata.inputRevision !== String(plan.revision) || metadata.jobId !== binding.jobId
+    || (metadata.sourceRequestSha256 !== binding.inputSha256 && metadata.inputSha256 !== binding.inputSha256)) fail("captured room does not match the opened room file.");
+  const cameraPose = capturedCameraPose(metadata);
+  model.updateMatrixWorld(true);
+  const ids = new Set<string>();
+  let vertices = 0, triangles = 0, projected = 0;
+  const bounds = new THREE.Box3();
+  model.traverse((node) => {
+    if (!node.matrixWorld.elements.every(Number.isFinite) || Math.abs(node.matrixWorld.determinant() - 1) > .003
+      || ![0, 1, 2].every((axis) => Math.abs(new THREE.Vector3().setFromMatrixColumn(node.matrixWorld, axis).lengthSq() - 1) < .003)
+      || ![3, 7, 11].every((index) => near(node.matrixWorld.elements[index], 0)) || !near(node.matrixWorld.elements[15], 1)) fail("captured mesh contains an invalid rigid transform.");
+    if (node === model) return;
+    if ([12, 13, 14].some((index) => Math.abs(node.matrixWorld.elements[index]) > 1000)) fail("captured placement exceeds the room bounds.");
+    if (node.userData.entityId !== undefined || node.userData.role !== undefined) {
+      const { entityId, role, appearanceStatus, photoTextureCoverage } = node.userData;
+      if (typeof entityId !== "string" || !/^mesh-[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(entityId)
+        || ids.has(entityId) || role !== "captured_surface" || !["photo_projected", "unobserved"].includes(appearanceStatus)
+        || typeof photoTextureCoverage !== "number" || !Number.isFinite(photoTextureCoverage) || photoTextureCoverage < 0 || photoTextureCoverage > 1
+        || (appearanceStatus === "unobserved" && photoTextureCoverage !== 0)
+        || (appearanceStatus === "photo_projected" && photoTextureCoverage === 0)) fail("captured surface metadata is unsupported.");
+      ids.add(entityId);
+      if (appearanceStatus === "photo_projected") projected++;
+      let childMeshes = 0;
+      node.traverse((child) => { if (child instanceof THREE.Mesh) childMeshes++; });
+      if (!childMeshes) fail("captured entity contains no observed geometry.");
+    }
+    if (!(node instanceof THREE.Mesh)) return;
+    let owner: THREE.Object3D | null = node;
+    while (owner && owner !== model && owner.userData.entityId === undefined) owner = owner.parent;
+    if (!owner || owner === model || owner.userData.role !== "captured_surface") fail("captured mesh has no observed surface owner.");
+    const materials = Array.isArray(node.material) ? node.material : [node.material];
+    if (materials.some((material) => !(material instanceof THREE.MeshBasicMaterial || material instanceof THREE.MeshStandardMaterial))) fail("captured surfaces require static basic or PBR materials.");
+    const position = node.geometry.getAttribute("position");
+    if (!position || position.itemSize !== 3 || (vertices += position.count) > MAX_CAPTURED_VERTICES) fail("captured positions are missing or too large.");
+    const indices = node.geometry.getIndex();
+    const count = indices?.count ?? position.count;
+    if (count % 3 || (triangles += count / 3) > MAX_CAPTURED_TRIANGLES) fail("captured triangles exceed the supported limit.");
+    for (let i = 0; i < position.count; i++) if (![position.getX(i), position.getY(i), position.getZ(i)].every((value) => Number.isFinite(value) && Math.abs(value) <= 1000)) fail("captured positions are nonfinite or exceed the room bounds.");
+    const uv = node.geometry.getAttribute("uv");
+    if (uv) for (let i = 0; i < uv.count; i++) if (![uv.getX(i), uv.getY(i)].every(Number.isFinite)) fail("captured texture coordinates are nonfinite.");
+    if (indices) for (let i = 0; i < indices.count; i++) if (!Number.isSafeInteger(indices.getX(i)) || indices.getX(i) < 0 || indices.getX(i) >= position.count) fail("captured triangle references an invalid vertex.");
+    bounds.union(new THREE.Box3().setFromObject(node, true));
+  });
+  if (!ids.size || !triangles || bounds.isEmpty()) fail("captured room contains no surface geometry.");
+  const reference = new THREE.Group();
+  reference.add(model);
+  // Photos already contain the room lighting. Unlit materials avoid shading
+  // the observed image twice; no invisible surface or shape is synthesized.
+  model.traverse((node) => {
+    if (!(node instanceof THREE.Mesh)) return;
+    const original = Array.isArray(node.material) ? node.material : [node.material];
+    const materials = original.map((material) => {
+      const source = material as THREE.MeshStandardMaterial | THREE.MeshBasicMaterial;
+      const unlit = new THREE.MeshBasicMaterial({ color: source.color, map: source.map, side: THREE.DoubleSide });
+      unlit.toneMapped = false;
+      return unlit;
+    });
+    node.material = Array.isArray(node.material) ? materials : materials[0];
+    original.forEach((material) => material.dispose());
+    node.castShadow = false; node.receiveShadow = false;
+  });
+  return { reference, bounds, surfaceCount: ids.size, projectedSurfaces: projected, cameraPose };
 }

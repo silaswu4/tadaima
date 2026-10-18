@@ -1,5 +1,7 @@
 # RoomPlan Photos and Appearance Evidence
 
+**Detailed scans:** the scanner now defaults to RoomPlan layout followed by a shared-session LiDAR surface pass. **Share detailed scan + photos** exports bundle 1.1 with hashed `mesh.json`; photo-only mode remains bundle 1.0. See [capturing the original room](high-fidelity-scan.md). Calibration conventions below apply to both versions; statements about missing dense geometry apply only to bundle 1.0.
+
 The iPhone companion can now collect real RGB photos while RoomPlan captures metric room geometry and existing-object size proxies. Photos are sampled from **RoomPlan's existing ARSession**. There is no second camera session, ARSession delegate replacement, provider key, photo-library permission, or automatic upload.
 
 ## Capture and Share

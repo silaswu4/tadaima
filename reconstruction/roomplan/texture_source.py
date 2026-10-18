@@ -63,6 +63,8 @@ def prepare_texture_source(bundle_path: Path, request: dict, output: Path) -> Pa
         "sourceArchiveSha256": bundle["sha256"],
         "sourceToCanonicalTranslation": compiled["coordinatePolicy"]["sourceToCanonicalTranslation"],
         "photos": photos}
+    if "mesh" in bundle["manifest"]:
+        source["mesh"] = dict(bundle["manifest"]["mesh"])
     output = Path(output).absolute()
     if output.exists() or output.is_symlink():
         raise RoomPlanError("Photo texture source output must be a fresh private directory")
@@ -70,6 +72,8 @@ def prepare_texture_source(bundle_path: Path, request: dict, output: Path) -> Pa
     (output / "photos").mkdir(mode=0o700)
     for photo in photos:
         _write_private(output / "photos" / (photo["id"] + ".jpg"), bundle["files"][photo["path"]])
+    if "mesh" in source:
+        _write_private(output / "mesh.json", bundle["files"]["mesh.json"])
     source_path = output / "photo-input.json"
     _write_private(source_path, (json.dumps(source, sort_keys=True, indent=2,
                                           ensure_ascii=False, allow_nan=False) + "\n").encode("utf-8"))

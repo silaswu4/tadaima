@@ -1,6 +1,7 @@
 """Runs inside Blender to independently reopen and inspect a generated scene."""
 
 import json
+import hashlib
 import math
 from pathlib import Path
 import sys
@@ -15,6 +16,7 @@ source = json.loads((directory / "scene.json").read_text())
 manifest = json.loads((directory / "manifest.json").read_text())
 bpy.ops.wm.open_mainfile(filepath=str(directory / "scene.blend"))
 scene = bpy.context.scene
+captured = manifest.get("captureRepresentation") == "observed_surface_mesh"
 assert scene.unit_settings.system == "METRIC"
 assert scene.unit_settings.scale_length == 1.0
 assert int(scene["inputRevision"]) == source["inputRevision"]
@@ -76,7 +78,42 @@ if window_profile:
         center = Vector((item["center"][0], -item["center"][2], item["center"][1]))
         assert (center - obj.location).dot(inward) > wall["thickness"] / 2, "Source must sit outside wall"
     assert bool(actual_window_lights) == (lighting["mode"] == "window_daylight")
-entities = {obj["entityId"]: obj for obj in scene.objects if "entityId" in obj}
+entities = {obj["entityId"]: obj for obj in scene.objects if "entityId" in obj and not (captured and obj.get("planningProxyOnly"))}
+if captured:
+    summary = manifest["surfaceReconstruction"]
+    assert summary["schemaVersion"] == "roomplan-surface-mesh/1.0"
+    assert json.loads((directory / "surface-reconstruction.json").read_text()) == summary
+    assert json.loads(scene["surfaceReconstructionSummaryJson"]) == summary
+    assert scene["captureRepresentation"] == "observed_surface_mesh"
+    assert scene["inputSha256"] == manifest["inputSha256"]
+    assert scene["sourceRequestSha256"] == manifest["sourceRequestSha256"]
+    assert scene["renderProfile"] == manifest["renderProfile"] == "captured-surface-rgb-v1"
+    assert sum(len(obj.data.vertices) for obj in entities.values()) == summary["vertexCount"]
+    assert sum(len(obj.data.polygons) for obj in entities.values()) == summary["triangleCount"]
+    assert summary["observedTriangleCount"] + summary["unobservedTriangleCount"] == summary["triangleCount"]
+    planning = {obj["entityId"]: obj for obj in scene.objects if obj.get("planningProxyOnly")}
+    expected_planning = {item["id"] for category in ("rooms", "walls", "openings") for item in source["geometry"][category]}
+    expected_planning.update(item["id"] for item in source.get("items", []))
+    assert set(planning) == expected_planning, "Editable planning geometry must stay separate from the captured reference"
+    assert all(obj.hide_render and obj.hide_get() for obj in planning.values())
+    original_mesh = directory.parent / "mesh.json"
+    if original_mesh.is_file():
+        assert hashlib.sha256(original_mesh.read_bytes()).hexdigest() == summary["meshSha256"]
+        original = json.loads(original_mesh.read_text())
+        assert {anchor["id"] for anchor in original["anchors"]} == set(entities)
+        registration = json.loads((directory.parent / "photo-registration.json").read_text())
+        translation = registration["sourceToCanonicalTranslation"]
+        for anchor in original["anchors"]:
+            obj = entities[anchor["id"]]
+            assert [list(face.vertices) for face in obj.data.polygons] == anchor["faces"], "Observed topology must remain unchanged"
+            assert [item.value for item in obj.data.attributes["ARMeshClassification"].data] == anchor["classifications"]
+            assert json.loads(obj["sourceAnchorTransformJson"]) == anchor["transform"]
+            for vertex, local in zip(obj.data.vertices, anchor["vertices"]):
+                transform = anchor["transform"]
+                world = [sum(transform[column*4+row]*local[column] for column in range(3))
+                         + transform[12+row] + translation[row] for row in range(3)]
+                expected = Vector((world[0],-world[2],world[1]))
+                assert (obj.matrix_world @ vertex.co-expected).length < 1e-4, "Observed source pose or canonical translation changed"
 assert len(entities) == len(manifest["objects"])
 for item in manifest["objects"]:
     obj = entities[item["id"]]
@@ -84,6 +121,44 @@ for item in manifest["objects"]:
     assert json.loads(obj["evidenceIdsJson"]) == item["evidenceIds"]
 for obj in entities.values():
     if obj.type == "MESH":
+        if captured:
+            assert obj["role"] == "captured_surface"
+            assert obj["representation"] == "observed_surface_mesh"
+            assert obj["meshSha256"] == summary["meshSha256"]
+            assert len(obj.data.vertices) == obj["sourceVertexCount"]
+            assert len(obj.data.polygons) == obj["sourceTriangleCount"]
+            assert all(len(face.vertices) == 3 and face.area > 0 for face in obj.data.polygons)
+            assert not obj.modifiers, "Observed surface must not depend on generated remeshing or hole filling"
+            assert all(math.isfinite(value) for vertex in obj.data.vertices for value in vertex.co)
+            uv = obj.data.uv_layers.active
+            assert uv and len(uv.data) == len(obj.data.loops)
+            assert all(math.isfinite(value) for loop in uv.data for value in loop.uv)
+            classes = obj.data.attributes["ARMeshClassification"]
+            assert classes.domain == "FACE" and len(classes.data) == len(obj.data.polygons)
+            assert all(0 <= entry.value <= 7 for entry in classes.data)
+            projected = 0
+            for polygon in obj.data.polygons:
+                material = obj.data.materials[polygon.material_index]
+                assert material.use_nodes
+                if material.get("appearanceSource") == "observed_camera_rgb":
+                    projected += 1
+                    points = [uv.data[index].uv for index in polygon.loop_indices]
+                    area = sum(a.x*b.y-b.x*a.y for a,b in zip(points,points[1:]+points[:1]))/2
+                    assert abs(area) > 1e-12, "Projected triangle UV collapsed"
+                else:
+                    assert material.get("appearanceSource") == "unobserved_plain_fallback"
+            assert abs(obj["photoTextureCoverage"] - projected/len(obj.data.polygons)) < 1e-6
+            assert obj["appearanceStatus"] == ("photo_projected" if projected else "unobserved")
+            assert json.loads(obj["evidenceIdsJson"]) == json.loads(obj["photoEvidenceIdsJson"])
+            for material in obj.data.materials:
+                images = [node.image for node in material.node_tree.nodes if node.type == "TEX_IMAGE"]
+                if material.get("appearanceSource") == "observed_camera_rgb":
+                    assert len(images) == 1 and images[0].packed_file
+                    assert max(images[0].size) <= 1024 and images[0].colorspace_settings.name == "sRGB"
+                    assert any(photo["photoId"] == material["photoId"] and photo["evidenceId"] == material["evidenceId"] for photo in summary["photoSources"])
+                else:
+                    assert not images, "Unobserved surfaces must not invent captured texture detail"
+            continue
         bm = bmesh.new()
         bm.from_mesh(obj.data)
         assert all(edge.is_manifold for edge in bm.edges), obj.name
@@ -136,7 +211,7 @@ for obj in entities.values():
                     assert shaders[0].inputs["Base Color"].is_linked, "Wood needs a base-color texture"
                     assert shaders[0].inputs["Roughness"].is_linked, "Wood needs a roughness texture"
                     assert any(image.colorspace_settings.name == "sRGB" for image in images), "Base color uses sRGB"
-for item in source.get("items", []):
+for item in ([] if captured else source.get("items", [])):
     obj = entities[item["id"]]
     assert obj.type == "MESH" and obj["role"] == "existing_furniture"
     assert obj.users_collection and any(collection.name == "ExistingFurniture" for collection in obj.users_collection)
@@ -163,7 +238,7 @@ for item in source.get("items", []):
     bm.from_mesh(obj.data)
     assert abs(bm.calc_volume() - width * height * depth) < 1e-5
     bm.free()
-for wall in source["geometry"]["walls"]:
+for wall in ([] if captured else source["geometry"]["walls"]):
     obj = entities[wall["id"]]
     cuts = [o for o in source["geometry"]["openings"] if o["wallId"] == wall["id"]]
     if obj.type != "MESH":
@@ -180,4 +255,5 @@ for wall in source["geometry"]["walls"]:
                          opening["sillHeight"] + opening["height"] / 2))
         assert not obj.ray_cast(center, Vector((0, 1, 0)), distance=wall["thickness"] * 4)[0], opening["id"]
 print("TADAIMA_BLEND_VERIFIED " + json.dumps({"entityCount": len(entities), "editable": True,
-                                             "texturedPbr": textured, "renderProfile": manifest.get("renderProfile")}))
+                                             "texturedPbr": textured, "renderProfile": manifest.get("renderProfile"),
+                                             "captureRepresentation": manifest.get("captureRepresentation")}))

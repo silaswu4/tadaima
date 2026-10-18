@@ -42,6 +42,9 @@ export interface ReconstructionArtifactFile {
 export interface ReconstructionManifest extends ReconstructionResult {
   schemaVersion: "1.0";
   inputSha256: string;
+  /** Exact input file bytes, before normalization; binds local viewer imports. */
+  sourceRequestSha256?: string;
+  captureRepresentation?: "observed_surface_mesh";
   blenderVersion: string;
   units: "m";
   coordinateSystem: "right-handed-y-up";
@@ -53,10 +56,33 @@ export interface ReconstructionManifest extends ReconstructionResult {
     blend: ReconstructionArtifactFile;
     glb: ReconstructionArtifactFile;
     photoTexturing?: ReconstructionArtifactFile;
+    surfaceReconstruction?: ReconstructionArtifactFile;
   };
-  objects: Array<{ id: string; role: "room_floor" | "wall" | "opening" | "existing_furniture"; name: string; evidenceIds: string[] }>;
+  objects: Array<{ id: string; role: "room_floor" | "wall" | "opening" | "existing_furniture" | "captured_surface"; name: string; evidenceIds: string[] }>;
   statistics: { meshCount: number; triangleCount: number; entityCount: number };
   warnings: string[];
+  surfaceReconstruction?: {
+    schemaVersion: "roomplan-surface-mesh/1.0";
+    mode: "observed_surface_mesh";
+    projectId: string;
+    jobId: string;
+    inputRevision: number;
+    inputSha256: string;
+    sourceArchiveSha256: string;
+    meshSha256: string;
+    vertexCount: number;
+    triangleCount: number;
+    photoCount: number;
+    observedTriangleCount: number;
+    unobservedTriangleCount: number;
+    /** Fraction of captured surface area assigned an observed photo. */
+    coverage: number;
+    photoSources: Array<{ photoId: string; sha256: string; evidenceId: string }>;
+    /** Manifest anchor order, then original face order; -1 means unobserved. */
+    triangleSourceIndices: number[];
+    triangleOrder: string;
+    warnings: string[];
+  };
   photoTexturing?: {
     schemaVersion: "roomplan-photo-textures/1.0";
     reviewRequired: true;

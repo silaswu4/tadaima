@@ -4,7 +4,7 @@ import RoomPlan
 /// Serialization and USDZ export run away from the main actor.
 actor ScanExportStore {
     func export(room: CapturedRoom, packet: RoomPlanPacket, fileStem: String,
-                includeUSDZ: Bool, photos: [CapturedScanPhoto]? = nil) throws -> URL {
+                includeUSDZ: Bool, photos: [CapturedScanPhoto]? = nil, mesh: ScanMeshPacket? = nil) throws -> URL {
         let manager = FileManager.default
         let documents = try manager.url(for: .documentDirectory, in: .userDomainMask,
                                         appropriateFor: nil, create: true)
@@ -25,7 +25,7 @@ actor ScanExportStore {
         if let photos {
             let bundleURL = directory.appendingPathComponent(fileStem + ".zip")
             let bundle = try ScanPhotoArchive.encode(scanData: scanData, projectId: packet.projectId,
-                jobId: packet.jobId, inputRevision: packet.inputRevision, photos: photos)
+                jobId: packet.jobId, inputRevision: packet.inputRevision, photos: photos, mesh: mesh)
             try bundle.write(to: bundleURL, options: [.atomic, .completeFileProtection])
             try manager.setAttributes([.protectionKey: FileProtectionType.complete, .posixPermissions: 0o600],
                                       ofItemAtPath: bundleURL.path)

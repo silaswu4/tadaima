@@ -239,3 +239,6 @@
 .furniture-appearanceNote { display: grid; gap: 7px; padding: 14px 16px; border-top: 1px solid var(--surface-deep); background: var(--surface); color: var(--ink-soft); font-size: 10px; line-height: 1.7; }
 .furniture-appearanceNote strong { color: var(--ink); font-weight: 500; }
 .furniture-appearanceNote a { color: var(--accent-deep); text-underline-offset: 3px; }
+
+.furniture-item:disabled { opacity: .5; cursor: default; }
+.furniture-item:disabled:hover { background: transparent; }

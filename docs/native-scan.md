@@ -1,5 +1,7 @@
 # Native Room Scanning Companion
 
+**Detailed surfaces:** the companion now captures an optional second ARKit LiDAR pass in the same coordinate frame. The observed textured reference and editable RoomPlan layout remain separate. See [capturing the original room](high-fidelity-scan.md) for capture, reconstruction, viewing and quality limits.
+
 Decision: October 18, 2026. The user approved a lightweight native scanning companion after confirming an **iPhone 14 Pro**. This supersedes the earlier web-only capture restriction for this optional input. Design, shopping, desktop/mobile viewing and Quest remain web experiences. Address research and photo-only web capture remain available; no tape measurement is required.
 
 ## First milestone

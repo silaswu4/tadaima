@@ -1,6 +1,6 @@
 # Tadaima Scan: Native RoomPlan Companion
 
-A minimal **iOS 17+ SwiftUI app** for a real RoomPlan scan on the team's iPhone 14 Pro. The app uses Apple's `RoomCaptureView`, built-in coaching and processed room preview. It shares normalized room surfaces and detected object proxies as JSON, optionally captures calibrated RGB photos in a single ZIP for appearance processing, and can share Apple's parametric USDZ. No measurements, account, provider keys, or upload service are required.
+A minimal **iOS 17+ SwiftUI app** for a real RoomPlan scan on the team's iPhone 14 Pro. The app uses Apple's `RoomCaptureView`, built-in coaching and processed room preview. It records the semantic room layout, then actual observed surfaces in a second ARKit LiDAR pass with calibrated RGB photos. A timestamped ZIP preserves layout, mesh and photos together. Geometry-only RoomPlan JSON and Apple's parametric USDZ remain available. No measurements, account, provider keys, or upload service are required.
 
 The native companion is the user-approved exception to the original web-only capture plan. The desktop/mobile shopping application remains in the main repository. This is one small capture app, not a second shopping frontend.
 
@@ -10,8 +10,8 @@ The native companion is the user-approved exception to the original web-only cap
 2. Connect and unlock the iPhone 14 Pro. Trust the Mac, pair the device with Xcode, and enable Developer Mode on the phone if requested.
 3. Under **Signing & Capabilities**, select your Apple development team. No team, certificate, provisioning profile, or Apple account is configured in this repository. Change `dev.tadaima.scan` to an available bundle identifier if your team needs a unique identifier.
 4. Select the connected iPhone as the run destination, then Run. Allow the camera permission when prompted.
-5. Leave **Save appearance photos** enabled, tap **Start room scan**, move slowly around one room, and follow Apple's guidance. Capture the full wall perimeter, openings, floor edges and upper wall edges. Include existing furniture from several visible angles. Pause briefly for automatic RGB photos, or tap **Capture photo** for a specific view. Tap **Finish & review** after covering the room.
-6. Inspect the model and photo thumbnails, then name the room. Choose **Share scan + photos** to AirDrop/save one timestamped ZIP containing geometry, JPEGs and camera calibration. **Share scan JSON** and **Share USDZ** remain geometry-only options.
+5. Leave **Capture real surface geometry** enabled, tap **Start room scan**, and follow Apple's guidance to cover the full wall perimeter, openings, floor edges and upper wall edges. Tap **Continue to real surfaces**. The app processes the layout, then starts the detailed camera view in the same world coordinate system.
+6. Walk slowly around furniture, including visible fronts, sides and backs. Watch the surface triangle counter, pause for automatic RGB photos, or tap **Capture photo** for a specific view. Tap **Finish surfaces & review** while tracking is ready. Inspect the photo thumbnails and counts, then name the room. Choose **Share detailed scan + photos** to save/AirDrop the timestamped ZIP. **Share scan JSON** and **Share USDZ** export the parametric layout and furniture proxies only. Turning detailed surfaces off restores the single-pass **Finish & review** / **Share scan + photos** flow.
 7. **Scan again** discards the current scan/export references and starts a fresh scan identity. Nothing is uploaded automatically.
 
 The runtime checks `RoomCaptureSession.isSupported`. Unsupported hardware and Simulator show an explanation instead of a fake scan. Camera denial has a Settings action. An active scan, permission request, post-processing operation, or export is invalidated when the app backgrounds; late callbacks cannot replace a new scan. A completed review stays available in memory until rescan or app termination. Export errors retain the current processed scan for an explicit retry.
@@ -52,9 +52,13 @@ Exports are written under the app's private `Documents/Scans/scan-<UUID>/` direc
 
 ## Appearance Photos
 
-Photo capture samples the existing RoomPlan ARSession, preserving camera-to-world poses and rescaled lens calibration with raw sensor-orientation JPEGs. Up to 32 images are saved, at most 1600 pixels per dimension, 2 MiB each and 32 MiB combined. Automatic selection checks normal tracking, viewpoint change, coarse motion and luminance. Manual capture bypasses viewpoint novelty, while retaining tracking, stability and storage checks. No second camera session or ARSession delegate is installed.
+The default capture has two sequential passes: RoomPlan first records the semantic layout, then a detailed ARKit pass records observed room and furniture surfaces. RoomPlan stops with `pauseARSession: false`; the detail preview reuses that ARSession and runs `.meshWithClassification` (or `.mesh` when classification is unsupported), with no reset and no plane flattening. The camera pose, mesh anchors and semantic room retain the original tracking coordinate system. Cancellation, backgrounding and completion pause explicitly; removing a preview view does not pause the shared session.
 
-The primary **Share scan + photos** button appears only when photos were saved. Finishing drains pending encoding; cancellation/rescan cannot attach late frames to a new scan. Photos remain private and are uploaded only if the user deliberately shares them elsewhere. The phone preview remains parametric. Rendering the exported ZIP in the worker automatically projects observed RGB onto visible surfaces; furniture shape remains a size proxy. See [automatic photo texturing](../../../docs/photo-texturing.md). See [photo protocol, import, appearance handoff and limitations](../../../docs/native-photo-capture.md).
+Walk around furniture and capture its visible sides during the detail pass. A live triangle counter reports observed geometry, not a completeness or accuracy score. Finish while tracking is normal. Finishing drains photo encoding, pauses tracking and copies the current mesh anchors to owned arrays away from the main actor. Invalid/oversized or empty meshes fail visibly, without truncation or a successful-looking detailed bundle. Repeated-index, zero-area and duplicate triangles are removed and their count is disclosed. Existing geometry-only JSON/USDZ export remains available.
+
+Photo capture samples the existing ARSession during the detailed pass (or the RoomPlan pass when detailed surfaces are disabled), preserving camera-to-world poses and rescaled lens calibration with raw sensor-orientation JPEGs. Up to 32 images are saved, at most 1600 pixels per dimension, 2 MiB each and 32 MiB combined. Automatic selection checks normal tracking, viewpoint change, coarse motion and luminance. Manual capture bypasses viewpoint novelty, while retaining tracking, stability and storage checks. No second camera session or ARSession delegate is installed.
+
+The primary **Share detailed scan + photos** button appears only when both detailed geometry and photos were saved. Turning detailed surfaces off preserves the original **Share scan + photos** mode. Finishing drains pending encoding; cancellation/rescan cannot attach late frames to a new scan. Photos remain private and are uploaded only if the user deliberately shares them elsewhere. The first phone preview is parametric and the second pass shows the camera feed. A detailed ZIP contains the actual observed scene mesh for reconstruction; the semantic furniture boxes remain separate approximations. Texture projection uses calibrated photos of visible surfaces. Hidden backs, thin legs, reflective surfaces and small details may remain missing. Mesh chunks are spatial regions, not independently segmented furniture objects; no exact-copy or complete-object claim is made. See [automatic photo texturing](../../../docs/photo-texturing.md). See [photo protocol, import, appearance handoff and limitations](../../../docs/native-photo-capture.md).
 
 ## Build and Verification
 
@@ -105,6 +109,7 @@ swiftc -swift-version 6 \
 
 swiftc -swift-version 6 \
   reconstruction/ios/TadaimaScan/TadaimaScan/ScanPhotoPacket.swift \
+  reconstruction/ios/TadaimaScan/TadaimaScan/ScanMeshPacket.swift \
   reconstruction/ios/TadaimaScan/TadaimaScan/ScanPhotoArchive.swift \
   reconstruction/ios/TadaimaScan/Tests/PhotoArchiveTests.swift \
   -o /tmp/tadaima-photo-archive-tests
@@ -115,6 +120,26 @@ The archive executable can emit a synthetic image bundle around the packet fixtu
 `/tmp/tadaima-photo-archive-tests --scan /tmp/synthetic-roomplan.json --emit-bundle /tmp/synthetic-roomplan.zip`.
 Import it with the normal RoomPlan CLI to exercise Swift ZIP output through Python. These images are generated test patterns, not phone photos. A fresh physical RGB scan remains necessary to verify on-device photographic results.
 
+## Detailed Surface Bundle
+
+The geometry packet remains `roomplan-scan/1.1`. A detailed bundle uses `roomplan-photo-bundle/1.1`, retaining all photo-bundle 1.0 fields and adding `mesh: {path: "mesh.json", sha256, byteLength}`. A bundle without a mesh remains version 1.0 with no mesh key. The ZIP STORE archive is limited to 96 MiB.
+
+`mesh.json` is `roomplan-mesh/1.0` with exactly `schemaVersion`, `projectId`, `jobId`, `inputRevision`, `coordinateSystem: "arkit-gravity-y-up-metres"`, `captureMethod: "arkit-scene-reconstruction"`, and `anchors`. Each anchor has a lower-case `mesh-<UUID>` ID, column-major rigid local-to-world `transform`, anchor-local meter `vertices` as Float triples, triangle `faces` as index triples, and one integer classification per triangle (0–7, unknown = 0). Original world coordinates are retained; any floor normalization must occur once in the importer for both mesh and cameras.
+
+Limits: 128 anchors, 200,000 total vertices, 300,000 total triangles, 48 MiB mesh JSON. Buffer copying honors source offsets/strides and 16-/32-bit triangle indices, using unaligned scalar reads. Nonfinite vertices, invalid indices, duplicate triangles, non-rigid transforms and oversized data are rejected. Face classifications do not identify complete furniture instances.
+
+Host checks:
+
+```bash
+swiftc -swift-version 6 \
+  reconstruction/ios/TadaimaScan/TadaimaScan/ScanMeshPacket.swift \
+  reconstruction/ios/TadaimaScan/Tests/MeshPacketTests.swift \
+  -o /tmp/tadaima-mesh-tests
+/tmp/tadaima-mesh-tests
+```
+
+The archive test executable accepts `--with-mesh` alongside `--scan` and `--emit-bundle` to emit a **synthetic** detailed bundle for cross-language tests. Host tests and iOS compilation do not establish physical capture quality. A fresh physical two-pass scan is required; existing RoomPlan boxes cannot recover missing surface geometry. The signed update was installed and launched on the paired iPhone 14 Pro after the previous scan was confirmed saved. Physical detailed scanning remains unverified until a new capture is imported.
+
 ## Primary Sources
 
 - [Apple: Create a 3D model with RoomCaptureView](https://developer.apple.com/documentation/roomplan/create-a-3d-model-of-an-interior-room-by-guiding-the-user-through-an-ar-experience)
@@ -124,3 +149,7 @@ Import it with the normal RoomPlan CLI to exercise Swift ZIP output through Pyth
 - [Apple: CapturedRoom objects](https://developer.apple.com/documentation/roomplan/capturedroom/objects)
 - [Apple: CapturedRoom.Object](https://developer.apple.com/documentation/roomplan/capturedroom/object)
 - The installed Xcode 27 SDK `RoomPlan.swiftinterface` was also inspected for real signatures, iOS availability, confidence, native parent IDs, curve detection, export options and callback isolation.
+
+- [Apple: Reconstructed scene meshes](https://developer.apple.com/documentation/arkit/visualizing-and-interacting-with-a-reconstructed-scene)
+- [Apple: Session configuration transitions](https://developer.apple.com/documentation/arkit/arsession/run(_:options:))
+- [Apple: Shared RoomPlan sessions](https://developer.apple.com/documentation/roomplan/structurebuilder/capturedstructure(from:))
