@@ -67,7 +67,9 @@ export function openQuest({ argv = [], env = process.env,
   const target = quests[0];
   const reverse = adb(["-s", target, "reverse", "tcp:3017", "tcp:3017"]);
   if (reverse.error || reverse.status !== 0) return fail("Could not forward port 3017 to the Quest. Check the USB connection and debugging permission, then retry.");
-  const started = adb(["-s", target, "shell", "am", "start", "-a", "android.intent.action.VIEW", "-d",
+  // Horizon shell owns visible browser panels. A direct browser Activity can
+  // be resumed without a visible headset window; use Meta's system deep link.
+  const started = adb(["-s", target, "shell", "am", "start", "-W", "-a", "android.intent.action.VIEW", "-n", "com.oculus.vrshell/.MainActivity", "-d", "systemux://browser", "-e", "uri",
     `http://localhost:3017/rooms#local-scan=${token}`]);
   if (started.error || started.status !== 0 || /(?:^|\n)\s*(?:Error:|Exception)/i.test(`${started.stdout ?? ""}\n${started.stderr ?? ""}`)) {
     return fail("Could not open the Quest browser. Put on the headset and retry; the private scan URL has not been printed.");
