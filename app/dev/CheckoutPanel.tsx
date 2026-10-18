@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { loadStripe, type Stripe } from "@stripe/stripe-js";
-import { Elements, PaymentElement, useElements, useStripe } from "@stripe/react-stripe-js";
+import { CardElement, Elements, useElements, useStripe } from "@stripe/react-stripe-js";
 import type { Cart, Mandate, Order, PaymentMethod, Recheck, RecheckLine, RoomPlan } from "@/backend/contracts";
 import { api, money } from "./api";
 
@@ -171,6 +171,7 @@ export function CheckoutPanel({ base, plan, onPlanChanged }: { base: string; pla
   const budget = plan?.constraints.budget ?? null;
   const overBudget = budget != null && cart.subtotal.amountMinor > budget.amountMinor;
   const stores = cart.merchants.map((g) => g.merchant).join(" and ") || "no store";
+  const paidAlready = view.orders.find((o) => o.cartDigest === cart.digest) ?? null;
   const mandateCard = mandate ? methods.find((m) => m.id === mandate.paymentMethodId) : null;
 
   return (
@@ -294,14 +295,8 @@ export function CheckoutPanel({ base, plan, onPlanChanged }: { base: string; pla
               </div>
             )}
             {setup && (
-              <Elements
-                stripe={stripeFor(setup.publishableKey)}
-                options={{
-                  clientSecret: setup.clientSecret,
-                  appearance: { theme: "stripe", variables: { fontFamily: "Inter, system-ui, sans-serif", borderRadius: "6px", colorPrimary: "#18181b" } },
-                }}
-              >
-                <CardForm onDone={finishSetup} onCancel={() => setSetup(null)} onError={(t) => setPayMsg({ kind: "err", text: t })} />
+              <Elements stripe={stripeFor(setup.publishableKey)} options={{ fonts: [{ cssSrc: "https://fonts.googleapis.com/css2?family=Inter:wght@400;500" }] }}>
+                <CardForm clientSecret={setup.clientSecret} onDone={finishSetup} onCancel={() => setSetup(null)} onError={(t) => setPayMsg({ kind: "err", text: t })} />
               </Elements>
             )}
             <p className="mt-2 text-xs text-zinc-500">Test mode. Use 4242 4242 4242 4242, any future date, any CVC.</p>
@@ -316,6 +311,7 @@ export function CheckoutPanel({ base, plan, onPlanChanged }: { base: string; pla
                 <button className="btn btn-primary h-9" disabled={!!busy || view.blockers.length > 0 || !card} onClick={() => void approve()}>
                   {busy === "approve" ? "Approving..." : `Approve ${money(cart.subtotal)} at ${stores}${card ? ` with ${cardName(card)}` : ""}`}
                 </button>
+                {paidAlready && <Note msg={{ kind: "warn", text: `This exact cart was already paid (${paidAlready.id}). Approving again would buy it twice.` }} />}
                 <p className="mt-2 text-xs leading-relaxed text-zinc-500">
                   The agent can spend up to {money(cart.subtotal)} at {stores} for 30 minutes, only for this exact cart. Any change to the cart cancels it.
                 </p>
@@ -491,16 +487,28 @@ function Receipt({ order: o }: { order: Order }) {
   );
 }
 
-function CardForm({ onDone, onCancel, onError }: { onDone: (setupIntentId: string) => Promise<void>; onCancel: () => void; onError: (t: string) => void }) {
+/** Card only: the SetupIntent allows other methods too, and the agent can only reuse a card off-session. */
+function CardForm({
+  clientSecret,
+  onDone,
+  onCancel,
+  onError,
+}: {
+  clientSecret: string;
+  onDone: (setupIntentId: string) => Promise<void>;
+  onCancel: () => void;
+  onError: (t: string) => void;
+}) {
   const stripe = useStripe();
   const elements = useElements();
   const [saving, setSaving] = useState(false);
   const ready = !!stripe && !!elements;
 
   async function save() {
-    if (!stripe || !elements) return;
+    const card = elements?.getElement(CardElement);
+    if (!stripe || !card) return;
     setSaving(true);
-    const { setupIntent, error } = await stripe.confirmSetup({ elements, redirect: "if_required" });
+    const { setupIntent, error } = await stripe.confirmCardSetup(clientSecret, { payment_method: { card } });
     if (error || !setupIntent) {
       setSaving(false);
       return onError(error?.message ?? "Card setup failed");
@@ -511,7 +519,9 @@ function CardForm({ onDone, onCancel, onError }: { onDone: (setupIntentId: strin
 
   return (
     <div className="space-y-2 rounded-md border border-zinc-200 p-3">
-      <PaymentElement options={{ layout: "tabs" }} />
+      <div className="rounded-md border border-zinc-300 bg-white px-2.5 py-2">
+        <CardElement options={{ hidePostalCode: true, style: { base: { fontFamily: "Inter, system-ui, sans-serif", fontSize: "14px", color: "#18181b" } } }} />
+      </div>
       <div className="flex gap-2">
         <button className="btn btn-primary" disabled={!ready || saving} onClick={() => void save()}>
           {saving ? "Saving..." : "Save card"}
