@@ -12,6 +12,15 @@ Owner: **Matthew**. This is the application and agent integration area. Work alo
 - The selected Solana adapter once the team chooses its scope; x402 remains rejected.
 - Integration in root `app/` routes/layout and shared package/config changes.
 
+## What exists
+
+- [`contracts.ts`](contracts.ts) v0.2: room plan, items with category and seats, product candidates (with a `fixture` flag), plan changes, proposals, validation results, apply results, jobs and cart reviews.
+- [`fixtures/demo-room.ts`](fixtures/demo-room.ts): a synthetic 5.0 x 4.2 m living room. Owned sofa and desk are locked, five proposed purchases ($1,725 of a $2,000 cap), seats exactly 4, plus a 14-product synthetic catalog for swaps. Not a real home or real offers.
+- [`plan/rules.ts`](plan/rules.ts): pure `applyChanges`, `costOf` and `validate` (in room, clearance overlap, locked items kept, budget, seats, sizes known, product available). Unknown sizes or stock come back `unknown`, never `pass`.
+- `npm test` runs `plan/rules.test.ts`.
+
+Item `position` is the center of the footprint on the floor, `dimensions` are `[width, height, depth]` before rotation, `rotationY` is radians about +Y (three.js convention).
+
 ## First tasks
 
 1. Agree on `contracts.ts` with the other three owners. The scaffold is a starting contract, not runtime validation or a complete implementation of the proposed data model.
