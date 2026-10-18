@@ -6,6 +6,7 @@ import type { RoomPlan, PlacedItem } from "../../backend/contracts";
 import { makeExplodeController, type ExplodeController } from "./explode";
 import { makeWorkspaceDemo } from "./workspace-fixture";
 import { block, rug, standingLamp, surface } from "./parts";
+import { createRoomLighting, setMetricSurfaceUVs } from "./lighting";
 
 export type WorkspaceItem = {
   id: string;
@@ -62,11 +63,12 @@ export function createFurnitureWorkspace(
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, options.lite ? 1.5 : 2));
   renderer.setClearColor("#f5f2eb");
   renderer.outputColorSpace = THREE.SRGBColorSpace;
-  renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.25;
+  renderer.toneMapping = THREE.AgXToneMapping;
+  renderer.toneMappingExposure = 1.1;
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFShadowMap;
   const scene = new THREE.Scene();
+  const lighting = createRoomLighting(renderer, scene, options.lite);
   const camera = new THREE.PerspectiveCamera(42, 1, .1, 200);
   const controls = new OrbitControls(camera, canvas);
   controls.enableDamping = !options.reducedMotion;
@@ -78,31 +80,35 @@ export function createFurnitureWorkspace(
   controls.enablePan = true;
   const shell = new THREE.Group();
   scene.add(shell);
-  scene.add(new THREE.HemisphereLight("#ffffff", "#c8b9a0", 2.6));
-  const sun = new THREE.DirectionalLight("#fff2dc", 3);
-  sun.position.set(1, 10, 7);
+  scene.add(new THREE.HemisphereLight("#eaf0ff", "#b4a18a", .45));
+  const sun = new THREE.DirectionalLight("#fff1da", 2.6);
+  sun.position.set(-5, 10, 8);
   sun.castShadow = true;
   sun.shadow.mapSize.setScalar(options.lite ? 1024 : 2048);
   sun.shadow.camera.left = sun.shadow.camera.bottom = -18;
   sun.shadow.camera.right = sun.shadow.camera.top = 18;
-  sun.shadow.normalBias = .025;
+  sun.shadow.radius = 3;
+  sun.shadow.normalBias = .015;
   sun.shadow.bias = -.0001;
   scene.add(sun);
   scene.add(sun.target);
 
-  const wallViews: { material: THREE.MeshStandardMaterial; midpoint: THREE.Vector3; outward: THREE.Vector3; interior: boolean }[] = [];
+  const wallViews: { material: THREE.MeshStandardMaterial; meshes: THREE.Mesh[]; midpoint: THREE.Vector3; outward: THREE.Vector3; interior: boolean }[] = [];
   const roomCenter = new THREE.Vector3();
   for (const room of plan.geometry.rooms) {
     const shape = new THREE.Shape(room.floorPolygon.map(([x, z]) => new THREE.Vector2(x, -z)));
     const geometry = new THREE.ExtrudeGeometry(shape, { depth: .1, bevelEnabled: false });
     geometry.rotateX(-Math.PI / 2);
-    const floor = new THREE.Mesh(geometry, surface("#ddd0ba", .95));
+    setMetricSurfaceUVs(geometry, 1.2);
+    const floor = new THREE.Mesh(geometry, lighting.floor);
     floor.position.y = -.1;
     floor.receiveShadow = true;
     shell.add(floor);
   }
   const floorBounds = new THREE.Box3().setFromObject(shell);
   if (floorBounds.isEmpty()) {
+    lighting.dispose();
+    release(shell);
     controls.dispose();
     renderer.dispose();
     throw new Error("A room floor is required for the furniture workspace.");
@@ -122,7 +128,7 @@ export function createFurnitureWorkspace(
     const dx = wall.end[0] - wall.start[0], dz = wall.end[1] - wall.start[1];
     const length = Math.hypot(dx, dz);
     if (length <= 0) continue;
-    const material = surface("#eee8de");
+    const material = lighting.makeWall();
     material.transparent = true;
     const midpoint = new THREE.Vector3((wall.start[0] + wall.end[0]) / 2, 0, (wall.start[1] + wall.end[1]) / 2);
     const outward = new THREE.Vector3(dz, 0, -dx).normalize();
@@ -131,7 +137,8 @@ export function createFurnitureWorkspace(
     const plusInside = insideFloor(midpoint.x + outward.x * .01, midpoint.z + outward.z * .01);
     const minusInside = insideFloor(midpoint.x - outward.x * .01, midpoint.z - outward.z * .01);
     if (plusInside && !minusInside) outward.negate();
-    wallViews.push({ material, midpoint, outward, interior: plusInside && minusInside });
+    const meshes: THREE.Mesh[] = [];
+    wallViews.push({ material, meshes, midpoint, outward, interior: plusInside && minusInside });
     const openings = plan.geometry.openings.filter((opening) => opening.wallId === wall.id);
     // Split at every aperture edge, so doors/windows are actual holes.
     const cuts = [...new Set([0, length, ...openings.flatMap((o) => [
@@ -152,16 +159,24 @@ export function createFurnitureWorkspace(
       for (const [low, high] of spans) {
         if (high <= low || b <= a) continue;
         const mesh = block(b - a, high - low, wall.thickness, material, 0);
+        setMetricSurfaceUVs(mesh.geometry, 1);
+        // Keep plaster phase continuous above/below an aperture on the same wall.
+        const uv = mesh.geometry.getAttribute("uv");
+        for (let index = 0; index < uv.count; index++) uv.setXY(index, uv.getX(index) + middle, uv.getY(index) + low);
         mesh.position.set(wall.start[0] + dx * middle / length, low, wall.start[1] + dz * middle / length);
         mesh.rotation.y = -Math.atan2(dz, dx);
         mesh.receiveShadow = true;
+        mesh.castShadow = true;
+        meshes.push(mesh);
         shell.add(mesh);
       }
     }
   }
   const roomBounds = new THREE.Box3().setFromObject(shell);
   const assembledBounds = roomBounds.clone();
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(120, 120), surface("#f5f2eb", 1));
+  // Extend beyond the camera's far plane so portrait overviews never reveal
+  // the edge of the presentation ground behind the room.
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(1000, 1000), surface("#f5f2eb", 1));
   ground.rotation.x = -Math.PI / 2;
   ground.position.set(roomCenter.x, -.115, roomCenter.z);
   ground.receiveShadow = true;
@@ -312,6 +327,8 @@ export function createFurnitureWorkspace(
       const near = wall.interior || wall.outward.dot(camera.position.clone().sub(wall.midpoint)) > 0;
       wall.material.opacity = near ? .075 : 1;
       wall.material.depthWrite = !near;
+      // A presentation cutaway should not leave an opaque wall's shadow behind.
+      for (const mesh of wall.meshes) mesh.castShadow = !near;
     }
     padOpacity = options.reducedMotion ? (exploded ? 1 : 0)
       : THREE.MathUtils.damp(padOpacity, exploded ? 1 : 0, 6, delta / 1000);
@@ -325,7 +342,7 @@ export function createFurnitureWorkspace(
   }
   resize();
   raf = requestAnimationFrame(frame);
-  const ready = Promise.all(plan.items.map(loadItem)).then((items) => {
+  const ready = Promise.all([Promise.all(plan.items.map(loadItem)), lighting.ready]).then(([items]) => {
     if (disposed) return;
     controller = makeExplodeController(plan.items.map((item) => ({ id: item.id, object: roots.get(item.id)! })), roomBounds, {
       reducedMotion: options.reducedMotion, floorY: 0, gap: .75,
@@ -339,6 +356,24 @@ export function createFurnitureWorkspace(
       inventoryPad.scale.set(size.x + .5, 1, size.z + .5);
       inventoryPad.position.set(center.x, -.03, center.z);
     }
+    // Fit a single stable shadow frustum around both layouts. This keeps contact
+    // shadows on exploded pieces without moving the light during a transition.
+    const shadowBounds = assembledBounds.clone().union(bounds);
+    const lightTarget = shadowBounds.getCenter(new THREE.Vector3());
+    sun.target.position.copy(lightTarget);
+    sun.position.copy(lightTarget).add(new THREE.Vector3(-8, 12, 10));
+    sun.target.updateMatrixWorld();
+    sun.updateMatrixWorld();
+    sun.shadow.updateMatrices(sun);
+    const lightBounds = shadowBounds.clone().applyMatrix4(sun.shadow.camera.matrixWorldInverse);
+    const shadowCamera = sun.shadow.camera;
+    shadowCamera.left = lightBounds.min.x - .5;
+    shadowCamera.right = lightBounds.max.x + .5;
+    shadowCamera.bottom = lightBounds.min.y - .5;
+    shadowCamera.top = lightBounds.max.y + .5;
+    shadowCamera.near = Math.max(.1, -lightBounds.max.z - 2);
+    shadowCamera.far = Math.max(shadowCamera.near + 1, -lightBounds.min.z + 2);
+    shadowCamera.updateProjectionMatrix();
     fit(false, true);
     callbacks.onReady(items.filter((item): item is WorkspaceItem => item !== null));
   }).catch(() => {
@@ -359,6 +394,7 @@ export function createFurnitureWorkspace(
     canvas.removeEventListener("pointerup", up);
     canvas.removeEventListener("pointercancel", cancelPointer);
     controller?.dispose();
+    lighting.dispose();
     release(scene);
     sun.shadow.dispose();
     renderer.dispose();

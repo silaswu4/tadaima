@@ -6,6 +6,7 @@ Owner: **Silas**. Build the browser-based 3D viewer and Quest 3S interaction lay
 
 - [`components/FurnitureWorkspace.tsx`](components/FurnitureWorkspace.tsx): responsive furniture workspace at `/room`, with explode/return, camera reset, selectable inventory, loading/error states, and model dimensions. The ASCII homepage and old pencil viewer are preserved.
 - [`room/workspace-scene.ts`](room/workspace-scene.ts): lazy Three.js cutaway renderer, GLB loading with Meshopt, orbit/pan/zoom, raycast selection, camera framing, reduced motion, and GPU cleanup. `createFurnitureWorkspace(canvas, callbacks, options)` accepts an optional canonical `RoomPlan`; it snapshots input rather than changing shared state.
+- [`room/lighting.ts`](room/lighting.ts): local image-based lighting, AgX-compatible PBR surface loading, and meter-scaled surface UVs. Appearance is independent of furniture placement and shared room geometry.
 - [`room/workspace-fixture.ts`](room/workspace-fixture.ts): explicit nine-piece demonstration plan using seven existing GLBs plus a procedural rug and lamp. The route currently mounts this sample, not an uploaded scan or address reconstruction.
 - [`room/explode.ts`](room/explode.ts): reusable size-aware inventory layout and reversible object animation. Stable item IDs map to independent loaded object roots; furniture keeps its original size and orientation. Inventory boxes sit beyond the room's +X boundary without overlapping. Return restores original local position, quaternion, and scale exactly, including after interrupted transitions.
 - [`components/AsciiHero.tsx`](components/AsciiHero.tsx): latest homepage hero configuration, visibility/playback handling, and ASCII renderer composition.
@@ -42,7 +43,17 @@ The shell stays together while each furnishing moves to a temporary inventory po
 
 The renderer takes validated, meter-based, Y-up geometry and independent furniture instances. It creates floor polygons and walls with door/window apertures; front-facing boundary walls and interior partitions fade for the cutaway. There is no live plan loading UI or placement editor on this route yet. A single flattened GLB cannot be exploded into semantic furniture automatically: the importer must supply separate item IDs, transforms, and assets. Quest/WebXR entry is not implemented by this change, and mobile browser emulation is not physical iPhone verification.
 
-All seven existing GLBs require Meshopt decoding and embedded WebP support. Their combined download is approximately 1.52 MB / 47,371 triangles, but decoded textures use substantially more memory. The workspace uses standard lighting/shadows without the pencil viewer's postprocessing and caps mobile pixel ratio at 1.5. It disposes controls, observers, animation frames, geometry, materials, textures, and late-arriving assets on unmount.
+All seven existing GLBs require Meshopt decoding and embedded WebP support. Their combined download is approximately 1.52 MB / 47,371 triangles, but decoded textures use substantially more memory. The workspace caps mobile pixel ratio at 1.5 and uses a single shadow-casting directional light without the pencil viewer's postprocessing. It disposes controls, observers, animation frames, geometry, materials, textures, environment render targets, and late-arriving assets on unmount.
+
+### PBR appearance and lighting
+
+The workspace uses AgX tone mapping, a local 1K HDRI prefiltered once through Three.js PMREM, a low-intensity hemisphere fill, and filtered PCF shadows. The shadow camera covers both the assembled room and the exploded inventory, so pieces retain contact shadows during transitions. This Three.js version removed `PCFSoftShadowMap`; the implementation uses supported `PCFShadowMap` with a non-default filter radius. No external asset service is required at runtime.
+
+CC0 oak base-color, roughness, and OpenGL normal maps and a plaster normal map are served from [`public/materials/room/`](../public/materials/room/). Floor UVs repeat every 1.2 meters in both directions, matching the source material's physical tile; wall plaster repeats every meter with subtle normal strength. Base color is decoded as sRGB; roughness and normal maps remain linear data. Room resizing changes the number of repeats rather than stretching the material. Existing furniture keeps its merchant/model materials and textures. Asset sources, physical scale, licensing, and checksums are recorded in [`sources.json`](../public/materials/room/sources.json).
+
+If an appearance texture cannot load, its material remains a plain PBR surface. If the HDRI fails, a generated `RoomEnvironment` supplies reflection lighting instead. Furniture assets still follow their separate labeled-proxy behavior. These fallbacks keep the workspace inspectable; they do not establish that every requested asset loaded. There is no live reconstruction of the captured room's real materials or light sources.
+
+The HDRI is a generic studio lighting environment, and PCF shadow filtering approximates softness. This browser renderer does not reproduce Blender Cycles light bounces, path tracing, baked lightmaps, or measured real-room illumination. It favors an interactive desktop/mobile view over offline-render parity; physical iPhone and Quest performance still need device testing.
 
 Run the focused behavior checks from the repository root:
 

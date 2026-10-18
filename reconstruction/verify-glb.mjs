@@ -8,6 +8,38 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { Box3, DoubleSide, Raycaster, Vector3 } from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { decodePng, installNodePngDecoder } from "./png-decoder.mjs";
+
+// Actual pixel decoding permits GLTFLoader's material path in Node. GPU upload,
+// lighting, and appearance remain browser/render checks, not claims of this tool.
+const decodedImages = installNodePngDecoder();
+
+function inspectEmbeddedImages(bytes) {
+  assert.equal(bytes.readUInt32LE(0), 0x46546c67, "GLB magic");
+  assert.equal(bytes.readUInt32LE(4), 2, "GLB version");
+  assert.equal(bytes.readUInt32LE(8), bytes.length, "GLB length");
+  const jsonLength = bytes.readUInt32LE(12);
+  assert.equal(bytes.readUInt32LE(16), 0x4e4f534a, "GLB JSON chunk");
+  const document = JSON.parse(bytes.toString("utf8", 20, 20 + jsonLength));
+  const images = document.images ?? [];
+  if (images.length === 0) return { document, images: [] };
+  const binOffset = 20 + jsonLength;
+  assert.equal(bytes.readUInt32LE(binOffset + 4), 0x004e4942, "GLB BIN chunk");
+  const binLength = bytes.readUInt32LE(binOffset);
+  assert.equal(binOffset + 8 + binLength, bytes.length, "GLB BIN length");
+  const inspected = images.map((image) => {
+    assert.equal(image.uri, undefined, "Room texture must be embedded, not a network/local URI");
+    assert.equal(image.mimeType, "image/png", "Verifier supports exported PNG textures only");
+    const view = document.bufferViews?.[image.bufferView];
+    assert(view && view.buffer === 0, "Image bufferView must reference GLB binary");
+    const start = view.byteOffset ?? 0;
+    assert(Number.isSafeInteger(start) && start >= 0 && Number.isSafeInteger(view.byteLength) && view.byteLength > 0
+      && start + view.byteLength <= binLength, "Image bufferView bounds");
+    const pixels = decodePng(bytes.subarray(binOffset + 8 + start, binOffset + 8 + start + view.byteLength));
+    return { width: pixels.width, height: pixels.height, pixelCount: pixels.width * pixels.height };
+  });
+  return { document, images: inspected };
+}
 
 async function verify(directory, validatorModule) {
   const manifest = JSON.parse(await readFile(resolve(directory, "manifest.json"), "utf8"));
@@ -19,6 +51,10 @@ async function verify(directory, validatorModule) {
     assert.equal(createHash("sha256").update(bytes).digest("hex"), file.sha256, file.fileName + " hash");
   }
   const bytes = await readFile(resolve(directory, "scene.glb"));
+  const embedded = inspectEmbeddedImages(bytes);
+  const textured = embedded.images.length > 0;
+  if (manifest.renderProfile === "pbr-daylight-v1") assert(textured, "PBR profile must export embedded material images");
+  const decodedBefore = decodedImages.length;
   const data = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
   const gltf = await new GLTFLoader().parseAsync(data, "");
   gltf.scene.updateMatrixWorld(true);
@@ -33,6 +69,20 @@ async function verify(directory, validatorModule) {
       for (const material of materials) material.side = DoubleSide;
       const positions = object.geometry.getAttribute("position");
       for (const number of positions.array) assert(Number.isFinite(number), "Nonfinite vertex");
+      if (textured) {
+        const uv = object.geometry.getAttribute("uv");
+        assert(uv && uv.itemSize === 2 && uv.count === positions.count, "Textured mesh needs complete UVs");
+        for (const number of uv.array) assert(Number.isFinite(number), "Nonfinite UV");
+        assert(materials.every((material) => material.isMeshStandardMaterial), "Exported material must use metallic/roughness PBR");
+        for (const material of materials) {
+          assert(material.normalMap?.image?.data?.length > 0, "Packed normal map must actually decode");
+          assert.equal(material.metalness, 0, "Room surfaces must not become metallic");
+          if (object.userData.role === "room_floor") {
+            assert(material.map?.image?.data?.length > 0, "Floor base color must actually decode");
+            assert(material.roughnessMap?.image?.data?.length > 0, "Floor roughness must actually decode");
+          }
+        }
+      }
     }
   });
   assert.equal(entities.size, manifest.objects.length, "Lost entity metadata");
@@ -66,7 +116,10 @@ async function verify(directory, validatorModule) {
   }
   const report = { valid: true, loader: "Three.js GLTFLoader", entityCount: entities.size,
     meshCount: manifest.statistics.meshCount, bounds: actual, testedApertures: source.geometry.openings.length,
-    glbByteLength: bytes.length };
+    glbByteLength: bytes.length, embeddedPngImages: embedded.images,
+    loaderDecodedImageCount: decodedImages.length - decodedBefore,
+    renderingVerified: false };
+  if (textured) assert(decodedImages.length > decodedBefore, "GLTFLoader must decode embedded textures");
   if (validatorModule) {
     const imported = await import(pathToFileURL(resolve(validatorModule)).href);
     const validator = imported.default ?? imported;

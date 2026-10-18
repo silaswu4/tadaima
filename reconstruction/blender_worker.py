@@ -21,19 +21,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from reconstruction import GENERATOR_VERSION
 from reconstruction.geometry import triangulate_polygon, validate_request, wall_cells
 from reconstruction.joins import wall_join_slopes
+from reconstruction.shading import RENDER_PROFILE, add_preview_setup, metric_uvs, room_materials
 
 FLOOR_THICKNESS = 0.08
-
-
-def material(name: str, rgba: tuple[float, float, float, float]):
-    result = bpy.data.materials.new(name)
-    result.use_nodes = True
-    result.diffuse_color = rgba
-    shader = result.node_tree.nodes.get("Principled BSDF")
-    shader.inputs["Base Color"].default_value = rgba
-    shader.inputs["Roughness"].default_value = 0.85
-    shader.inputs["Metallic"].default_value = 0.0
-    return result
 
 
 def mesh_object(name, vertices, faces, collection, mat):
@@ -174,39 +164,6 @@ def bounds_of(objects):
             "max": [max(p[i] for p in canonical) for i in range(3)]}
 
 
-def add_preview_setup(scene, bounds):
-    low, high = bounds["min"], bounds["max"]
-    target = Vector(((low[0] + high[0]) / 2, -(low[2] + high[2]) / 2, (low[1] + high[1]) / 3))
-    span = max(high[0] - low[0], high[2] - low[2], high[1] - low[1])
-    data = bpy.data.cameras.new("PreviewCamera")
-    camera = bpy.data.objects.new("PreviewCamera", data)
-    scene.collection.objects.link(camera)
-    camera.location = target + Vector((span * 1.3, -span * 1.5, span * 1.6))
-    camera.rotation_euler = (target - camera.location).to_track_quat("-Z", "Y").to_euler()
-    data.type = "ORTHO"
-    data.ortho_scale = span * 1.7
-    scene.camera = camera
-    light_data = bpy.data.lights.new("PreviewArea", "AREA")
-    light = bpy.data.objects.new("PreviewArea", light_data)
-    scene.collection.objects.link(light)
-    light.location = target + Vector((span, -span / 2, span * 2))
-    light.rotation_euler = (target - light.location).to_track_quat("-Z", "Y").to_euler()
-    light_data.energy = 1800
-    light_data.shape = "DISK"
-    light_data.size = span * 1.5
-    scene.world.use_nodes = True
-    scene.world.node_tree.nodes["Background"].inputs["Color"].default_value = (0.6, 0.65, 0.75, 1)
-    scene.world.node_tree.nodes["Background"].inputs["Strength"].default_value = 0.5
-    scene.render.engine = "CYCLES"
-    scene.cycles.device = "CPU"
-    scene.cycles.samples = 24
-    scene.cycles.seed = 0
-    scene.render.resolution_x = 960
-    scene.render.resolution_y = 720
-    scene.render.resolution_percentage = 100
-    scene.render.image_settings.file_format = "PNG"
-
-
 def generate(request, output: Path, preview: bool):
     if bpy.app.version < (4, 5, 0):
         raise RuntimeError("Blender 4.5 LTS or newer is required")
@@ -230,8 +187,7 @@ def generate(request, output: Path, preview: bool):
         collection = bpy.data.collections.new(name)
         scene.collection.children.link(collection)
         collections[name] = collection
-    floor_mat = material("Floor_PBR", (0.53, 0.4, 0.26, 1))
-    wall_mat = material("Wall_PBR", (0.84, 0.82, 0.76, 1))
+    floor_mat, wall_mat = room_materials()
     objects = [build_floor(room, collections["Floors"], floor_mat) for room in geometry["rooms"]]
     for wall in geometry["walls"]:
         openings = [o for o in geometry["openings"] if o["wallId"] == wall["id"]]
@@ -239,8 +195,10 @@ def generate(request, output: Path, preview: bool):
         objects.append(obj)
         objects.extend(build_opening(o, obj, wall["thickness"], collections["Openings"]) for o in openings)
     bpy.context.view_layer.update()
+    for obj in objects:
+        metric_uvs(obj, 1.2 if obj["role"] == "room_floor" else 1)
     bounds = bounds_of(objects)
-    add_preview_setup(scene, bounds)
+    add_preview_setup(scene, bounds, objects)
     bpy.context.view_layer.update()
     bpy.ops.object.select_all(action="DESELECT")
     for obj in objects:
@@ -251,7 +209,9 @@ def generate(request, output: Path, preview: bool):
     result = bpy.ops.export_scene.gltf(
         filepath=str(output / "scene.glb"), export_format="GLB", check_existing=False,
         use_selection=True, export_yup=True, export_extras=True, export_materials="EXPORT",
-        export_normals=True, export_texcoords=False, export_animations=False,
+        export_normals=True, export_texcoords=True, export_tangents=True, export_animations=False,
+        export_image_format="AUTO",
+        use_renderable=False,
         export_cameras=False, export_lights=False, export_draco_mesh_compression_enable=False,
         export_unused_images=False, export_unused_textures=False,
     )
@@ -259,6 +219,7 @@ def generate(request, output: Path, preview: bool):
         raise RuntimeError("glTF exporter did not finish")
     metadata = {
         "blenderVersion": bpy.app.version_string,
+        "renderProfile": RENDER_PROFILE,
         "bounds": bounds,
         "objects": [{"id": obj["entityId"], "role": obj["role"], "name": obj.name,
                      "evidenceIds": json.loads(obj["evidenceIdsJson"])} for obj in objects],
