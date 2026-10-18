@@ -64,7 +64,8 @@ def _sha256(path: Path) -> str:
 
 
 def generate(request_path: Path, output_path: Path, *, blender: str | None = None,
-             timeout: float = 120, preview: bool = False) -> dict:
+             timeout: float = 120, preview: bool = False,
+             photo_bundle: Path | None = None) -> dict:
     """Publish a complete fresh artifact directory, or leave no final directory.
 
     Caller supplies trusted output/configuration paths. Input JSON never chooses
@@ -87,6 +88,13 @@ def generate(request_path: Path, output_path: Path, *, blender: str | None = Non
         command = [binary, "--background", "--factory-startup", "--disable-autoexec",
                    "--python-exit-code", "1", "--python", str(Path(__file__).with_name("blender_worker.py")),
                    "--", "--request", str(scene_json), "--output", str(staging)]
+        photo_sources = staging / "photo-sources"
+        if photo_bundle is not None:
+            # A private sidecar, not a second room schema or an arbitrary image
+            # URL. Revalidate source bytes and bind poses to this exact geometry.
+            from reconstruction.roomplan.texture_source import prepare_texture_source
+            source = prepare_texture_source(Path(photo_bundle), request, photo_sources)
+            command.extend(["--photo-source", str(source)])
         if preview:
             command.append("--preview")
         log_path = staging / "worker.log"
@@ -100,6 +108,12 @@ def generate(request_path: Path, output_path: Path, *, blender: str | None = Non
             tail = log_path.read_text(errors="replace")[-8000:]
             raise PipelineError(f"Blender failed (exit {process.returncode}):\n{tail}")
         metadata = json.loads((staging / "worker-result.json").read_text())
+        if photo_bundle is not None:
+            if not isinstance(metadata.get("photoTexturing"), dict):
+                raise PipelineError("Photo texturing was requested but the worker produced no coverage report")
+            # The original archive stays with its caller. All render textures
+            # must already be packed into both portable artifacts.
+            shutil.rmtree(photo_sources)
         artifacts = {}
         files = {}
         for key, filename, media_type in (
@@ -122,6 +136,16 @@ def generate(request_path: Path, output_path: Path, *, blender: str | None = Non
         ]
         if request.get("items"):
             warnings.append("Existing furniture is represented by separate sensor-size proxies, not exact textured meshes or merchant products.")
+        if photo_bundle is not None:
+            report = staging / "photo-texturing.json"
+            if not report.is_file() or report.is_symlink():
+                raise PipelineError("Photo texturing coverage report is missing")
+            files["photoTexturing"] = {
+                "assetId": f"{request['projectId']}:{request['jobId']}:photoTexturing",
+                "fileName": report.name, "mediaType": "application/json",
+                "byteLength": report.stat().st_size, "sha256": _sha256(report),
+            }
+            warnings.extend(metadata["photoTexturing"].get("warnings", []))
         if any(e["dimensionStatus"] == "inferred" for e in request["evidence"]):
             warnings.append("Some evidence is inferred; user confirmation does not turn it into a physical measurement.")
         manifest = {
@@ -141,6 +165,9 @@ def generate(request_path: Path, output_path: Path, *, blender: str | None = Non
         (staging / "manifest.json").write_text(json.dumps(manifest, sort_keys=True, indent=2,
                                                          allow_nan=False) + "\n")
         (staging / "worker-result.json").unlink()
+        for path in staging.rglob("*"):
+            if not path.is_symlink():
+                path.chmod(0o700 if path.is_dir() else 0o600)
         # Another process using this job ID must not replace a successful run.
         if output.exists() or output.is_symlink():
             raise PipelineError("Output was created by another job while Blender was running")

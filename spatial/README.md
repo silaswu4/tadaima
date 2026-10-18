@@ -83,3 +83,18 @@ Native reconstruction requests can include independent captured furniture instan
 Locked placement remains canonical; inventory explode is a reversible presentation transform and returns each detected item to its original position and orientation. Source evidence and the original request are not changed. An empty `items` array remains a usable room shell, and older request files without `items` remain supported.
 
 Run `node --experimental-strip-types --test spatial/tests/test-captured-furniture.mjs spatial/tests/test-room-appearance.mjs spatial/tests/test-explode.mjs` for import limits/provenance, unsafe-link rejection, rotated/elevated proxy bounds and locked-item explode/restore checks.
+
+
+### Local photo-textured reconstruction models
+
+At `/room`, choose **Open room file** for the reconstruction JSON, then **Open textured model** for its generated `scene.glb`. The model is read in the browser without uploading files. **Remove photo model** restores the procedural preview, and importing another JSON clears the previous model. A mismatched or unsupported GLB reports an error and keeps the procedural room usable.
+
+The importer accepts one static GLB up to 64 MiB with embedded PNG/JPEG images, no resource URLs (including data URLs), bounded image dimensions/decoded pixel count, and supported material extensions. Before replacing the preview, it checks the exported project ID and input revision, every floor/wall/opening/furniture semantic ID and role, wall/opening/furniture transforms, actual floor/wall/furniture extents, finite vertices and at least one `photo_projected` entity. This binds the model to the opened project/revision and geometry. The viewer does not check the job ID (the shared plan does not retain it), independently verify a photo’s identity, or establish visibility.
+
+Captured furniture keeps independent canonical roots and can still be selected, exploded and returned exactly. Projected photos describe appearance on the captured size proxy, not a recovered detailed furniture mesh. Unseen faces retain the reconstruction worker’s fallback material; lighting remains the viewer’s approximation.
+
+Run the focused resource/import/placement regressions:
+
+```bash
+node --experimental-strip-types --test spatial/tests/test-textured-model.mjs spatial/tests/test-captured-furniture.mjs spatial/tests/test-explode.mjs spatial/tests/test-room-appearance.mjs
+```

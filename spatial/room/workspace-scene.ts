@@ -10,6 +10,7 @@ import { createRoomLighting, setMetricSurfaceUVs } from "./lighting";
 import { RectAreaLightUniformsLib } from "three/addons/lights/RectAreaLightUniformsLib.js";
 import { insideFloor, planWindowDaylight } from "./window-daylight";
 import { createFurnitureProxy, placeFurnitureModel } from "./furniture-model";
+import { bindTexturedRoom, validateLocalTexturedGlb } from "./textured-model";
 
 export type WorkspaceItem = {
   id: string;
@@ -17,7 +18,7 @@ export type WorkspaceItem = {
   /** Local model bounds, not retailer-verified dimensions. */
   size: [number, number, number];
   modelAvailable: boolean;
-  representation: "detected_size_proxy" | "demo_model" | "demo_proxy";
+  representation: "detected_size_proxy" | "photo_textured_proxy" | "demo_model" | "demo_proxy";
   locked: boolean;
   evidence: string[];
 };
@@ -32,6 +33,7 @@ type Callbacks = {
   onReady(items: WorkspaceItem[]): void;
   onSelect(id: string | null): void;
   onError(message: string): void;
+  onPhotoModel?(loaded: boolean, message?: string): void;
 };
 
 /** Release GPU resources, including embedded ImageBitmaps from loaded GLBs. */
@@ -61,7 +63,7 @@ function release(root: THREE.Object3D) {
 export function createFurnitureWorkspace(
   canvas: HTMLCanvasElement,
   callbacks: Callbacks,
-  options: { lite?: boolean; reducedMotion?: boolean; plan?: RoomPlan } = {},
+  options: { lite?: boolean; reducedMotion?: boolean; plan?: RoomPlan; texturedModel?: ArrayBuffer } = {},
 ): WorkspaceScene {
   // Snapshot canonical input; presentation transforms belong only to Object3Ds.
   const plan = structuredClone(options.plan ?? makeWorkspaceDemo());
@@ -110,7 +112,7 @@ export function createFurnitureWorkspace(
   scene.add(sun);
   scene.add(sun.target);
 
-  const wallViews: { material: THREE.MeshStandardMaterial; meshes: THREE.Mesh[]; midpoint: THREE.Vector3; outward: THREE.Vector3; interior: boolean }[] = [];
+  const wallViews: { id: string; materials: THREE.MeshStandardMaterial[]; meshes: THREE.Mesh[]; midpoint: THREE.Vector3; outward: THREE.Vector3; interior: boolean }[] = [];
   const roomCenter = new THREE.Vector3();
   const appearances = new Map(plan.appearance?.surfaces.map((entry) => [entry.entityId, entry]) ?? []);
   for (const room of plan.geometry.rooms) {
@@ -148,7 +150,7 @@ export function createFurnitureWorkspace(
     const minusInside = insideFloor([midpoint.x - outward.x * .01, midpoint.z - outward.z * .01], plan.geometry);
     if (plusInside && !minusInside) outward.negate();
     const meshes: THREE.Mesh[] = [];
-    wallViews.push({ material, meshes, midpoint, outward, interior: plusInside && minusInside });
+    wallViews.push({ id: wall.id, materials: [material], meshes, midpoint, outward, interior: plusInside && minusInside });
     const openings = plan.geometry.openings.filter((opening) => opening.wallId === wall.id);
     // Split at every aperture edge, so doors/windows are actual holes.
     const cuts = [...new Set([0, length, ...openings.flatMap((o) => [
@@ -203,6 +205,7 @@ export function createFurnitureWorkspace(
 
   const roots = new Map<string, THREE.Group>();
   const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
+  let photoFurniture: Map<string, THREE.Group> | null = null;
   let controller: ExplodeController | null = null;
   let selectedId: string | null = null;
   let exploded = false;
@@ -289,11 +292,42 @@ export function createFurnitureWorkspace(
   canvas.addEventListener("pointerup", up);
   canvas.addEventListener("pointercancel", cancelPointer);
 
+  async function preparePhotoModel() {
+    if (!options.texturedModel) return;
+    let loaded: THREE.Object3D | null = null;
+    try {
+      validateLocalTexturedGlb(options.texturedModel);
+      loaded = (await loader.parseAsync(options.texturedModel, "")).scene;
+      if (disposed) { release(loaded); return; }
+      const bound = bindTexturedRoom(loaded, plan);
+      release(shell); shell.clear();
+      shell.add(bound.shell);
+      photoFurniture = bound.furniture;
+      for (const wall of wallViews) {
+        wall.meshes = bound.walls.get(wall.id) ?? [];
+        wall.materials = [];
+        for (const mesh of wall.meshes) {
+          const materials = (Array.isArray(mesh.material) ? mesh.material : [mesh.material]).map((material) => {
+            if (!(material instanceof THREE.MeshStandardMaterial)) throw new Error("Photo model: use standard PBR materials.");
+            const own = material.clone(); own.transparent = true; wall.materials.push(own); return own;
+          });
+          mesh.material = Array.isArray(mesh.material) ? materials : materials[0];
+        }
+      }
+      callbacks.onPhotoModel?.(true);
+    } catch (cause) {
+      if (loaded) release(loaded);
+      if (!disposed) callbacks.onPhotoModel?.(false, cause instanceof Error ? cause.message : "The photo model could not be opened.");
+    }
+  }
+
   async function loadItem(item: PlacedItem): Promise<WorkspaceItem | null> {
+    const photographed = photoFurniture?.get(item.id);
     let model: THREE.Object3D;
     let available = true;
     try {
-      if (item.assetUrl) model = (await loader.loadAsync(item.assetUrl)).scene;
+      if (photographed) model = photographed;
+      else if (item.assetUrl) model = (await loader.loadAsync(item.assetUrl)).scene;
       else if (plan.projectId === "furniture-workspace-demo" && item.id === "demo-rug") model = rug(3, 2.1, "#d6cab6");
       else if (plan.projectId === "furniture-workspace-demo" && item.id === "demo-lamp") model = standingLamp();
       else throw new Error("No furniture asset");
@@ -302,14 +336,16 @@ export function createFurnitureWorkspace(
       model = createFurnitureProxy(item.dimensions ?? [1, 1, 1]);
     }
     if (disposed) { release(model); return null; }
-    const { root, size } = placeFurnitureModel(item, model);
+    const { root, size } = photographed
+      ? { root: photographed, size: [...item.dimensions!] as [number, number, number] }
+      : placeFurnitureModel(item, model);
     root.traverse((node) => {
       if (node instanceof THREE.Mesh) { node.castShadow = true; node.receiveShadow = true; }
     });
     roots.set(item.id, root);
     scene.add(root);
     return { id: item.id, label: item.label, size, modelAvailable: available,
-      representation: item.origin === "existing_owned" && plan.projectId !== "furniture-workspace-demo" && !available ? "detected_size_proxy" : available ? "demo_model" : "demo_proxy",
+      representation: photographed ? (photographed.userData.photoTextureCoverage > 0 ? "photo_textured_proxy" : "detected_size_proxy") : item.origin === "existing_owned" && plan.projectId !== "furniture-workspace-demo" && !available ? "detected_size_proxy" : available ? "demo_model" : "demo_proxy",
       locked: item.locked,
       evidence: (item.evidenceIds ?? []).flatMap((id) => {
         const observation = plan.evidence.find((entry) => entry.id === id);
@@ -332,8 +368,7 @@ export function createFurnitureWorkspace(
     controls.update();
     for (const wall of wallViews) {
       const near = wall.interior || wall.outward.dot(camera.position.clone().sub(wall.midpoint)) > 0;
-      wall.material.opacity = near ? .075 : 1;
-      wall.material.depthWrite = !near;
+      for (const material of wall.materials) { material.opacity = near ? .075 : 1; material.depthWrite = !near; }
       // A presentation cutaway should not leave an opaque wall's shadow behind.
       for (const mesh of wall.meshes) mesh.castShadow = !near;
     }
@@ -349,7 +384,10 @@ export function createFurnitureWorkspace(
   }
   resize();
   raf = requestAnimationFrame(frame);
-  const ready = Promise.all([Promise.all(plan.items.map(loadItem)), lighting.ready]).then(([items]) => {
+  const ready = preparePhotoModel().then(() => {
+    if (disposed) return [[], undefined] as [Array<WorkspaceItem | null>, void];
+    return Promise.all([Promise.all(plan.items.map(loadItem)), lighting.ready]);
+  }).then(([items]) => {
     if (disposed) return;
     controller = makeExplodeController(plan.items.map((item) => ({ id: item.id, object: roots.get(item.id)! })), roomBounds, {
       reducedMotion: options.reducedMotion, floorY: 0, gap: .75,

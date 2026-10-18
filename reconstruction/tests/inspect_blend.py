@@ -21,6 +21,10 @@ assert int(scene["inputRevision"]) == source["inputRevision"]
 textured = manifest.get("renderProfile") in ("pbr-daylight-v1", "pbr-window-daylight-v2")
 window_profile = manifest.get("renderProfile") == "pbr-window-daylight-v2"
 source_surfaces = {surface["entityId"]: surface for surface in source.get("appearance", {}).get("surfaces", [])}
+photo_entities = {entry["entityId"]: entry for entry in manifest.get("photoTexturing", {}).get("entities", [])}
+if photo_entities:
+    assert json.loads((directory / "photo-texturing.json").read_text()) == manifest["photoTexturing"]
+    assert json.loads(scene["photoTexturingSummaryJson"]) == manifest["photoTexturing"]
 if textured:
     assert scene.get("renderProfile") == manifest["renderProfile"]
     assert scene.render.engine == "CYCLES", "Photoreal preview requires the path tracer"
@@ -98,6 +102,19 @@ for obj in entities.values():
             for material in obj.data.materials:
                 assert material.use_nodes
                 shaders = [node for node in material.node_tree.nodes if node.type == "BSDF_PRINCIPLED"]
+                photo = photo_entities.get(obj["entityId"])
+                if photo is not None:
+                    assert shaders and shaders[0].inputs["Base Color"].is_linked
+                    assert not shaders[0].inputs["Normal"].is_linked, "Photo atlas must not reuse procedural UV normal maps"
+                    assert shaders[0].inputs["Metallic"].default_value == 0
+                    images = [node.image for node in material.node_tree.nodes if node.type == "TEX_IMAGE"]
+                    assert len(images) == 1 and images[0].packed_file, "Observed pixels must travel in the blend"
+                    assert list(images[0].size) == [photo["atlasWidth"], photo["atlasHeight"]]
+                    assert images[0].colorspace_settings.name == "sRGB"
+                    assert obj["appearanceStatus"] == ("photo_projected" if photo["coverage"] > 0 else "unobserved")
+                    assert abs(obj["photoTextureCoverage"] - photo["coverage"]) < 1e-6
+                    assert json.loads(obj["photoEvidenceIdsJson"]) == photo["evidenceIds"]
+                    continue
                 assert shaders and shaders[0].inputs["Normal"].is_linked, "PBR normal must reach the surface shader"
                 images = [node.image for node in material.node_tree.nodes if node.type == "TEX_IMAGE"]
                 assert images and all(image and image.packed_file for image in images), "Material maps must be packed"

@@ -546,10 +546,14 @@ def run(input_path, output_path, *, render=False, blender=None, preview=False,
         dossier["reconstructionRequestPath"] = "reconstruction.request.json"
         _write(output / "roomplan.dossier.json", dossier)
         if render:
-            result = generate(output / "reconstruction.request.json", output / "draft", blender=blender, preview=preview)
+            result = generate(output / "reconstruction.request.json", output / "draft", blender=blender,
+                              preview=preview, timeout=300 if bundle is not None else 120,
+                              photo_bundle=output / "scan.input.zip" if bundle is not None else None)
             result["warnings"].extend(compiled["warnings"])
             _write(output / "draft/manifest.json", result)
             dossier["draftManifestPath"] = "draft/manifest.json"
+            if "photoTexturing" in result:
+                dossier["photoTexturingPath"] = "draft/photo-texturing.json"
         _write(output / "roomplan.dossier.json", dossier)
         return dossier
     except Exception as error:
@@ -606,4 +610,4 @@ def _attach_photo_evidence(output, bundle, compiled, dossier):
         for photo in selected]})
     dossier.update({"photoRegistrationPath": "photo-registration.json",
                     "appearancePhotosPath": "appearance.photos.json", "appearancePhotoCount": len(selected)})
-    compiled["warnings"].append("RGB photos are retained as captured-room appearance evidence, with original camera poses and calibration. They do not automatically create textured walls or exact furniture meshes; registration and appearance require review.")
+    compiled["warnings"].append("RGB photos are retained as captured-room appearance evidence, with original camera poses and calibration. Rendered drafts automatically project visible photo pixels; they do not automatically recover exact furniture meshes. Registration, incomplete texture coverage and appearance require review.")

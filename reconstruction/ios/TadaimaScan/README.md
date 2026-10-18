@@ -54,7 +54,7 @@ Exports are written under the app's private `Documents/Scans/scan-<UUID>/` direc
 
 Photo capture samples the existing RoomPlan ARSession, preserving camera-to-world poses and rescaled lens calibration with raw sensor-orientation JPEGs. Up to 32 images are saved, at most 1600 pixels per dimension, 2 MiB each and 32 MiB combined. Automatic selection checks normal tracking, viewpoint change, coarse motion and luminance. Manual capture bypasses viewpoint novelty, while retaining tracking, stability and storage checks. No second camera session or ARSession delegate is installed.
 
-The primary **Share scan + photos** button appears only when photos were saved. Finishing drains pending encoding; cancellation/rescan cannot attach late frames to a new scan. Photos remain private and are uploaded only if the user deliberately shares them elsewhere. Capturing RGB does not itself bake textures or recover exact furniture meshes. See [photo protocol, import, appearance handoff and limitations](../../../docs/native-photo-capture.md).
+The primary **Share scan + photos** button appears only when photos were saved. Finishing drains pending encoding; cancellation/rescan cannot attach late frames to a new scan. Photos remain private and are uploaded only if the user deliberately shares them elsewhere. The phone preview remains parametric. Rendering the exported ZIP in the worker automatically projects observed RGB onto visible surfaces; furniture shape remains a size proxy. See [automatic photo texturing](../../../docs/photo-texturing.md). See [photo protocol, import, appearance handoff and limitations](../../../docs/native-photo-capture.md).
 
 ## Build and Verification
 

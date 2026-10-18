@@ -73,7 +73,7 @@ python3 -m reconstruction.appearance \
   --output /private/path/appearance-proposal.json
 ```
 
-This handoff prepares evidence for matching wall/floor finishes and furniture appearance. It does **not** automatically bake the photos into the Blender/GLB, recover unseen furniture sides, or replace size proxies with exact furniture meshes. Material inference needs the existing reviewed proposal or configured vision provider. Calibrated photo projection, occlusion handling and per-object appearance reconstruction are subsequent processing work.
+The appearance-analysis command prepares evidence for matching material families; inference still needs a reviewed proposal or configured vision provider. Separately, native ZIP imports rendered with `--render` now automatically project actual visible RGB pixels onto the room and furniture proxies. Unseen surfaces retain plain fallback colors, and exact furniture meshes are not recovered. See [automatic photo texturing](photo-texturing.md) for projection, occlusion checks, coverage and viewing the textured GLB.
 
 ## Verification and Sources
 

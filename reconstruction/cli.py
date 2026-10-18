@@ -20,6 +20,7 @@ def main(argv=None):
     build.add_argument("--blender", help="Blender 4.5 LTS+ executable; defaults to BLENDER_BIN or PATH")
     build.add_argument("--timeout", default=120.0, type=float, help="Blender runtime limit in seconds")
     build.add_argument("--preview", action="store_true", help="Also render a CPU Cycles PNG")
+    build.add_argument("--photo-bundle", type=Path, help="Original matching native scan+photos ZIP for automatic calibrated texture projection")
     args = parser.parse_args(argv)
     try:
         if args.command == "validate":
@@ -28,7 +29,7 @@ def main(argv=None):
                       "inputRevision": request["inputRevision"]}
         else:
             result = generate(args.input, args.output, blender=args.blender,
-                              timeout=args.timeout, preview=args.preview)
+                              timeout=args.timeout, preview=args.preview, photo_bundle=args.photo_bundle)
         print(json.dumps(result, sort_keys=True, allow_nan=False))
         return 0
     except (GeometryError, PipelineError, OSError, ValueError) as error:

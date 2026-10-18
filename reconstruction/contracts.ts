@@ -52,9 +52,29 @@ export interface ReconstructionManifest extends ReconstructionResult {
     sceneJson: ReconstructionArtifactFile;
     blend: ReconstructionArtifactFile;
     glb: ReconstructionArtifactFile;
+    photoTexturing?: ReconstructionArtifactFile;
   };
   objects: Array<{ id: string; role: "room_floor" | "wall" | "opening" | "existing_furniture"; name: string; evidenceIds: string[] }>;
   statistics: { meshCount: number; triangleCount: number; entityCount: number };
   warnings: string[];
+  photoTexturing?: {
+    schemaVersion: "roomplan-photo-textures/1.0";
+    reviewRequired: true;
+    mode: "calibrated_photo_projection";
+    sourcePhotoCount: number;
+    sourceArchiveSha256: string;
+    atlasTexels: number;
+    entities: Array<{
+      entityId: string;
+      role: "room_floor" | "wall" | "existing_furniture";
+      status: "captured_photo_covered" | "captured_photo_partial" | "unobserved";
+      coverage: number;
+      photoIds: string[];
+      evidenceIds: string[];
+      atlas: string;
+      atlasSha256: string;
+    }>;
+    warnings: string[];
+  };
   preview?: { fileName: string; mediaType: string; byteLength: number; sha256: string };
 }

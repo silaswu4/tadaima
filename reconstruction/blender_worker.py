@@ -7,6 +7,7 @@ reverses that conversion. Walls use centerlines and floors top out at Y=0.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 from pathlib import Path
@@ -190,7 +191,7 @@ def bounds_of(objects):
             "max": [max(p[i] for p in canonical) for i in range(3)]}
 
 
-def generate(request, output: Path, preview: bool):
+def generate(request, output: Path, preview: bool, photo_source: Path | None = None):
     if bpy.app.version < (4, 5, 0):
         raise RuntimeError("Blender 4.5 LTS or newer is required")
     scene = bpy.context.scene
@@ -205,6 +206,8 @@ def generate(request, output: Path, preview: bool):
         # safe-integer revision as text. The manifest retains a numeric revision.
         scene[key] = str(request[key]) if key == "inputRevision" else request[key]
     scene["generatorVersion"] = GENERATOR_VERSION
+    scene["inputSha256"] = hashlib.sha256((json.dumps(request, sort_keys=True, indent=2,
+        ensure_ascii=False, allow_nan=False) + "\n").encode("utf-8")).hexdigest()
     scene["coordinateSystem"] = "Blender Z-up; glTF export Y-up"
     scene["wallAlignment"] = "centerline"
     geometry = request["geometry"]
@@ -239,6 +242,13 @@ def generate(request, output: Path, preview: bool):
         material["appearanceStatus"] = "sensor_proxy"
         objects.extend(build_existing_furniture(item, collection, material) for item in request["items"])
         bpy.context.view_layer.update()
+    photo_summary = None
+    if photo_source is not None:
+        from reconstruction.photo_texturing import apply_photo_textures
+        photo_summary = apply_photo_textures(objects, photo_source, output)
+        scene["photoTexturingSummaryJson"] = json.dumps(photo_summary, separators=(",", ":"))
+        (output / "photo-texturing.json").write_text(json.dumps(photo_summary, indent=2,
+                                                              allow_nan=False) + "\n")
     bounds = bounds_of(objects)
     lighting_summary = add_preview_setup(scene, bounds, objects, geometry)
     bpy.context.view_layer.update()
@@ -271,6 +281,8 @@ def generate(request, output: Path, preview: bool):
                        "triangleCount": sum(sum(len(p.vertices) - 2 for p in obj.data.polygons) for obj in objects if obj.type == "MESH"),
                        "entityCount": len(objects)},
     }
+    if photo_summary is not None:
+        metadata["photoTexturing"] = photo_summary
     (output / "worker-result.json").write_text(json.dumps(metadata, indent=2) + "\n")
     if preview:
         scene.render.filepath = str(output / "preview.png")
@@ -282,9 +294,10 @@ def main():
     parser.add_argument("--request", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--preview", action="store_true")
+    parser.add_argument("--photo-source", type=Path)
     args = parser.parse_args(sys.argv[sys.argv.index("--") + 1:])
     request = validate_request(json.loads(args.request.read_text()))
-    generate(request, args.output, args.preview)
+    generate(request, args.output, args.preview, args.photo_source)
 
 
 if __name__ == "__main__":

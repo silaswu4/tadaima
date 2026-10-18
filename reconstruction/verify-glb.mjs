@@ -55,6 +55,17 @@ async function verify(directory, validatorModule) {
   const textured = embedded.images.length > 0;
   const windowProfile = manifest.renderProfile === "pbr-window-daylight-v2";
   const sourceSurfaces = new Map((source.appearance?.surfaces ?? []).map((surface) => [surface.entityId, surface]));
+  const photoEntities = new Map((manifest.photoTexturing?.entities ?? []).map((entry) => [entry.entityId, entry]));
+  if (manifest.photoTexturing) {
+    assert.deepEqual(JSON.parse(await readFile(resolve(directory, "photo-texturing.json"), "utf8")), manifest.photoTexturing);
+    for (const entry of photoEntities.values()) {
+      assert(/^photo-textures\/photo-atlas-[0-9]{4}\.png$/.test(entry.atlas), "Photo atlas must be a local generated PNG");
+      const png = await readFile(resolve(directory, entry.atlas));
+      assert.equal(createHash("sha256").update(png).digest("hex"), entry.atlasSha256, "Photo atlas hash");
+      const decoded = decodePng(png);
+      assert.equal(decoded.width, entry.atlasWidth); assert.equal(decoded.height, entry.atlasHeight);
+    }
+  }
   if (windowProfile || manifest.renderProfile === "pbr-daylight-v1") assert(textured, "PBR profile must export embedded material images");
   const decodedBefore = decodedImages.length;
   const data = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
@@ -77,8 +88,19 @@ async function verify(directory, validatorModule) {
         for (const number of uv.array) assert(Number.isFinite(number), "Nonfinite UV");
         assert(materials.every((material) => material.isMeshStandardMaterial), "Exported material must use metallic/roughness PBR");
         for (const material of materials) {
-          assert(material.normalMap?.image?.data?.length > 0, "Packed normal map must actually decode");
           assert.equal(material.metalness, 0, "Room surfaces must not become metallic");
+          const photo = photoEntities.get(object.userData.entityId);
+          if (photo) {
+            assert(material.map?.image?.data?.length > 0, "Captured RGB must actually decode");
+            assert.equal(material.map.image.width, photo.atlasWidth);
+            assert.equal(material.map.image.height, photo.atlasHeight);
+            assert.equal(material.normalMap, null, "Photo UV atlas must not reuse procedural normal UVs");
+            assert.equal(object.userData.appearanceStatus, photo.coverage > 0 ? "photo_projected" : "unobserved");
+            assert(Math.abs(object.userData.photoTextureCoverage - photo.coverage) < 1e-6);
+            assert.deepEqual(JSON.parse(object.userData.photoEvidenceIdsJson), photo.evidenceIds);
+            continue;
+          }
+          assert(material.normalMap?.image?.data?.length > 0, "Packed normal map must actually decode");
           const existing = object.userData.role === "existing_furniture";
           const spec = existing ? undefined : sourceSurfaces.get(object.userData.entityId);
           const finish = spec?.finish ?? (object.userData.role === "room_floor" ? "wood" : "paint");
@@ -115,7 +137,8 @@ async function verify(directory, validatorModule) {
     assert.equal(object.userData.label, item.label);
     assert.equal(object.userData.locked, item.locked);
     assert.equal(object.userData.proxyGeometry, "sensor_bounding_box");
-    assert.equal(object.userData.appearanceStatus, "sensor_proxy");
+    const photo = photoEntities.get(item.id);
+    assert.equal(object.userData.appearanceStatus, photo ? photo.coverage > 0 ? "photo_projected" : "unobserved" : "sensor_proxy");
     assert.deepEqual(JSON.parse(object.userData.dimensionsJson), item.dimensions);
     assert.deepEqual(JSON.parse(object.userData.evidenceIdsJson), item.evidenceIds ?? []);
     assert(object.getWorldPosition(new Vector3()).distanceTo(new Vector3(...item.position)) < 1e-5, "Furniture bottom-center origin mismatch");

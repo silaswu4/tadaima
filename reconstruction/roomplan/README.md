@@ -130,10 +130,7 @@ python3 -m reconstruction.appearance \
 
 That command prepares analysis input; it does not itself infer finishes. The
 existing `--proposal-file` or configured `--model` path can produce a reviewed
-photo-cited finish profile. Capturing/importing photos does **not** automatically
-bake wall textures, recover hidden surfaces, or replace detected furniture proxies
-with exact textured meshes. All photos and calibration are preserved for that
-subsequent appearance work.
+photo-cited finish profile. With `--render`, the importer now automatically projects calibrated photo pixels onto visible room and existing-furniture surfaces, using scene-wide occlusion checks. Unseen regions retain plain fallback colors, and furniture shape remains a size proxy. The generated Blender scene packs the atlases and the GLB embeds them. See [automatic photo texturing, coverage and viewer import](../../docs/photo-texturing.md). Importing without `--render` only preserves the sources and prepares the request.
 
 ```bash
 python3 -m unittest reconstruction.tests.test_roomplan_photo_bundle -v
