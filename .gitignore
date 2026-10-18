@@ -39,3 +39,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# third-party test art for the ascii hero, not ours to ship
+/public/art/japan*
