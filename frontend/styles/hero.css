@@ -172,6 +172,40 @@
 .tadaima-hero .hero-qr small { font-size: 13px; line-height: 18px; color: var(--hero-muted); }
 .tadaima-hero .hero-qr a { color: var(--hero-fg); }
 
+/* ---------- credit, bottom right ---------- */
+.tadaima-hero .hero-credit {
+  position: absolute;
+  z-index: 3;
+  right: var(--hero-left);
+  bottom: 30px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  font-size: 13px;
+  line-height: 18px;
+  text-shadow: 0 1px 12px rgba(43, 26, 16, 0.55);
+}
+.tadaima-hero .hero-credit p { margin: 0; color: var(--hero-muted); }
+.tadaima-hero .hero-credit nav { display: flex; gap: 18px; }
+.tadaima-hero .hero-credit a { position: relative; color: var(--hero-fg); text-decoration: none; }
+.tadaima-hero .hero-credit a::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -2px;
+  height: 1px;
+  background: currentColor;
+  transform: scaleX(0);
+  transform-origin: 100% 50%;
+  transition: transform 0.5s var(--hero-ease);
+}
+.tadaima-hero .hero-credit a:hover::after,
+.tadaima-hero .hero-credit a:focus-visible::after { transform: scaleX(1); transform-origin: 0% 50%; }
+.tadaima-hero .hero-credit a:focus-visible { outline: none; }
+.tadaima-hero:not(.is-revealed) .hero-credit { visibility: hidden; }
+
 /* ---------- wordmark, bottom left, with the mark in front ---------- */
 .tadaima-hero .hero-word {
   position: absolute;
@@ -275,6 +309,8 @@
 @media (max-width: 809px) {
   .tadaima-hero { --hero-left: 16px; }
   .tadaima-hero { --hero-word-size: 21vw; }
+  /* the wordmark fills the bottom on a phone, so the credit sits just above it */
+  .tadaima-hero .hero-credit { bottom: calc(var(--hero-word-size) * 0.92 + 18px); }
   /* three items will not fit across a phone, so they stack in the top corner */
   .tadaima-hero .hero-side { top: 20px; left: var(--hero-left); }
   .tadaima-hero .hero-list { flex-direction: column; gap: 8px; }

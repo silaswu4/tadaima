@@ -124,6 +124,7 @@ export default function Home() {
         gsap.fromTo(`${layer} .hero-word__char`, { yPercent: 105 }, { yPercent: 0, duration: 1.15, ease: "power4.out", stagger: 0.05, delay: 0.1, force3D });
       }
       // each option rises out of its own line, like the wordmark
+      gsap.fromTo(".hero-credit", { y: 8, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: 0.8, ease: "power3.out", delay: 0.8 });
       gsap.fromTo(".hero-row__label", { yPercent: 110 }, { yPercent: 0, duration: 0.9, ease: "power4.out", stagger: 0.1, delay: 0.45 });
     }, root);
     return () => ctx.revert();
@@ -358,6 +359,17 @@ export default function Home() {
 
         </div>
 
+        <footer className="hero-credit">
+          <p>Built at LA Hacks 2026</p>
+          <nav aria-label="Project links">
+            <a href="https://github.com/silaswu4/tadaima" target="_blank" rel="noreferrer">
+              GitHub ↗
+            </a>
+            <a href="https://lahacks.com" target="_blank" rel="noreferrer">
+              LA Hacks ↗
+            </a>
+          </nav>
+        </footer>
       </DappledLight>
 
       {/* outside the light's own layer so it can blend with it */}
