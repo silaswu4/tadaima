@@ -24,6 +24,13 @@ export function applyChanges(plan: RoomPlan, changes: PlanChange[]): RoomPlan {
       next.constraints = { ...next.constraints, ...c.constraints };
       continue;
     }
+    if (c.kind === "add_products") {
+      const ids = new Set(c.products.map((p) => p.id));
+      next.products = [...next.products.filter((p) => !ids.has(p.id)), ...structuredClone(c.products)];
+      const evIds = new Set(c.evidence.map((e) => e.id));
+      next.evidence = [...next.evidence.filter((e) => !evIds.has(e.id)), ...structuredClone(c.evidence)];
+      continue;
+    }
     if (c.kind === "add") {
       if (next.items.some((i) => i.id === c.item.id)) throw new PlanChangeError(`item ${c.item.id} already exists`);
       next.items.push(structuredClone(c.item));

@@ -1,7 +1,7 @@
 import "server-only";
 
 import { Redis } from "@upstash/redis";
-import type { PlanProposal, RoomPlan } from "@/backend/contracts";
+import type { Job, PlanProposal, RoomPlan } from "@/backend/contracts";
 import { demoPlan } from "@/backend/fixtures/demo-room";
 
 /**
@@ -110,6 +110,17 @@ export async function savePlan(projectId: string, expectedRevision: number, next
 
 export async function saveProposal(p: PlanProposal) {
   await db().set(proposalKey(p.projectId, p.id), p, PROPOSAL_TTL_S);
+}
+
+const jobKey = (projectId: string, id: string) => `job:${projectId}:${id}`;
+const JOB_TTL_S = 24 * 60 * 60;
+
+export async function saveJob(job: Job) {
+  await db().set(jobKey(job.projectId, job.id), job, JOB_TTL_S);
+}
+
+export async function getJob<Output = unknown>(projectId: string, id: string) {
+  return db().get<Job<Output>>(jobKey(projectId, id));
 }
 
 export async function getProposal(projectId: string, id: string) {

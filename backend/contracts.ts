@@ -125,6 +125,8 @@ export type PlanChange =
   | { kind: "replace"; itemId: string; productId: string }
   | { kind: "move"; itemId: string; position: Vector3Meters; rotationY: number }
   | { kind: "lock"; itemId: string; locked: boolean }
+  /** Add researched products to the plan's catalog. Changes no furniture. */
+  | { kind: "add_products"; products: ProductCandidate[]; evidence: Evidence[] }
   | { kind: "set_constraints"; constraints: Partial<RoomPlan["constraints"]> };
 
 export interface ValidationResult {
@@ -182,6 +184,19 @@ export interface Job<Output = unknown> {
   error: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+/** Output of a product_research job. */
+export interface ResearchJobOutput {
+  /** The room facts the search was built from. */
+  brief: string;
+  itemId: string;
+  merchant: string;
+  /** Every product found, with whether it fits the room as it is now. */
+  results: Array<{ product: ProductCandidate; fits: boolean; problems: string[] }>;
+  /** Products that fit were added to the plan at this revision. */
+  addedAtRevision: number | null;
+  costUsd: number | null;
 }
 
 // ---------- cart ----------
