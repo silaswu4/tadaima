@@ -47,7 +47,7 @@ export const api = (projectId: string) => {
     execute: () => call<Order & { error?: string; refused?: boolean }>("POST", `${p}/checkout/execute`),
     shop: (req: ShopRequest | Record<string, unknown>) => call<Job<ShopJobOutput>>("POST", `${p}/shop`, req),
     shopJob: (jobId: string) => call<Job<ShopJobOutput>>("GET", `${p}/shop/${jobId}`),
-    place: (productId: string, spot: FloorSpot, expectedRevision?: number) => call<PlaceResult>("POST", `${p}/place`, { productId, spot, expectedRevision }),
+    place: (productId: string, spot: FloorSpot, expectedRevision?: number, jobId?: string) => call<PlaceResult>("POST", `${p}/place`, { productId, spot, expectedRevision, jobId }),
     moveTo: (itemId: string, spot: FloorSpot, unlock?: boolean) => call<PlaceResult>("POST", `${p}/items/${itemId}/move-to`, { spot, unlock }),
   };
 };

@@ -5,6 +5,8 @@ import { placeProduct } from "@/backend/shopping/shop";
 const Body = z.object({
   productId: z.string().max(200),
   spot: FloorSpotSchema,
+  /** The search it came from, for live finds not yet in the catalog. */
+  jobId: z.string().max(80).nullable().optional(),
   expectedRevision: z.number().int().nullable().optional(),
 });
 

@@ -158,12 +158,16 @@ export async function getShopJob(projectId: string, jobId: string) {
  */
 export async function placeProduct(
   projectId: string,
-  body: { productId: string; spot: FloorSpot; expectedRevision?: number | null },
+  body: { productId: string; spot: FloorSpot; jobId?: string | null; expectedRevision?: number | null },
 ): Promise<PlaceResult> {
+  // a live find that didn't fit when it was found isn't in the catalog yet; the search that found it still has it
+  const job = body.jobId ? await getJob<ShopJobOutput>(projectId, body.jobId) : null;
+  if (body.jobId && (!job || job.type !== "shop_at_spot")) throw new NotFound(`no shopping job ${body.jobId}`);
   for (let attempt = 0; attempt < 3; attempt++) {
     const { plan } = await getProject(projectId);
     if (body.expectedRevision != null && body.expectedRevision !== plan.revision) return { ok: false, reason: "stale_revision", currentRevision: plan.revision };
-    const product = plan.products.find((p) => p.id === body.productId);
+    const known = plan.products.find((p) => p.id === body.productId);
+    const product = known ?? job?.output?.results.find((r) => r.product.id === body.productId)?.product;
     if (!product) throw new NotFound(`no product ${body.productId} in this room's catalog`);
     const fit = placeAt(plan, product, body.spot);
     if (!fit.ok) {
@@ -171,7 +175,10 @@ export async function placeProduct(
       return { ok: false, reason: "no_fit", message: fit.message, nearest: fit.nearest };
     }
     const itemId = `item_${product.category}_${crypto.randomUUID().slice(0, 6)}`;
-    const r = await applyPlanChanges(projectId, plan.revision, [{ kind: "add", item: itemFor(product, fit.placement, itemId) }]);
+    const r = await applyPlanChanges(projectId, plan.revision, [
+      ...(known ? [] : [{ kind: "add_products" as const, products: [product], evidence: [] }]),
+      { kind: "add", item: itemFor(product, fit.placement, itemId) },
+    ]);
     if (r.ok) return { ok: true, plan: r.plan, itemId, placement: fit.placement };
     if (r.reason === "validation_failed") return r;
     // someone else saved first: re-place against their change, unless the caller pinned a revision

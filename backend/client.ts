@@ -99,7 +99,7 @@ export function roomClient(projectId: string, opts: { baseUrl?: string; pollMs?:
     /** A search re-checked against the room now (call after any change to refresh fits). */
     shopJob: (jobId: string) => call<Job<ShopJobOutput>>("GET", `${base}/shop/${jobId}`),
     /** Put a product in the room at a spot; it joins the cart. */
-    place: (productId: string, spot: FloorSpot) => call<PlaceResult>("POST", `${base}/place`, { productId, spot }),
+    place: (productId: string, spot: FloorSpot, jobId?: string) => call<PlaceResult>("POST", `${base}/place`, { productId, spot, jobId }),
   };
 }
 

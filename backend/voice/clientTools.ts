@@ -182,7 +182,7 @@ export function voiceClientTools(opts: {
       const r = job.output.results[Math.round(choice) - 1];
       if (!r) return `There's no option ${choice}; this search has ${job.output.results.length}.`;
       try {
-        const res = await post<PlaceResult>(`${base}/place`, { productId: r.product.id, spot: job.output.request.spot });
+        const res = await post<PlaceResult>(`${base}/place`, { productId: r.product.id, spot: job.output.request.spot, jobId: job.id });
         if (res.ok) {
           opts.onPlan?.(res.plan);
           opts.onCheckout?.();

@@ -117,6 +117,7 @@ describe("shop at a spot", () => {
     assert.ok(!corner.json.ok && corner.json.reason === "no_fit", JSON.stringify(corner.json));
     if (!corner.json.ok && corner.json.reason === "no_fit") assert.ok(corner.json.nearest, "says where it would fit");
     assert.equal((await a.place(id, { position: [-3, 0, 1] })).status, 422);
+    assert.equal((await a.place(id, BACK_WALL, undefined, "job_nope")).status, 404);
     assert.equal((await a.get()).json.plan.revision, plan.revision, "nothing saved by any of those");
   });
 

@@ -86,7 +86,7 @@ export function ShopPanel({
 
   async function add(r: ShopResult) {
     if (!job?.output) return;
-    const res = await api<PlaceResult>("POST", `${base}/place`, { productId: r.product.id, spot: job.output.request.spot });
+    const res = await api<PlaceResult>("POST", `${base}/place`, { productId: r.product.id, spot: job.output.request.spot, jobId: job.id });
     setMsg({ key: r.product.id, ...placeMessage(res.data, res.error) });
     if (res.data?.ok) {
       onGhost(null);
