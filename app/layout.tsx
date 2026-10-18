@@ -7,7 +7,6 @@ const serif = Instrument_Serif({
   variable: "--font-serif",
   subsets: ["latin"],
   weight: "400",
-  style: ["normal", "italic"],
 });
 
 // paper mono, by paper.design (SIL OFL, see fonts/PaperMono-OFL.txt)

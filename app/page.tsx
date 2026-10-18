@@ -19,7 +19,7 @@ export default function Home() {
           <h1 className="display rise" style={{ animationDelay: "120ms" }}>
             your room,
             <br />
-            <em>rearranged.</em>
+            rearranged.
           </h1>
           <p
             className="rise max-w-[34ch] leading-relaxed text-ink-soft"
