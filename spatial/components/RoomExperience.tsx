@@ -129,6 +129,12 @@ const Icon = {
       <path d="M8 3v10M3 8h10" />
     </svg>
   ),
+  basket: (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M2.5 6h11l-1.2 7a1 1 0 0 1-1 .8H4.7a1 1 0 0 1-1-.8z" />
+      <path d="M5.5 6 8 2.5 10.5 6" />
+    </svg>
+  ),
   move: (
     <svg viewBox="0 0 16 16" aria-hidden="true">
       <path d="M8 2v12M2 8h12M8 2 6 4M8 2l2 2M8 14l-2-2M8 14l2-2M2 8l2-2M2 8l2 2M14 8l-2-2M14 8l-2 2" />
@@ -181,8 +187,8 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
   const [canUndo, setCanUndo] = useState(false);
   const [xr, setXr] = useState(false);
   const [presenting, setPresenting] = useState(false);
-  const [exploded, setExploded] = useState(false);
-  const [blindsRaised, setBlindsRaised] = useState<boolean | null>(null);
+  const [, setExploded] = useState(false);
+  const [, setBlindsRaised] = useState<boolean | null>(null);
   const [pending, setPending] = useState<ProductCandidate | null>(null);
   const [floorSpot, setFloorSpot] = useState<FloorSpot | null>(null);
   const saveRef = useRef(onPlanChange);
@@ -312,6 +318,19 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [panel, openPanel]);
+  const [looking, setLooking] = useState(false);
+  useEffect(() => {
+    const sync = () => setLooking(Boolean(document.pointerLockElement));
+    document.addEventListener("pointerlockchange", sync);
+    const onTab = (e: KeyboardEvent) => {
+      if (e.code !== "Tab" || e.repeat || panel || modeRef.current !== "walk" || coarseRef.current) return;
+      e.preventDefault();
+      if (document.pointerLockElement) document.exitPointerLock();
+      else walkRef.current?.lockPointer();
+    };
+    window.addEventListener("keydown", onTab);
+    return () => { document.removeEventListener("pointerlockchange", sync); window.removeEventListener("keydown", onTab); };
+  }, [panel]);
   const showResultsRef = useRef(false);
   useLayoutEffect(() => { showResultsRef.current = showResults && !panel; });
 
@@ -500,6 +519,17 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
   const putAway = (item: WalkItem) => {
     api()?.store(item.id);
     setNotice(`Put away ${item.label}`);
+  };
+
+  const carryOut = (item: WalkItem) => {
+    const engine = api() as (WalkScene & { takeOutAndCarry?: (id: string) => string | null }) | null;
+    if (!engine) return;
+    // newer engines put it straight in your hands and only check the fit on drop
+    const id = engine.takeOutAndCarry ? engine.takeOutAndCarry(item.id) : engine.takeOut(item.id);
+    if (!id) return;
+    if (!engine.takeOutAndCarry) { engine.select(id); engine.beginMove(id); }
+    setMoving(true);
+    if (mode === "walk" && !coarse) engine.lockPointer();
   };
 
   const takeOut = (item: WalkItem) => {
@@ -747,6 +777,7 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
       <canvas
         ref={canvasRef}
         className="room-x__canvas"
+        data-tour="room"
         role="img"
         aria-label={`${room.label}, walkable view`}
         onClick={onCanvasClick}
@@ -781,12 +812,6 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
                 Dollhouse
               </button>
             </div>
-            <button type="button" className="room-x__pill" aria-pressed={exploded} disabled={!ready || presenting} onClick={() => { api()?.setExploded(!exploded); }}>Explode</button>
-            {blindsRaised !== null ? (
-              <button type="button" className="room-x__pill" aria-label="Raise window blinds" aria-pressed={blindsRaised} title="Neutral daylight preview; exterior not captured" disabled={!ready || blocked} onClick={() => api()?.setWindowBlindsRaised(!blindsRaised)}>
-                {blindsRaised ? "Blinds raised" : "Raise blinds"}
-              </button>
-            ) : null}
             {xr && ready ? (
               <button type="button" className="room-x__pill" onClick={enterXR}>
                 Enter VR
@@ -794,47 +819,35 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
             ) : null}
           </div>
 
-          {inventory.length > 0 ? (
-            <button
-              type="button"
-              className="room-x__pill room-x__basket-btn"
-              onClick={() => openPanel("inventory")}
-              aria-haspopup="dialog"
-              aria-expanded={panel === "inventory"}
-              aria-label={`Inventory, ${inventory.length} ${inventory.length === 1 ? "piece" : "pieces"} put away`}
-              disabled={!ready || blocked}
-            >
-              <span>Inventory</span>
-              <span className="room-x__count">{inventory.length}</span>
-            </button>
-          ) : null}
           <button
             type="button"
+            data-tour="basket"
             className="room-x__pill room-x__basket-btn"
             onClick={() => openPanel("basket")}
             aria-haspopup="dialog"
             aria-expanded={panel === "basket"}
             aria-label={`Basket, ${basket.length} ${basket.length === 1 ? "piece" : "pieces"}, ${basketTotal}`}
+            title="Basket (B)"
             disabled={!ready || blocked}
           >
-            <span>Basket</span>
-            {basket.length > 0 ? (
-              <>
-                <span className="room-x__count">{basket.length}</span>
-                <span className="room-x__basket-total">{basketTotal}</span>
-              </>
-            ) : null}
+            {Icon.basket}
+            <span className="room-x__basket-total">{basket.length ? basketTotal : "$0"}</span>
           </button>
         </div>
       </header>
 
       {/* ---------- walk aids ---------- */}
 
-      <p className="room-x__hint" data-show={showHint || undefined} aria-hidden={!showHint}>
-        {coarse
-          ? "Drag to look around. Use the pad to walk. Tap a piece to select it."
-          : "Click to look around. WASD to walk. Click a piece to select it."}
-      </p>
+      {coarse ? (
+        <p className="room-x__hint" data-show={showHint || undefined} aria-hidden={!showHint}>
+          Drag to look around. Use the pad to walk. Tap a piece to select it.
+        </p>
+      ) : null}
+      {ready && !coarse && mode === "walk" && !panel ? (
+        <p className="room-x__cursor-chip" data-looking={looking || undefined}>
+          {looking ? <>Press <span className="room-x__cap-key">Tab</span> for your cursor</> : <>Click the room or press <span className="room-x__cap-key">Tab</span> to look around</>}
+        </p>
+      ) : null}
 
       {ready && coarse && mode === "walk" ? (
         <div className="room-x__pad" role="group" aria-label="Walk">
@@ -870,10 +883,11 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
 
       {/* ---------- bottom tools ---------- */}
       {ready ? (
-        <div className="room-x__tools">
+        <div className="room-x__bottom"><div className="room-x__tools">
           <button
             type="button"
             className="room-x__pill"
+            data-tour="undo"
             onClick={() => safely(() => api()?.undo())}
             disabled={!canUndo || blocked}
             aria-label="Undo last change"
@@ -892,6 +906,8 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
           <button
             type="button"
             className="room-x__pill room-x__pill--ink"
+            data-tour="add"
+            title="Add furniture (F)"
             onClick={openCatalog}
             disabled={blocked || !shopping.session}
             aria-haspopup="dialog"
@@ -900,6 +916,17 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
             {Icon.plus}
             <span>Add furniture</span>
           </button>
+        </div>
+          {/* stashed pieces wait here; pick one up to carry it back into the room */}
+          <div className="room-x__dock" data-tour="inventory" role="list" aria-label="Inventory">
+            {inventory.length ? inventory.map((item) => (
+              <button key={item.id} type="button" role="listitem" className="room-x__dock-item" disabled={blocked}
+                onClick={() => safely(() => carryOut(item))} title={`Pick up ${item.label.split(",")[0]}`}>
+                <span>{item.label.split(",")[0]}</span>
+                <small>{formatDimensions(item.dimensions).split(" · ")[0]}</small>
+              </button>
+            )) : <span className="room-x__dock-empty">Inventory is empty. Select a piece and press Del to stash it.</span>}
+          </div>
         </div>
       ) : null}
 

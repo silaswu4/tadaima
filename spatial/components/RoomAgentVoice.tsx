@@ -212,10 +212,10 @@ function VoiceSession({ getTools, disabled = false, update }: RoomAgentVoiceProp
     return { gather: g.value, offset: Math.sin(now / 520) * 0.75 * g.value, stretch: Math.abs(Math.cos(now / 520)) * 0.3, heldLevel: 0.55 };
   };
 
-  const label = pending || (open && !live) ? "Connecting" : open ? "Listening" : working ? "Working" : conversation.isSpeaking ? "Speaking" : "Hold Space to talk";
+  const label = pending || (open && !live) ? "Connecting" : open ? "Listening" : working ? "Working" : conversation.isSpeaking ? "Speaking" : "Talk";
 
   return (
-    <div className="room-voice">
+    <div className="room-voice" data-tour="talk">
       {(caption || error) && (
         <p className="room-voice__caption" data-error={error ? true : undefined} role="status" aria-live="polite">
           {error || caption}
@@ -253,6 +253,7 @@ function VoiceSession({ getTools, disabled = false, update }: RoomAgentVoiceProp
             <path d="M4.5 9.5a5.5 5.5 0 0 0 11 0M10 15v2.5" />
           </svg>
           <span>{label}</span>
+          {label === "Talk" ? <span className="room-voice__key" aria-hidden="true">hold Space</span> : null}
         </button>
       </VoiceBeam>
     </div>
