@@ -12,6 +12,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 Read `docs/team-ownership.md` and the relevant folder README before editing.
 
+The user requests reconstruction work directly on `main`. Preserve concurrent commits, fetch before pushing, and never force-push the shared branch.
+
 | Area | Owner | Boundary |
 | --- | --- | --- |
 | `backend/` | Matthew | Shared contracts, services, shopping agents, sponsor adapters, integration |

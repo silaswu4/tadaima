@@ -121,7 +121,9 @@ These are collaboration boundaries, not a prohibition on helping another owner. 
 
 ## Branch and integration guidance
 
-Use one short-lived branch per focused change. Example names are `work/backend-room-contract`, `work/reconstruction-shell`, `work/frontend-onboarding`, and `work/spatial-selection`; they are suggestions, not branches created by this document.
+The user's latest instruction is to perform reconstruction work directly on `main`. Fetch before publishing, preserve concurrent commits, and never force-push the shared branch. The geometry-to-Blender/GLB implementation is integrated there.
+
+For other contributors using the earlier review workflow, use one short-lived branch per focused change. Example names are `work/backend-room-contract`, `work/frontend-onboarding`, and `work/spatial-selection`; they are suggestions, not branches created by this document.
 
 Start from the latest shared base, commit a coherent change, and open a reviewable pull request when using the team's review workflow. Coordinate contract PRs first, then update dependent branches. Let Matthew integrate changes that cross the root application wiring or common contracts. Do not force-push another person's branch.
 

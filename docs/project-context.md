@@ -53,6 +53,7 @@ These are synthesis and implementation recommendations, not additional user appr
 9. **Concurrent repository update:** Preserve the incoming ASCII landing hero from `34e581c` in `spatial/` and compose it from `frontend/`. Keep the earlier pencil-room renderer available; do not overwrite the newer work during scaffolding.
 10. **Backend/reconstruction swap:** The user takes reconstruction; Matthew takes backend, agents, shopping, shared contracts, and integration. Silas and Angelina keep their frontend assignments.
 11. **Reconstruction implementation:** A locally verified geometry-to-Blender/GLB pipeline now exists in `reconstruction/`, including runtime validation, editable objects, real apertures, a manifest, and a Node adapter. It does not yet recover geometry from addresses or photographs. See [the implementation handoff](../reconstruction/README.md).
+12. **Working branch correction:** The user requests reconstruction work directly on `main`, preserving concurrent changes and avoiding force pushes.
 
 ## Solana status at handoff
 

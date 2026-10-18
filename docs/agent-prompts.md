@@ -43,7 +43,7 @@ Start with controlled procedural geometry before adding neural reconstruction or
 
 Angelina owns camera/capture UI; you own processing. Matthew owns upload authorization, persistence, shared contracts, and job coordination. Silas owns browser rendering and Quest interactions. Coordinate boundary changes; do not duplicate room types or commit private captures/large generated artifacts.
 
-Use a dedicated branch, run relevant checks, and commit your focused work. Report the branch, input/output contract, verified scale/export behavior, and integration instructions. Do not push directly to main.
+The user requests reconstruction work directly on main. Preserve unrelated changes, fetch before publishing, run relevant checks, commit, and push without force-pushing. Report the commit, input/output contract, verified scale/export behavior, and integration instructions.
 ```
 
 ## Silas: spatial frontend
