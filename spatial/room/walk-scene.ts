@@ -2127,6 +2127,7 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
   }
 
   let last = performance.now();
+  let lastXRErrorAt = -Infinity;
   function frame(time: number) {
     if (disposed) return;
     const dt = Math.min(0.1, Math.max(0, (time - last) / 1000));
@@ -2139,8 +2140,9 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
     }
     try {
       xr?.update(dt);
-    } catch {
-      // A headset layer fault must not stop the room from drawing.
+    } catch (error) {
+      // A headset layer fault must not stop the room from drawing, but it must leave a trace.
+      if (time - lastXRErrorAt > 5000) { lastXRErrorAt = time; console.error("[walk-scene] XR update failed", error); }
     }
     exploder?.update(time);
     if (moving) updateMove(false, dt);

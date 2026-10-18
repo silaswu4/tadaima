@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { XRControllerModelFactory } from "three/examples/jsm/webxr/XRControllerModelFactory.js";
 import type { RoomPlan } from "../../backend/contracts";
 import { createXRMenu, XR_MENU_INK } from "./workspace-xr-menu";
 import { insideFloor } from "./window-daylight";
@@ -303,6 +304,18 @@ export function createWorkspaceXR(options: WorkspaceXROptions) {
     }
   }
 
+  // Real Touch controller models (fetched from the WebXR input-profiles CDN on connect), so the
+  // wearer sees their hands instead of bare rays. Grip spaces are absent in headless test renderers.
+  const grips: THREE.Object3D[] = [];
+  if (typeof renderer.xr.getControllerGrip === "function") {
+    const modelFactory = new XRControllerModelFactory();
+    for (const index of [0, 1]) {
+      const grip = renderer.xr.getControllerGrip(index);
+      grip.add(modelFactory.createControllerModel(grip));
+      rig.add(grip); grips.push(grip);
+    }
+  }
+
   for (const controller of controllers) {
     rig.add(controller);
     const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(0, 0, -1)]),
@@ -496,6 +509,7 @@ export function createWorkspaceXR(options: WorkspaceXROptions) {
       renderer.xr.removeEventListener("sessionend", restore);
       for (const cleanup of cleanups) cleanup();
       sourceByController.clear(); menu.dispose();
+      grips.forEach((grip) => grip.removeFromParent());
       menuPointers.forEach((pointer) => { pointer.geometry.dispose(); pointer.material.dispose(); pointer.removeFromParent(); });
       reticle.geometry.dispose(); reticle.material.dispose();
       rig.removeFromParent(); hud.removeFromParent(); reticle.removeFromParent();
