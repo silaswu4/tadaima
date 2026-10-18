@@ -71,3 +71,74 @@ References: Apple's [surface transforms](https://developer.apple.com/documentati
 ## Existing objects (v1.1)
 
 The companion now exports `roomplan-scan/1.1`, adding required `objects` with native IDs, categories, confidence, dimensions and object-center transforms. The importer preserves supported detections as evidence-linked existing-owned items with bottom-center placement, yaw and inferred planning locks. It does not turn detections into merchant products or exact textured meshes. Old v1.0 input remains supported. Valid tilted objects are explicitly omitted with reasons because the application currently supports yaw only. See [existing furniture contracts, real recovery and verification](../../docs/existing-furniture.md).
+
+## RGB scan bundles
+
+The companion's **Share scan + photos** exports a timestamped `.zip`. Pass that
+file to the same importer instead of `.json`; the JSON-only path is unchanged:
+
+```bash
+python3 -m reconstruction.roomplan \
+  --input /private/path/living-room_2026-10-18_scan.zip \
+  --output reconstruction/output/native-photo-job
+```
+
+`roomplan-photo-bundle/1.0` contains exactly `manifest.json`, `roomplan.json`, and
+its declared `photos/photo-<lowercase-UUID>.jpg` entries. The manifest binds the
+original geometry JSON and each JPEG by SHA-256 and byte length, carries matching
+project/job/revision IDs, and records capture time, AR timestamp, normal tracking,
+image dimensions, 16 column-major camera-to-world values, and nine column-major
+intrinsics values. Dimensions and intrinsics describe the saved JPEG, including
+any downsampling. Pixel coordinates use the raw sensor image with a top-left
+origin; JPEGs are not silently rotated into portrait display orientation.
+
+The reader never extracts archive paths. It rejects undeclared or duplicate
+members, links, encryption, unsafe paths, unsupported compression, corrupt CRCs,
+nonfinite or nonrigid transforms, inconsistent identity/hashes/calibration, and
+mismatched JPEG header dimensions. Limits are 32 photos, 2 MiB per JPEG, 32 MiB
+combined JPEG bytes, 1600 pixels per image dimension, 256 KiB manifest, 2 MiB scan
+JSON, and 36 MiB archive. Both stored ZIPs and bounded deflate are accepted. JPEG
+screening reads headers; it is not a full image decoder or capture-authenticity
+check. The native exporter additionally decodes images before export.
+
+The importer retains all sources privately and leaves compiled geometry unchanged:
+
+| Path | Meaning |
+| --- | --- |
+| `scan.input.zip` | Exact original archive and its dossier SHA-256 |
+| `scan.input.json` | Exact geometry JSON from the archive |
+| `photos.manifest.json` | Exact original camera/photo manifest |
+| `photos/*.jpg` | Every validated original JPEG |
+| `photo-registration.json` | Evidence references, original poses/intrinsics, and source-to-canonical translation |
+| `appearance.photos.json` | Up to eight photos selected by camera pose diversity for the appearance pipeline |
+
+All photo evidence is scoped to `captured_room`, with no measured dimension or
+user confirmation attached. Original camera poses remain in ARKit space. Apply
+`sourceToCanonicalTranslation` once when projecting into the room: the importer
+normalizes floor Y but does not rotate or otherwise re-estimate room geometry.
+ARKit drift or relocalization can still misalign a photo and a surface; inspect
+registration before treating these poses as accurate texture projection.
+
+Prepare a keyless, hash-bound appearance-analysis packet from those actual bytes:
+
+```bash
+python3 -m reconstruction.appearance \
+  --input reconstruction/output/native-photo-job/reconstruction.request.json \
+  --photos reconstruction/output/native-photo-job/appearance.photos.json \
+  --output reconstruction/output/native-photo-job/appearance.analysis.json
+```
+
+That command prepares analysis input; it does not itself infer finishes. The
+existing `--proposal-file` or configured `--model` path can produce a reviewed
+photo-cited finish profile. Capturing/importing photos does **not** automatically
+bake wall textures, recover hidden surfaces, or replace detected furniture proxies
+with exact textured meshes. All photos and calibration are preserved for that
+subsequent appearance work.
+
+```bash
+python3 -m unittest reconstruction.tests.test_roomplan_photo_bundle -v
+```
+
+These tests use synthetic image headers and camera transforms. They cover the
+archive boundary and existing appearance handoff, not physical iPhone scanning
+or photographic fidelity.

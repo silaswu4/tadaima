@@ -3,7 +3,8 @@ import RoomPlan
 
 /// Serialization and USDZ export run away from the main actor.
 actor ScanExportStore {
-    func export(room: CapturedRoom, packet: RoomPlanPacket, fileStem: String, includeUSDZ: Bool) throws -> URL {
+    func export(room: CapturedRoom, packet: RoomPlanPacket, fileStem: String,
+                includeUSDZ: Bool, photos: [CapturedScanPhoto]? = nil) throws -> URL {
         let manager = FileManager.default
         let documents = try manager.url(for: .documentDirectory, in: .userDomainMask,
                                         appropriateFor: nil, create: true)
@@ -17,9 +18,19 @@ actor ScanExportStore {
         attributes.isExcludedFromBackup = true
         try protectedDirectory.setResourceValues(attributes)
         let jsonURL = directory.appendingPathComponent(fileStem + ".json")
-        try ScanWire.encode(packet).write(to: jsonURL, options: [.atomic, .completeFileProtection])
+        let scanData = try ScanWire.encode(packet)
+        try scanData.write(to: jsonURL, options: [.atomic, .completeFileProtection])
         try manager.setAttributes([.protectionKey: FileProtectionType.complete, .posixPermissions: 0o600],
                                   ofItemAtPath: jsonURL.path)
+        if let photos {
+            let bundleURL = directory.appendingPathComponent(fileStem + ".zip")
+            let bundle = try ScanPhotoArchive.encode(scanData: scanData, projectId: packet.projectId,
+                jobId: packet.jobId, inputRevision: packet.inputRevision, photos: photos)
+            try bundle.write(to: bundleURL, options: [.atomic, .completeFileProtection])
+            try manager.setAttributes([.protectionKey: FileProtectionType.complete, .posixPermissions: 0o600],
+                                      ofItemAtPath: bundleURL.path)
+            return bundleURL
+        }
         if !includeUSDZ { return jsonURL }
         let modelURL = directory.appendingPathComponent(fileStem + ".usdz")
         // Fresh filename for an explicit retry, never a stale export from another scan.

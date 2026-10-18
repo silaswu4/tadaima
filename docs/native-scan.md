@@ -20,7 +20,7 @@ A Safari camera page cannot invoke this native framework as a browser API. The o
 2. Name the room and start scanning. Grant camera access when requested.
 3. Walk around the room using RoomPlan's built-in guidance; include corners, walls, doors and windows.
 4. Finish the scan and inspect the resulting room preview.
-5. Share the timestamp-named JSON export to Files/AirDrop and transfer it to the reconstruction worker machine. Optional USDZ is a reference export.
+5. With **Save appearance photos** enabled, pause facing walls, floors and furniture during capture. Review the saved-photo counter/thumbnails, then choose **Share scan + photos** to transfer one timestamped ZIP containing geometry, JPEGs and camera calibration. Geometry-only JSON and optional reference USDZ remain available.
 6. Import and validate the JSON, then generate the editable Blender scene and GLB.
 7. Review the modeled room before relying on furniture clearances. Production upload and viewer handoff are separate integration work.
 
@@ -92,3 +92,7 @@ The user completed a real iPhone scan and shared its JSON and parametric USDZ. T
 ## Scan naming
 
 The native review title, exported room label, and shared JSON/USDZ filenames now include the capture date/time. Filenames use the capture timezone’s numeric UTC offset and an eight-character scan-ID suffix, for example `living-room_2026-10-18_03-05-41-0700_ff42b20e.json`. The paired USDZ uses the same basename. Re-sharing a scan preserves its original capture time; `capturedAt` remains UTC in the packet. User-entered room names are sanitized only for filenames, and the underlying UUID job identity/private directory remains unchanged.
+
+## RGB appearance capture
+
+The optional photo path is now implemented in the companion and local importer. It saves bounded RGB keyframes from RoomPlan's ARSession, retains their native camera poses and scaled intrinsics, and exports a hash-bound `roomplan-photo-bundle/1.0` ZIP. The importer preserves all photo evidence and prepares up to eight images for the existing appearance pipeline. Capturing/importing photos does not automatically texture the Blender scene or reconstruct exact furniture meshes. See [the complete photo capture contract and verification boundaries](native-photo-capture.md).

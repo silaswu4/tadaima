@@ -512,7 +512,13 @@ def _write(path, value):
 def run(input_path, output_path, *, render=False, blender=None, preview=False,
         expected_project=None, expected_job=None, expected_revision=None):
     """Keep private source/dossier and optionally generate a fresh Blender draft."""
-    raw, body = _read(input_path)
+    bundle = None
+    if Path(input_path).suffix.lower() == ".zip":
+        from .photo_bundle import read_photo_bundle
+        bundle = read_photo_bundle(input_path)
+        raw, body = bundle["scan"], bundle["scanBytes"]
+    else:
+        raw, body = _read(input_path)
     for key, expected in (("projectId", expected_project), ("jobId", expected_job), ("inputRevision", expected_revision)):
         if expected is not None and (not isinstance(raw, dict) or raw.get(key) != expected):
             raise RoomPlanError(f"RoomPlan {key} does not match the authorized job")
@@ -527,8 +533,12 @@ def run(input_path, output_path, *, render=False, blender=None, preview=False,
     dossier = {"schemaVersion": "roomplan-result/1.0", "status": "failed", "reviewRequired": True,
                "method": "native_roomplan_surface_import", "inputSha256": hashlib.sha256(body).hexdigest(),
                "sourcePath": "scan.input.json", "reconstructionRequestPath": None, "draftManifestPath": None}
+    if bundle is not None:
+        _write_photo_sources(output, bundle, dossier)
     try:
         compiled = import_scan(raw)
+        if bundle is not None:
+            _attach_photo_evidence(output, bundle, compiled, dossier)
         dossier.update({key: compiled[key] for key in ("status", "warnings", "corrections", "floorY", "coordinatePolicy")})
         dossier.update({key: compiled["request"][key] for key in ("projectId", "jobId", "inputRevision")})
         dossier.update({key: compiled[key] for key in ("detectedObjectCount", "importedItemCount", "omittedObjects") if key in compiled})
@@ -547,3 +557,53 @@ def run(input_path, output_path, *, render=False, blender=None, preview=False,
         dossier["error"] = str(error)[:2000] if isinstance(error, RoomPlanError) else "RoomPlan draft generation failed; inspect private worker configuration."
         _write(output / "roomplan.dossier.json", dossier)
         raise
+
+
+def _private_bytes(path, body):
+    path.write_bytes(body)
+    os.chmod(path, 0o600)
+
+
+def _write_photo_sources(output, bundle, dossier):
+    """Copy only individually validated members, never extract ZIP paths."""
+    _private_bytes(output / "scan.input.zip", bundle["archiveBytes"])
+    _private_bytes(output / "photos.manifest.json", bundle["manifestBytes"])
+    (output / "photos").mkdir(mode=0o700)
+    for photo in bundle["manifest"]["photos"]:
+        _private_bytes(output / "photos" / (photo["id"] + ".jpg"), bundle["files"][photo["path"]])
+    dossier.update({"photoCount": len(bundle["manifest"]["photos"]),
+                    "photoManifestPath": "photos.manifest.json", "photoRegistrationPath": None,
+                    "appearancePhotosPath": None, "photoArchivePath": "scan.input.zip",
+                    "photoArchiveSha256": bundle["sha256"]})
+
+
+def _attach_photo_evidence(output, bundle, compiled, dossier):
+    from .photo_bundle import representative_photos
+    photos = bundle["manifest"]["photos"]
+    request = compiled["request"]
+    references = {}
+    for photo in photos:
+        ident = _evidence_id(request["jobId"] + ":rgb:" + photo["id"])
+        references[photo["id"]] = ident
+        request["evidence"].append({"id": ident, "sourceUrl": None,
+            "privateAssetId": request["jobId"] + ":" + photo["path"],
+            "observedAt": photo["capturedAt"],
+            "claim": "Captured-room RGB appearance evidence; photo SHA-256 " + photo["sha256"]
+                + ". Camera pose is source ARKit tracking, not verified texture alignment or furniture identity.",
+            "dimensionStatus": None, "confirmedByUserAt": None})
+    validate_request(request)
+    registration = {"schemaVersion": "roomplan-photo-registration/1.0", "reviewRequired": True,
+        "sourceManifestPath": "photos.manifest.json", "coordinateSystem": bundle["manifest"]["coordinateSystem"],
+        "imageConvention": bundle["manifest"]["imageConvention"],
+        "sourceToCanonicalTranslation": compiled["coordinatePolicy"]["sourceToCanonicalTranslation"],
+        "posePolicy": "Camera-to-world column-major transforms remain unmodified in source ARKit space. Add the recorded translation once for canonical room coordinates. ARKit drift/relocalization may require registration review.",
+        "photos": [{**photo, "evidenceId": references[photo["id"]]} for photo in photos]}
+    _write(output / "photo-registration.json", registration)
+    selected = representative_photos(photos)
+    _write(output / "appearance.photos.json", {"photos": [
+        {"id": photo["id"], "evidenceId": references[photo["id"]], "sha256": photo["sha256"],
+         "mediaType": "image/jpeg", "scope": "captured_room", "path": photo["path"]}
+        for photo in selected]})
+    dossier.update({"photoRegistrationPath": "photo-registration.json",
+                    "appearancePhotosPath": "appearance.photos.json", "appearancePhotoCount": len(selected)})
+    compiled["warnings"].append("RGB photos are retained as captured-room appearance evidence, with original camera poses and calibration. They do not automatically create textured walls or exact furniture meshes; registration and appearance require review.")
