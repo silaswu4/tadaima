@@ -1,0 +1,426 @@
+import * as THREE from "three";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
+import type { RoomPlan } from "../../backend/contracts";
+import { block } from "./parts";
+import { createRoomLighting, setMetricSurfaceUVs } from "./lighting";
+import { createFurnitureProxy, placeFurnitureModel } from "./furniture-model";
+import { galleryPart } from "./gallery-parts";
+
+export type IsoGallery = {
+  ready: Promise<void>;
+  /** Build in the room at `index`, sliding from the side given by `direction`. Resolves when settled. */
+  showRoom(index: number, direction?: 1 | -1): Promise<void>;
+  dispose(): void;
+};
+
+type Options = { initial?: number; reducedMotion?: boolean; lite?: boolean };
+
+const BACKGROUND = "#f5f2eb";
+const CLAY = "#e4ddd1";
+// Long lens from far away: reads close to isometric while keeping real depth.
+const FOV = 14;
+const VIEW = new THREE.Vector3(1, 0.92, 1.18).normalize();
+
+const easeOutCubic = (t: number) => 1 - (1 - t) ** 3;
+const easeInOutCubic = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2);
+const easeOutBack = (t: number) => 1 + 2.2 * (t - 1) ** 3 + 1.2 * (t - 1) ** 2;
+const easeInOutQuart = (t: number) => (t < 0.5 ? 8 * t ** 4 : 1 - (-2 * t + 2) ** 4 / 2);
+
+type Tween = { start: number; duration: number; ease: (t: number) => number; step: (v: number) => void; done?: () => void };
+type Uniforms = { uReveal: { value: number }; uClay: { value: THREE.Color }; uOrigin: { value: THREE.Vector2 }; uSpan: { value: number } };
+
+/** Patch a standard material so it fades from flat clay to its real finish, rippling out from the room center. */
+function withReveal(material: THREE.Material, uniforms: Uniforms) {
+  if (!(material instanceof THREE.MeshStandardMaterial) || material.userData.isoReveal) return;
+  material.userData.isoReveal = true;
+  material.onBeforeCompile = (shader) => {
+    Object.assign(shader.uniforms, uniforms);
+    shader.vertexShader = shader.vertexShader
+      .replace("#include <common>", "#include <common>\nvarying vec3 vIsoLocal;")
+      .replace("#include <begin_vertex>", "#include <begin_vertex>\nvIsoLocal = (modelMatrix * vec4(transformed, 1.0)).xyz;");
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        "#include <common>",
+        `#include <common>
+varying vec3 vIsoLocal;
+uniform float uReveal;
+uniform vec3 uClay;
+uniform vec2 uOrigin;
+uniform float uSpan;
+float isoHash(vec2 p) { return fract(sin(dot(p, vec2(41.3, 289.1))) * 15731.743); }
+float isoNoise(vec2 p) {
+  vec2 i = floor(p), f = fract(p);
+  vec2 u = f * f * (3.0 - 2.0 * f);
+  return mix(mix(isoHash(i), isoHash(i + vec2(1, 0)), u.x), mix(isoHash(i + vec2(0, 1)), isoHash(i + vec2(1, 1)), u.x), u.y);
+}`,
+      )
+      .replace(
+        "#include <opaque_fragment>",
+        `float isoDist = length(vIsoLocal.xz - uOrigin) / uSpan + vIsoLocal.y * 0.08;
+float isoMask = smoothstep(0.0, 0.18, uReveal * 1.35 - isoDist - isoNoise(vIsoLocal.xz * 2.2) * 0.22);
+outgoingLight = mix(uClay, outgoingLight, isoMask);
+#include <opaque_fragment>`,
+      );
+  };
+  material.needsUpdate = true;
+}
+
+function release(root: THREE.Object3D) {
+  root.traverse((node) => {
+    if (!(node instanceof THREE.Mesh)) return;
+    node.geometry.dispose();
+    for (const m of Array.isArray(node.material) ? node.material : [node.material]) {
+      for (const value of Object.values(m)) if (value instanceof THREE.Texture) value.dispose();
+      m.dispose();
+    }
+  });
+}
+
+type RoomView = {
+  pivot: THREE.Group;
+  floor: THREE.Group;
+  walls: { root: THREE.Group; height: number }[];
+  furniture: { root: THREE.Group; rest: THREE.Vector3; order: number }[];
+  uniforms: Uniforms;
+  bounds: THREE.Box3;
+};
+
+export function createIsoGallery(canvas: HTMLCanvasElement, plans: RoomPlan[], options: Options = {}): IsoGallery {
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, options.lite ? 1.5 : 2));
+  renderer.setClearColor(BACKGROUND);
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.toneMapping = THREE.AgXToneMapping;
+  renderer.toneMappingExposure = 1.1;
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+  const scene = new THREE.Scene();
+  const lighting = createRoomLighting(renderer, scene, options.lite);
+  scene.add(new THREE.HemisphereLight("#eef2ff", "#b6a48c", 0.5));
+  const sun = new THREE.DirectionalLight("#fff3e0", 2.4);
+  sun.castShadow = true;
+  sun.shadow.mapSize.setScalar(options.lite ? 1024 : 2048);
+  sun.shadow.radius = 4;
+  sun.shadow.normalBias = 0.02;
+  scene.add(sun, sun.target);
+
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(400, 400), new THREE.ShadowMaterial({ opacity: 0.12 }));
+  ground.rotation.x = -Math.PI / 2;
+  ground.position.y = -0.141;
+  ground.receiveShadow = true;
+  scene.add(ground);
+
+  const camera = new THREE.PerspectiveCamera(FOV, 1, 1, 400);
+  // Every room sits centered on the origin inside its own pivot; the stage tilts under the cursor.
+  const stage = new THREE.Group();
+  scene.add(stage);
+  const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
+  let disposed = false;
+
+  function buildRoom(plan: RoomPlan): { view: RoomView; loaded: Promise<void> } {
+    const pivot = new THREE.Group();
+    const content = new THREE.Group();
+    pivot.add(content);
+    pivot.visible = false;
+    stage.add(pivot);
+    const floorPlan = plan.geometry.rooms[0];
+    const xs = floorPlan.floorPolygon.map((p) => p[0]);
+    const zs = floorPlan.floorPolygon.map((p) => p[1]);
+    const center = new THREE.Vector3((Math.min(...xs) + Math.max(...xs)) / 2, 0, (Math.min(...zs) + Math.max(...zs)) / 2);
+    content.position.copy(center).negate();
+    const uniforms: Uniforms = {
+      uReveal: { value: 0 },
+      uClay: { value: new THREE.Color(CLAY) },
+      uOrigin: { value: new THREE.Vector2(center.x, center.z) },
+      uSpan: { value: Math.hypot(Math.max(...xs) - Math.min(...xs), Math.max(...zs) - Math.min(...zs)) / 2 },
+    };
+
+    const shape = new THREE.Shape(floorPlan.floorPolygon.map(([x, z]) => new THREE.Vector2(x - center.x, -(z - center.z))));
+    const geometry = new THREE.ExtrudeGeometry(shape, { depth: 0.14, bevelEnabled: false });
+    geometry.rotateX(-Math.PI / 2);
+    setMetricSurfaceUVs(geometry, 1.2);
+    const floorMesh = new THREE.Mesh(geometry, lighting.makeSurface("floor"));
+    floorMesh.receiveShadow = true;
+    const floor = new THREE.Group();
+    floor.position.set(center.x, -0.14, center.z);
+    floor.add(floorMesh);
+    content.add(floor);
+
+    // Cutaway: keep only the walls facing away from the camera, with real openings.
+    const walls: RoomView["walls"] = [];
+    for (const wall of plan.geometry.walls) {
+      const dx = wall.end[0] - wall.start[0];
+      const dz = wall.end[1] - wall.start[1];
+      const length = Math.hypot(dx, dz);
+      if (length <= 0) continue;
+      const mid = new THREE.Vector3((wall.start[0] + wall.end[0]) / 2, 0, (wall.start[1] + wall.end[1]) / 2);
+      if (new THREE.Vector3(VIEW.x, 0, VIEW.z).dot(mid.sub(center)) > 0) continue;
+      const material = lighting.makeSurface("wall");
+      const root = new THREE.Group();
+      const openings = plan.geometry.openings.filter((o) => o.wallId === wall.id);
+      const cuts = [...new Set([0, length, ...openings.flatMap((o) => [o.offset, o.offset + o.width].map((v) => THREE.MathUtils.clamp(v, 0, length)))])].sort(
+        (a, b) => a - b,
+      );
+      for (let i = 0; i < cuts.length - 1; i++) {
+        const a = cuts[i];
+        const b = cuts[i + 1];
+        const middle = (a + b) / 2;
+        const holes = openings
+          .filter((o) => middle > o.offset && middle < o.offset + o.width)
+          .map((o) => [Math.max(0, o.sillHeight), Math.min(wall.height, o.sillHeight + o.height)])
+          .sort((p, q) => p[0] - q[0]);
+        let bottom = 0;
+        const spans: number[][] = [];
+        for (const [low, high] of holes) {
+          if (low > bottom) spans.push([bottom, low]);
+          bottom = Math.max(bottom, high);
+        }
+        if (bottom < wall.height) spans.push([bottom, wall.height]);
+        for (const [low, high] of spans) {
+          const mesh = block(b - a, high - low, wall.thickness, material, 0);
+          setMetricSurfaceUVs(mesh.geometry, 1, undefined, [middle, low]);
+          mesh.position.set(wall.start[0] + (dx * middle) / length, low, wall.start[1] + (dz * middle) / length);
+          mesh.rotation.y = -Math.atan2(dz, dx);
+          mesh.castShadow = true;
+          mesh.receiveShadow = true;
+          root.add(mesh);
+        }
+      }
+      content.add(root);
+      walls.push({ root, height: wall.height });
+    }
+
+    const furniture: RoomView["furniture"] = [];
+    const loaded = Promise.all(
+      plan.items.map(async (item) => {
+        let model: THREE.Object3D | null = galleryPart(item.id, item.dimensions);
+        if (!model) {
+          try {
+            if (!item.assetUrl) throw new Error("No asset");
+            model = (await loader.loadAsync(item.assetUrl)).scene;
+          } catch {
+            model = createFurnitureProxy(item.dimensions ?? [0.8, 0.8, 0.8]);
+          }
+        }
+        if (disposed) {
+          release(model);
+          return;
+        }
+        const { root } = placeFurnitureModel(item, model);
+        root.traverse((node) => {
+          if (node instanceof THREE.Mesh) {
+            node.castShadow = true;
+            node.receiveShadow = true;
+          }
+        });
+        content.add(root);
+        furniture.push({ root, rest: root.position.clone(), order: Math.hypot(root.position.x - center.x, root.position.z - center.z) });
+      }),
+    ).then(() => {
+      furniture.sort((a, b) => a.order - b.order);
+      content.traverse((node) => {
+        if (node instanceof THREE.Mesh) for (const m of Array.isArray(node.material) ? node.material : [node.material]) withReveal(m, uniforms);
+      });
+      view.bounds.setFromObject(pivot);
+    });
+    const view: RoomView = { pivot, floor, walls, furniture, uniforms, bounds: new THREE.Box3() };
+    return { view, loaded };
+  }
+
+  const built = plans.map(buildRoom);
+  const rooms = built.map((b) => b.view);
+  let current = Math.min(Math.max(options.initial ?? 0, 0), Math.max(0, rooms.length - 1));
+  let step = 12;
+
+  // Frame the largest room along the fixed view direction.
+  function fit() {
+    const bounds = new THREE.Box3();
+    for (const r of rooms) bounds.union(r.bounds);
+    if (bounds.isEmpty()) return;
+    const target = new THREE.Vector3(0, bounds.max.y * 0.3, 0);
+    const right = new THREE.Vector3().crossVectors(camera.up, VIEW).normalize();
+    const up = new THREE.Vector3().crossVectors(VIEW, right);
+    const tanV = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
+    const tanH = tanV * camera.aspect;
+    let distance = 1;
+    for (const x of [bounds.min.x, bounds.max.x])
+      for (const y of [bounds.min.y, bounds.max.y])
+        for (const z of [bounds.min.z, bounds.max.z]) {
+          const corner = new THREE.Vector3(x, y, z).sub(target);
+          distance = Math.max(distance, corner.dot(VIEW) + Math.abs(corner.dot(right)) / tanH, corner.dot(VIEW) + Math.abs(corner.dot(up)) / tanV);
+        }
+    camera.position.copy(target).addScaledVector(VIEW, distance * 1.6);
+    camera.lookAt(target);
+    // Lift the room into the upper part of the frame, clear of the caption.
+    const { width, height } = canvas.getBoundingClientRect();
+    camera.setViewOffset(width, height, 0, height * 0.09, width, height);
+    camera.near = Math.max(0.5, distance * 0.3);
+    camera.far = distance * 5;
+    camera.updateProjectionMatrix();
+    const span = bounds.getSize(new THREE.Vector3()).length();
+    step = span * 1.6;
+    sun.position.set(-6, 12, 8);
+    sun.target.position.set(0, 0, 0);
+    const cam = sun.shadow.camera;
+    cam.left = -step * 1.2;
+    cam.right = step * 1.2;
+    cam.top = span;
+    cam.bottom = -span;
+    cam.far = span * 6;
+    cam.updateProjectionMatrix();
+  }
+
+  function resize() {
+    if (disposed) return;
+    const { width, height } = canvas.getBoundingClientRect();
+    renderer.setSize(Math.max(1, width), Math.max(1, height), false);
+    camera.aspect = Math.max(1, width) / Math.max(1, height);
+    fit();
+  }
+  const observer = new ResizeObserver(resize);
+  observer.observe(canvas);
+
+  const pointer = new THREE.Vector2();
+  const tilt = new THREE.Vector2();
+  const onPointer = (event: PointerEvent) => {
+    pointer.set((event.clientX / window.innerWidth) * 2 - 1, (event.clientY / window.innerHeight) * 2 - 1);
+  };
+  window.addEventListener("pointermove", onPointer, { passive: true });
+
+  let tweens: Tween[] = [];
+  const tween = (start: number, duration: number, ease: Tween["ease"], stepFn: Tween["step"], done?: () => void) =>
+    tweens.push({ start, duration, ease, step: stepFn, done });
+  const clear = (view: RoomView) => {
+    tweens = tweens.filter((t) => !(t as Tween & { view?: RoomView }).view || (t as Tween & { view?: RoomView }).view !== view);
+  };
+
+  function settle(view: RoomView) {
+    view.floor.scale.set(1, 1, 1);
+    for (const w of view.walls) w.root.position.y = 0;
+    for (const f of view.furniture) {
+      f.root.position.copy(f.rest);
+      f.root.scale.setScalar(1);
+    }
+    view.uniforms.uReveal.value = 1.6;
+  }
+
+  // Floor, walls, then furniture from the center out, then the finishes wash in.
+  function buildIn(view: RoomView, t0: number) {
+    const own = (start: number, duration: number, ease: Tween["ease"], stepFn: Tween["step"]) => {
+      tween(start, duration, ease, stepFn);
+      (tweens[tweens.length - 1] as Tween & { view?: RoomView }).view = view;
+    };
+    view.floor.scale.set(0.3, 1, 0.3);
+    for (const w of view.walls) w.root.position.y = -w.height - 0.2;
+    for (const f of view.furniture) {
+      f.root.position.copy(f.rest).add(new THREE.Vector3(0, 1.4, 0));
+      f.root.scale.setScalar(0.001);
+    }
+    view.uniforms.uReveal.value = 0;
+    own(t0, 900, easeOutBack, (v) => view.floor.scale.set(0.3 + 0.7 * v, 1, 0.3 + 0.7 * v));
+    view.walls.forEach((w, i) => {
+      const from = -w.height - 0.2;
+      own(t0 + 120 + i * 90, 1300, easeOutCubic, (v) => (w.root.position.y = from * (1 - v)));
+    });
+    view.furniture.forEach((f, i) => {
+      own(t0 + 520 + i * 75, 1100, easeOutCubic, (v) => {
+        f.root.position.y = f.rest.y + 1.4 * (1 - v);
+        f.root.scale.setScalar(Math.max(0.001, (0.85 + 0.15 * v) * Math.min(1, v * 4)));
+      });
+    });
+    own(t0 + 700, 2600, easeInOutCubic, (v) => (view.uniforms.uReveal.value = 1.6 * v));
+  }
+
+  let busy = false;
+  function showRoom(index: number, direction: 1 | -1 = 1): Promise<void> {
+    const next = ((index % rooms.length) + rooms.length) % rooms.length;
+    if (busy || next === current) return Promise.resolve();
+    const out = rooms[current];
+    const into = rooms[next];
+    current = next;
+    if (options.reducedMotion) {
+      out.pivot.visible = false;
+      into.pivot.visible = true;
+      into.pivot.position.set(0, 0, 0);
+      into.pivot.rotation.set(0, 0, 0);
+      settle(into);
+      return Promise.resolve();
+    }
+    busy = true;
+    clear(out);
+    clear(into);
+    const t0 = performance.now();
+    const d = direction;
+    // Outgoing room turns and slides away while its finishes fall back to clay.
+    const revealFrom = out.uniforms.uReveal.value;
+    tween(t0, 1200, easeInOutCubic, (v) => (out.uniforms.uReveal.value = revealFrom * (1 - v)));
+    tween(t0, 2000, easeInOutQuart, (v) => (out.pivot.rotation.y = 0.6 * d * v));
+    tween(t0 + 150, 1800, easeInOutQuart, (v) => (out.pivot.position.x = -step * d * v), () => (out.pivot.visible = false));
+    // Incoming room swings in from the other side and builds itself as it lands.
+    into.pivot.visible = true;
+    into.pivot.position.x = step * d;
+    into.pivot.rotation.y = -0.8 * d;
+    tween(t0 + 150, 1800, easeInOutQuart, (v) => (into.pivot.position.x = step * d * (1 - v)));
+    tween(t0 + 350, 1800, easeInOutQuart, (v) => (into.pivot.rotation.y = -0.8 * d * (1 - v)));
+    buildIn(into, t0 + 450);
+    return new Promise((resolve) =>
+      setTimeout(() => {
+        busy = false;
+        resolve();
+      }, 2350),
+    );
+  }
+
+  let raf = 0;
+  let last = performance.now();
+  function frame(now: number) {
+    if (disposed) return;
+    const dt = Math.min(0.1, (now - last) / 1000);
+    last = now;
+    tweens = tweens.filter((t) => {
+      const p = (now - t.start) / t.duration;
+      if (p < 0) return true;
+      t.step(t.ease(Math.min(1, p)));
+      if (p >= 1) t.done?.();
+      return p < 1;
+    });
+    if (!options.reducedMotion) {
+      tilt.x = THREE.MathUtils.damp(tilt.x, pointer.x, 2.5, dt);
+      tilt.y = THREE.MathUtils.damp(tilt.y, pointer.y, 2.5, dt);
+      stage.rotation.y = -tilt.x * 0.06;
+      stage.rotation.x = tilt.y * 0.012;
+      stage.rotation.z = tilt.y * 0.012;
+    }
+    renderer.render(scene, camera);
+    raf = requestAnimationFrame(frame);
+  }
+
+  const ready = Promise.all([...built.map((b) => b.loaded), lighting.ready]).then(() => {
+    if (disposed) return;
+    resize();
+    const first = rooms[current];
+    if (!first) return;
+    first.pivot.visible = true;
+    if (options.reducedMotion) settle(first);
+    else buildIn(first, performance.now() + 200);
+    raf = requestAnimationFrame(frame);
+  });
+
+  return {
+    ready,
+    showRoom,
+    dispose() {
+      if (disposed) return;
+      disposed = true;
+      cancelAnimationFrame(raf);
+      observer.disconnect();
+      window.removeEventListener("pointermove", onPointer);
+      lighting.dispose();
+      release(scene);
+      sun.shadow.dispose();
+      renderer.dispose();
+    },
+  };
+}
