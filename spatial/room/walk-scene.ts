@@ -12,6 +12,8 @@ import type { AddRequest, WalkCallbacks, WalkItem, WalkMode, WalkOptions, WalkPr
 import { block, rug, standingLamp, surface } from "./parts";
 import { createRoomLighting, setMetricSurfaceUVs } from "./lighting";
 import { createIndoorLighting, fitRoomShadow } from "./indoor-lighting";
+import { applyBakedIndirect, bakedPoseMatches, FULL_DIFFUSE_PROFILE, ownBakedIndirectMaterials, setBakedIndirectEnabled } from "./baked-indirect";
+import { prepareWindowGlass } from "./window-glass";
 import { createShadowCache } from "./shadow-cache";
 import { createFurnitureProxy, placeFurnitureModel } from "./furniture-model";
 import { galleryPart } from "./gallery-parts";
@@ -433,8 +435,15 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
     const gltf = await loader.parseAsync(source.texturedModel, "");
     if (disposed) { releaseAll([gltf.scene]); return; }
     allRoots.add(gltf.scene);
+    prepareWindowGlass(gltf.scene);
+    let fullDiffuse = false;
+    gltf.scene.traverse((node) => {
+      if (node instanceof THREE.Mesh && (Array.isArray(node.material) ? node.material : [node.material]).some((material) => material.userData.tadaimaIndirectLightmap === FULL_DIFFUSE_PROFILE)) fullDiffuse = true;
+    });
+    const bakedMeshes = applyBakedIndirect(gltf.scene);
     const bound = prepareWalkSource(bindTexturedRoom(gltf.scene, source.plan, source.binding));
     scene.add(bound.shell); allRoots.add(bound.shell);
+    prepareWindowGlass(bound.shell);
     for (const [id, object] of bound.templates) { sourceTemplates.set(id, object); allRoots.add(object); }
     for (const floor of floorMeshes) (floor.material as THREE.Material).visible = false;
     for (const mesh of wallMeshes) mesh.visible = false;
@@ -447,6 +456,7 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
         const original = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
         const cloned = original.map((material) => material.clone() as THREE.MeshStandardMaterial);
         mesh.material = Array.isArray(mesh.material) ? cloned : cloned[0];
+        applyBakedIndirect(mesh);
         return cloned;
       });
     }
@@ -459,9 +469,16 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
     // Match the Blender indoor rig's warm key/fill balance. A shadowed indoor
     // proxy restores contact depth without inventing an exterior sun beam.
     if (bound.representation === "photo_informed_parametric") {
-      indoorLighting = createIndoorLighting(scene, sun, hemisphere, roomBounds, lite);
+      indoorLighting = createIndoorLighting(scene, sun, hemisphere, roomBounds, lite, bakedMeshes > 0, fullDiffuse);
       indoorLighting.setImmersive(renderer.xr.isPresenting);
       renderer.toneMappingExposure = 1;
+      if (fullDiffuse) {
+        // The runtime ceiling is inferred and absent from the exported shell.
+        // Approximate its broad reflected fixture light rather than leaving a
+        // dark, unlit cap over the Cycles-lit room.
+        ceilingMaterial.emissive.set("#fff1d8");
+        ceilingMaterial.emissiveIntensity = .3;
+      }
     }
     applyWallMode();
     shadowCache.invalidate();
@@ -552,6 +569,12 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
     entry.cos = Math.cos(entry.item.rotationY);
     entry.sin = Math.sin(entry.item.rotationY);
     entry.flat = entry.item.category === "rug" || entry.dims[1] < FLAT_HEIGHT;
+    syncEntryIndirect(entry);
+  }
+
+  function syncEntryIndirect(entry: Entry) {
+    const original = source?.plan.items.find((item) => item.id === entry.item.id);
+    if (original) setBakedIndirectEnabled(entry.root, !exploder?.isExploded && bakedPoseMatches(original, entry.root.position, entry.root.rotation.y));
   }
 
   // ------------------------------------------------------------ models
@@ -572,7 +595,11 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
   async function buildModel(item: PlacedItem, size: Size | null): Promise<{ object: THREE.Object3D; dims: Size }> {
     await sourceLoad;
     const captured = sourceTemplates.get(item.id);
-    if (captured) return { object: captured.clone(true), dims: size ?? [...source!.plan.items.find((entry) => entry.id === item.id)!.dimensions!] as Size };
+    if (captured) {
+      const object = captured.clone(true);
+      ownBakedIndirectMaterials(object);
+      return { object, dims: size ?? [...source!.plan.items.find((entry) => entry.id === item.id)!.dimensions!] as Size };
+    }
     let base: THREE.Object3D | null = galleryPart(item.id, size);
     let library: LibraryModel | null = null;
     if (!base) {
@@ -1030,6 +1057,7 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
     restoreCanonical();
     exploder = makeExplodeController([...entries].map(([id, entry]) => ({ id, object: entry.root })), roomBounds, { reducedMotion: reduced });
     exploder.setExploded(true, performance.now());
+    for (const entry of entries.values()) syncEntryIndirect(entry);
     fitRoomShadow(sun, exploder.getDisplayBounds());
     shadowCache.invalidate();
     fitOrbit();
@@ -1368,6 +1396,7 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
     }
     entry.root.position.set(moving.x, 0, moving.z);
     entry.root.rotation.y = moving.rotation;
+    syncEntryIndirect(entry);
     footprintMesh.visible = true;
     footprintMesh.position.set(moving.x, 0.006, moving.z);
     footprintMesh.rotation.y = moving.rotation;

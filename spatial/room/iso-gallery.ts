@@ -10,6 +10,8 @@ import { galleryPart } from "./gallery-parts";
 import { LIBRARY, assetTransform, type LibraryModel } from "../../backend/shopping/assets";
 import type { WalkOptions } from "./walk-api";
 import { bindTexturedRoom, validateLocalTexturedGlb } from "./textured-model";
+import { applyBakedIndirect, bakedPoseMatches, ownBakedIndirectMaterials, setBakedIndirectEnabled } from "./baked-indirect";
+import { prepareWindowGlass } from "./window-glass";
 
 export type IsoGallery = {
   ready: Promise<void>;
@@ -50,7 +52,10 @@ type Uniforms = { uReveal: { value: number }; uClay: { value: THREE.Color }; uOr
 function withReveal(material: THREE.Material, uniforms: Uniforms) {
   if (!(material instanceof THREE.MeshStandardMaterial) || material.userData.isoReveal) return;
   material.userData.isoReveal = true;
-  material.onBeforeCompile = (shader) => {
+  const before = material.onBeforeCompile;
+  const previousKey = material.customProgramCacheKey();
+  material.onBeforeCompile = (shader, renderer) => {
+    before.call(material, shader, renderer);
     Object.assign(shader.uniforms, uniforms);
     shader.vertexShader = shader.vertexShader
       .replace("#include <common>", "#include <common>\nvarying vec3 vIsoLocal;")
@@ -79,6 +84,7 @@ outgoingLight = mix(uClay, outgoingLight, isoMask);
 #include <opaque_fragment>`,
       );
   };
+  material.customProgramCacheKey = () => `${previousKey}:iso-reveal-v1`;
   material.needsUpdate = true;
 }
 
@@ -238,7 +244,10 @@ export function createIsoGallery(canvas: HTMLCanvasElement, sources: GallerySour
       const gltf = await loader.parseAsync(reconstruction.texturedModel, "");
       if (disposed) { release(gltf.scene); return null; }
       gltf.scene.traverse((node) => { if (node instanceof THREE.Mesh) retained.add(node); });
+      prepareWindowGlass(gltf.scene);
+      applyBakedIndirect(gltf.scene);
       const bound = bindTexturedRoom(gltf.scene, reconstruction.plan, reconstruction.binding);
+      prepareWindowGlass(bound.shell);
       for (const room of reconstruction.plan.geometry.rooms) {
         const node = bound.shell.children.find((child) => child.userData.entityId === room.id);
         if (node) floor.add(node);
@@ -268,11 +277,13 @@ export function createIsoGallery(canvas: HTMLCanvasElement, sources: GallerySour
         const captured = bound?.furniture.get(item.id);
         if (captured) {
           const original = reconstruction!.plan.items.find((entry) => entry.id === item.id)!;
+          ownBakedIndirectMaterials(captured);
           if (JSON.stringify(item.dimensions) !== JSON.stringify(original.dimensions)) throw new Error("Captured furniture dimensions cannot change in the gallery.");
           // The bound wrapper already owns the canonical pose and its children
           // are local. Apply the editable pose once, without mesh recentering.
           captured.position.fromArray(item.position);
           captured.rotation.y = item.rotationY;
+          setBakedIndirectEnabled(captured, bakedPoseMatches(original, captured.position, captured.rotation.y));
           content.add(captured);
           furniture.push({ root: captured, rest: captured.position.clone(), order: Math.hypot(captured.position.x - center.x, captured.position.z - center.z) });
           return;

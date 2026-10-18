@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
+import { createRequire } from "node:module";
 import test from "node:test";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { roomSourceIdentity, validateEditedRoom, validateRoomModelBinding, validateRoomDraft, getRoomDraft, saveRoomDraft, getRoom, importRoom, saveEditedPlan, importLocalCapture, bootstrapLocalCapture, listRooms } from "../rooms/registry.ts";
 import { prepareLocalShoppingPlan, searchLocalProducts, commitLocalProduct } from "../room/local-shopping.ts";
 import { getTadaimaRooms } from "../fixtures/roomsCatalog.ts";
@@ -196,11 +198,12 @@ for (const room of getTadaimaRooms()) test(`catalog room ${room.id} and its vali
  * Native import/reload and GLB persistence are separately exercised in browser QA. */
 function storageAdapter() {
   const stores = new Map([["rooms", new Map([["migration-sentinel", { privateScan: "retained" }]])]]);
+  let completedWrites = 0;
   const db = {
     objectStoreNames: { contains: name => stores.has(name) },
     createObjectStore(name) { stores.set(name, new Map()); },
     close() {},
-    transaction(name) {
+    transaction(name, mode) {
       const records = stores.get(name);
       assert.ok(records, `store ${name} must exist`);
       let timer;
@@ -220,13 +223,13 @@ function storageAdapter() {
           try { result.result = action(); result.onsuccess?.(); }
           catch (cause) { result.error = cause; result.onerror?.(); transaction.onerror?.(); }
         });
-        timer = setTimeout(() => transaction.oncomplete?.(), 0);
+        timer = setTimeout(() => { if (mode === "readwrite") completedWrites++; transaction.oncomplete?.(); }, 0);
         return result;
       }
       return transaction;
     },
   };
-  return { stores, factory: { open(name, version) {
+  return { stores, db, get completedWrites() { return completedWrites; }, factory: { open(name, version) {
     assert.equal(name, "tadaima-private-rooms"); assert.equal(version, 2);
     const request = { result: db };
     queueMicrotask(() => { request.onupgradeneeded?.(); request.onsuccess?.(); });
@@ -276,8 +279,169 @@ test("catalog storage isolates two room IDs sharing one project and preserves pr
     const reopened = await importRoom(fixture());
     assert.deepEqual(reopened.editedPlan, conflict, "opening the same original scan preserves its newer accepted plan");
     assert.deepEqual(reopened.sourcePlan, imported.sourcePlan);
-  } finally { if (previous === undefined) delete globalThis.indexedDB; else globalThis.indexedDB = previous; }
+  } finally { adapter.db.onversionchange?.(); if (previous === undefined) delete globalThis.indexedDB; else globalThis.indexedDB = previous; }
 });
+
+/** A real, embedded synthetic GLB: full semantic validation and the actual GLTFLoader run without images or network. */
+async function modelFixture(source, revisionLabel = "original", bindingChange = {}, materialMetadata = {}) {
+  const { plan, binding } = await roomSourceIdentity(source);
+  const buffers = [], bufferViews = [], accessors = [], meshes = [], nodes = [];
+  let byteOffset = 0;
+  function box(min, max, position, extras, yaw = 0) {
+    const corners = [[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0], [0, 0, 1], [1, 0, 1], [1, 1, 1], [0, 1, 1]];
+    const triangles = [0, 2, 1, 0, 3, 2, 4, 5, 6, 4, 6, 7, 0, 1, 5, 0, 5, 4, 3, 7, 6, 3, 6, 2, 0, 4, 7, 0, 7, 3, 1, 2, 6, 1, 6, 5];
+    const data = Buffer.alloc(triangles.length * 12);
+    triangles.forEach((corner, vertex) => corners[corner].forEach((axis, component) => data.writeFloatLE(axis ? max[component] : min[component], vertex * 12 + component * 4)));
+    bufferViews.push({ buffer: 0, byteOffset, byteLength: data.length }); buffers.push(data); byteOffset += data.length;
+    accessors.push({ bufferView: bufferViews.length - 1, componentType: 5126, count: triangles.length, type: "VEC3", min, max });
+    meshes.push({ primitives: [{ attributes: { POSITION: accessors.length - 1 }, material: 0 }] });
+    nodes.push({ mesh: meshes.length - 1, translation: position, rotation: [0, Math.sin(yaw / 2), 0, Math.cos(yaw / 2)], extras });
+  }
+  const room = plan.geometry.rooms[0], xs = room.floorPolygon.map(p => p[0]), zs = room.floorPolygon.map(p => p[1]);
+  box([Math.min(...xs), -.08, Math.min(...zs)], [Math.max(...xs), 0, Math.max(...zs)], [0, 0, 0], { entityId: room.id, role: "room_floor", appearanceStatus: "photo_projected" });
+  for (const wall of plan.geometry.walls) {
+    const dx = wall.end[0] - wall.start[0], dz = wall.end[1] - wall.start[1];
+    box([0, 0, -wall.thickness / 2], [Math.hypot(dx, dz), wall.height, wall.thickness / 2], [wall.start[0], 0, wall.start[1]], { entityId: wall.id, role: "wall" }, -Math.atan2(dz, dx));
+  }
+  for (const item of plan.items) {
+    const [w, h, d] = item.dimensions;
+    box([-w / 2, 0, -d / 2], [w / 2, h, d / 2], item.position, { entityId: item.id, role: "existing_furniture", appearanceStatus: "photo_projected" });
+  }
+  const binary = Buffer.concat(buffers);
+  const raw = { asset: { version: "2.0" }, scene: 0, scenes: [{ nodes: nodes.map((_, i) => i), extras: { projectId: plan.projectId, inputRevision: String(plan.revision), jobId: binding.jobId, inputSha256: binding.inputSha256, modelRevision: revisionLabel, ...bindingChange } }],
+    nodes, meshes, accessors, bufferViews, buffers: [{ byteLength: binary.length }], materials: [{ extras: materialMetadata, pbrMetallicRoughness: { baseColorFactor: [.5, .4, .3, 1], metallicFactor: 0, roughnessFactor: .8 } }] };
+  const text = Buffer.from(JSON.stringify(raw)), padded = Buffer.concat([text, Buffer.alloc((4 - text.length % 4) % 4, 32)]);
+  const bytes = Buffer.alloc(28 + padded.length + binary.length);
+  bytes.writeUInt32LE(0x46546C67, 0); bytes.writeUInt32LE(2, 4); bytes.writeUInt32LE(bytes.length, 8);
+  bytes.writeUInt32LE(padded.length, 12); bytes.writeUInt32LE(0x4E4F534A, 16); padded.copy(bytes, 20);
+  bytes.writeUInt32LE(binary.length, 20 + padded.length); bytes.writeUInt32LE(0x004E4942, 24 + padded.length); binary.copy(bytes, 28 + padded.length);
+  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+}
+
+function modelSource() {
+  const raw = JSON.parse(fixture());
+  raw.geometry.openings = [];
+  return JSON.stringify(raw, null, 2) + "\n";
+}
+
+async function withRoomStorage(run) {
+  const previous = globalThis.indexedDB, adapter = storageAdapter();
+  const parseAsync = GLTFLoader.prototype.parseAsync;
+  // tsx compiles the registry/binder through CJS while GLTFLoader is native ESM.
+  // Normalize only the test loader result to the binder's Three.js class realm;
+  // real GLB parsing, metadata checks and semantic geometry validation still run.
+  const { ObjectLoader } = createRequire(import.meta.url)("three");
+  GLTFLoader.prototype.parseAsync = async function (...args) {
+    const gltf = await parseAsync.apply(this, args);
+    return { ...gltf, scene: new ObjectLoader().parse(gltf.scene.toJSON()) };
+  };
+  globalThis.indexedDB = adapter.factory;
+  try { await run(adapter); }
+  finally { GLTFLoader.prototype.parseAsync = parseAsync; adapter.db.onversionchange?.(); if (previous === undefined) delete globalThis.indexedDB; else globalThis.indexedDB = previous; }
+}
+
+test("explicit verified model upgrade preserves source bytes, label, accepted furniture and basket revision", async () => withRoomStorage(async () => {
+  const source = modelSource(), originalModel = await modelFixture(source), upgradedModel = await modelFixture(source, "baked-light");
+  const original = await importRoom(source, originalModel, "Saved scan");
+  const shopping = prepareLocalShoppingPlan(original.editedPlan), spot = { position: [3, 0, 2.3] };
+  const offer = searchLocalProducts(shopping, { category: "chair", spot }).find(entry => entry.fits && entry.product.availability === "available");
+  assert.ok(offer);
+  const accepted = commitLocalProduct(shopping, offer.product.id, spot, shopping.revision);
+  assert.equal(accepted.ok, true);
+  accepted.plan.items[0].stored = true; accepted.plan.items[0].position = [2, 0, 1]; accepted.plan.items[0].locked = true;
+  await saveEditedPlan(original.id, accepted.plan);
+  const before = await getRoom(original.id);
+  const updated = await importRoom(source, upgradedModel, "Do not rename", { replaceModel: true });
+  assert.deepEqual(updated, { ...before, model: upgradedModel });
+  assert.notDeepEqual(updated.model, original.model);
+  assert.deepEqual(await getRoom(original.id), updated, "the replacement is durable");
+  assert.equal(updated.sourceJson, source); assert.equal(updated.editedPlan.items.length, 2);
+  assert.equal(updated.editedPlan.items[1].productId, offer.product.id);
+}));
+
+test("regular reimport preserves the existing model and accepted edits", async () => withRoomStorage(async () => {
+  const source = modelSource(), originalModel = await modelFixture(source), newerModel = await modelFixture(source, "baked-light");
+  const saved = await importRoom(source, originalModel, "Existing room");
+  const edited = structuredClone(saved.editedPlan); edited.revision++; edited.items[0].stored = true;
+  await saveEditedPlan(saved.id, edited);
+  const before = await getRoom(saved.id);
+  assert.deepEqual(await importRoom(source, newerModel, "Different label"), before);
+}));
+
+test("model upgrade rejects a mismatched GLB before writing the saved room", async () => withRoomStorage(async (adapter) => {
+  const source = modelSource(), saved = await importRoom(source, await modelFixture(source));
+  const before = structuredClone(adapter.stores.get("rooms").get(saved.id));
+  await assert.rejects(importRoom(source, await modelFixture(source, "wrong", { jobId: "another-scan" }), undefined, { replaceModel: true }), /different scan or revision/);
+  assert.deepEqual(adapter.stores.get("rooms").get(saved.id), before);
+}));
+
+test("model upgrade requires both a supplied GLB and an existing matching scan", async () => withRoomStorage(async (adapter) => {
+  const source = modelSource();
+  await assert.rejects(importRoom(source, undefined, undefined, { replaceModel: true }), /choose a matching GLB/);
+  await assert.rejects(importRoom(source, await modelFixture(source), undefined, { replaceModel: true }), /not saved/);
+  assert.deepEqual([...adapter.stores.get("rooms").keys()], ["migration-sentinel"], "neither failure writes a new room");
+}));
+
+test("malformed baked lighting is rejected before replacing a verified room model", async () => withRoomStorage(async (adapter) => {
+  const source = modelSource(), saved = await importRoom(source, await modelFixture(source));
+  const before = structuredClone(adapter.stores.get("rooms").get(saved.id));
+  await assert.rejects(importRoom(source, await modelFixture(source, "wrong-profile", {}, { tadaimaIndirectLightmap: "untrusted-profile" }), undefined, { replaceModel: true }), /Unsupported baked room lighting profile/);
+  await assert.rejects(importRoom(source, await modelFixture(source, "wrong-scale", {}, { tadaimaIndirectLightmap: "cycles-diffuse-indirect-v1", tadaimaIndirectScale: -1 }), undefined, { replaceModel: true }), /invalid intensity scale/);
+  await assert.rejects(importRoom(source, await modelFixture(source, "missing-uv-and-texture", {}, { tadaimaIndirectLightmap: "cycles-diffuse-indirect-v1" }), undefined, { replaceModel: true }), /Baked room lighting needs/);
+  assert.deepEqual(adapter.stores.get("rooms").get(saved.id), before, "failed lighting validation leaves the saved room untouched");
+}));
+
+test("authenticated local bootstrap upgrades an existing model without losing source, edits, basket or revision", async () => withRoomStorage(async (adapter) => {
+  const previousFetch = globalThis.fetch, previousWindow = globalThis.window;
+  const source = modelSource(), token = "d".repeat(64);
+  let deliveredModel = await modelFixture(source), requiredWrites = 1, consumed = 0, storedToken = token;
+  const location = { hash: `#local-scan=${token}&keep=room`, pathname: "/rooms", search: "?view=walk" };
+  globalThis.window = { location, dispatchEvent() {},
+    sessionStorage: { getItem: () => storedToken, removeItem: () => { storedToken = null; } },
+    history: { replaceState(_state, _title, url) {
+      assert.ok(adapter.completedWrites >= requiredWrites, "the capability is consumed only after the room transaction completes");
+      consumed++; assert.equal(url, "/rooms?view=walk#keep=room"); location.hash = "#keep=room";
+    } },
+  };
+  globalThis.fetch = async (url) => url.endsWith("/scene") ? new Response(source) : new Response(deliveredModel);
+  try {
+    const first = await bootstrapLocalCapture();
+    assert.deepEqual(first.model, deliveredModel); assert.equal(consumed, 1); assert.equal(storedToken, null);
+    const shopping = prepareLocalShoppingPlan(first.editedPlan), spot = { position: [3, 0, 2.3] };
+    const offer = searchLocalProducts(shopping, { category: "chair", spot }).find(entry => entry.fits && entry.product.availability === "available");
+    assert.ok(offer);
+    const accepted = commitLocalProduct(shopping, offer.product.id, spot, shopping.revision);
+    assert.equal(accepted.ok, true); accepted.plan.items[0].stored = true; accepted.plan.items[0].locked = true;
+    await saveEditedPlan(first.id, accepted.plan);
+    const before = await getRoom(first.id);
+    deliveredModel = await modelFixture(source, "latest-hybrid-bake");
+    location.hash = `#local-scan=${token}&keep=room`; storedToken = token; requiredWrites = adapter.completedWrites + 1;
+    const upgraded = await bootstrapLocalCapture();
+    assert.deepEqual(upgraded, { ...before, model: deliveredModel });
+    assert.deepEqual(await getRoom(first.id), upgraded);
+    assert.equal(upgraded.editedPlan.items[1].productId, offer.product.id);
+    assert.equal(consumed, 2); assert.equal(storedToken, null); assert.equal(location.hash, "#keep=room");
+  } finally { globalThis.fetch = previousFetch; if (previousWindow === undefined) delete globalThis.window; else globalThis.window = previousWindow; }
+}));
+
+test("local bootstrap rejects a different model binding without replacing a saved room or consuming the capability", async () => withRoomStorage(async (adapter) => {
+  const previousFetch = globalThis.fetch, previousWindow = globalThis.window;
+  const source = modelSource(), token = "e".repeat(64);
+  const saved = await importRoom(source, await modelFixture(source));
+  const before = await getRoom(saved.id), beforeWrites = adapter.completedWrites;
+  const wrongModel = await modelFixture(source, "wrong-input", { inputSha256: "0".repeat(64) });
+  globalThis.window = { location: { hash: `#local-scan=${token}`, pathname: "/rooms", search: "" }, dispatchEvent() {},
+    sessionStorage: { getItem: () => token, removeItem: () => assert.fail("a failed update cannot consume the capability") },
+    history: { replaceState: () => assert.fail("a failed update cannot consume the URL capability") },
+  };
+  globalThis.fetch = async (url) => url.endsWith("/scene") ? new Response(source) : new Response(wrongModel);
+  try {
+    await assert.rejects(bootstrapLocalCapture(), /different scan or revision/);
+    assert.deepEqual(await getRoom(saved.id), before);
+    assert.equal(adapter.completedWrites, beforeWrites);
+    assert.equal(globalThis.window.location.hash, `#local-scan=${token}`);
+  } finally { globalThis.fetch = previousFetch; if (previousWindow === undefined) delete globalThis.window; else globalThis.window = previousWindow; }
+}));
 
 // Schema parsing / HTTP transport may reorder keys without changing source facts.
 test("server JSON key ordering does not invalidate immutable scan furniture", async () => {

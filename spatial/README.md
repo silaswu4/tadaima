@@ -203,10 +203,12 @@ Automated XR tests cover synthetic controller rays, tracking loss, teleport canc
 
 ### Indoor lighting in the main room flow
 
-The photo-informed scanned room at `/rooms/[roomId]` uses `indoor-lighting.ts`: a warm shadowed key, restrained HDR/hemisphere fill, an unshadowed bounce approximation and two broad desktop area fills. This recreates the Blender indoor rig's light balance in real time; it is not a Cycles render or baked lightmap. The original `.blend`, GLB materials and source binding remain unchanged. Raw photo-projected references keep their separate unlit rendering policy.
+The photo-informed scanned room at `/rooms/[roomId]` supports actual Cycles lightmaps as well as the `indoor-lighting.ts` runtime fallback. `baked-indirect.ts` restores a tagged secondary-UV atlas from the derived GLB's emissive transport into diffuse lighting. Full diffuse bakes replace runtime diffuse once, preserving live PBR specular/reflections and modest dynamic contact shadows. Moved/rotated/exploded pieces revert to runtime shading instead of carrying their original baked illumination. Original artifacts and source binding remain intact. See [Blender lighting workflow](../docs/blender-lighting.md) for baking, denoising and model upgrades.
 
 Desktop uses one 2048px PCF shadow map. Mobile and immersive VR use one 1024px map and hide the area fills; VR explicitly applies this budget even with a large viewport or fine pointer. XR framebuffer scale is 0.85 with foveation 0.6, configured before session entry. There are no point-light shadow cubes, screen-space effects or stereo postprocessing passes.
 
 `shadow-cache.ts` updates the depth map only when visible caster transforms, geometry or visibility change, or when the light/frustum is invalidated. Walking and head motion reuse it; furniture movement, placement, async model loading, storage, undo, cutaway changes and explode refresh it. Explode expands the shadow frustum to include the inventory and restores it on return. The cache is intended for this static-mesh room pipeline, not animated skeletal or morph-target assets.
 
 The spatial suite includes lighting-budget, XR profile restore, shadow-frustum and cache invalidation regressions. Physical Quest frame rate still needs device verification. API references: [Three.js shadow caching](https://threejs.org/docs/pages/LightShadow.html), [WebXR resolution and foveation](https://threejs.org/docs/pages/WebXRManager.html).
+
+Semantic `WindowGlass` panes use inexpensive alpha PBR with no transmission render pass. The glass is excluded from opaque lightmaps and depth/shadow writing; actual modeled blinds remain opaque. A transparent pane does not supply an exterior reconstruction: the current backdrop remains a presentation environment.

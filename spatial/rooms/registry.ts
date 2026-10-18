@@ -89,8 +89,8 @@ export function validateRoomModelBinding(raw: Record<string, unknown>, plan: Roo
 
 /** Preflight forbids remote assets; semantic checks inspect every loaded room entity and measured pose. */
 export async function validateRoomModel(model: ArrayBuffer, plan: RoomPlan, binding: CapturedRoomBinding): Promise<void> {
-  const [{ validateLocalTexturedGlb, bindTexturedRoom }, { GLTFLoader }] = await Promise.all([
-    import("../room/textured-model"), import("three/examples/jsm/loaders/GLTFLoader.js"),
+  const [{ validateLocalTexturedGlb, bindTexturedRoom }, { GLTFLoader }, { applyBakedIndirect }] = await Promise.all([
+    import("../room/textured-model"), import("three/examples/jsm/loaders/GLTFLoader.js"), import("../room/baked-indirect"),
   ]);
   validateRoomModelBinding(validateLocalTexturedGlb(model), plan, binding);
   const gltf = await new GLTFLoader().parseAsync(model, "");
@@ -105,7 +105,7 @@ export async function validateRoomModel(model: ArrayBuffer, plan: RoomPlan, bind
       for (const value of Object.values(material)) if (value && typeof value === "object" && "isTexture" in value && value.isTexture) textures.add(value as import("three").Texture);
     }
   });
-  try { bindTexturedRoom(gltf.scene, plan, binding); }
+  try { applyBakedIndirect(gltf.scene); bindTexturedRoom(gltf.scene, plan, binding); }
   finally {
     for (const geometry of geometries) geometry.dispose();
     for (const material of materials) material.dispose();
@@ -191,15 +191,25 @@ async function storedRoom(id: string): Promise<StoredRoom | null> {
   return record;
 }
 
-export async function importRoom(sourceJson: string, model?: ArrayBuffer, label?: string): Promise<RoomRecord> {
+export async function importRoom(sourceJson: string, model?: ArrayBuffer, label?: string, options: { replaceModel?: boolean } = {}): Promise<RoomRecord> {
+  if (options.replaceModel && model === undefined) fail("choose a matching GLB to update this scan’s model.");
   const { id, plan, binding } = await roomSourceIdentity(sourceJson);
   const title = (label?.trim() || plan.geometry.rooms[0].label).slice(0, 120);
   if (model !== undefined) await validateRoomModel(model, plan, binding);
   const db = await database();
   const transaction = db.transaction(STORE, "readwrite"), done = completed(transaction), store = transaction.objectStore(STORE);
   const previous = await requestValue(store.get(id)) as StoredRoom | undefined;
-  // Never overwrite accepted edits when the same private scan is opened from its local link again.
-  const record: StoredRoom = previous ? { ...previous, ...(model && !previous.modelBlob ? { modelBlob: new Blob([model], { type: "model/gltf-binary" }) } : {}) } : {
+  // A verified model upgrade changes only the asset, never the immutable scan or accepted shopping plan.
+  // The read and write share a transaction so a concurrent furniture save cannot be replaced by an older snapshot.
+  if (options.replaceModel && !previous) {
+    transaction.abort(); await done.catch(() => {});
+    return fail("this scan is not saved in this browser. Open it before updating its model.");
+  }
+  if (options.replaceModel && previous && (previous.sourceJson !== sourceJson || !jsonEqual(previous.sourcePlan, plan) || !jsonEqual(previous.binding, binding))) {
+    transaction.abort(); await done.catch(() => {});
+    return fail("the saved room no longer matches this verified scan. Its model was not updated.");
+  }
+  const record: StoredRoom = previous ? { ...previous, ...(model && (options.replaceModel || !previous.modelBlob) ? { modelBlob: new Blob([model], { type: "model/gltf-binary" }) } : {}) } : {
     version: 1, id, label: title, sourceJson, sourcePlan: clone(plan), binding,
     ...(model ? { modelBlob: new Blob([model], { type: "model/gltf-binary" }) } : {}), editedPlan: clone(plan), updatedAt: new Date().toISOString(),
   };
@@ -294,7 +304,12 @@ export async function importLocalCapture(token: string): Promise<RoomRecord> {
   const bodies = await Promise.all((["scene", "model"] as const).map(async (asset) => boundedResponse(await fetch(`/api/local-capture/${asset}`, {
     headers: { authorization: `Bearer ${token}` }, cache: "no-store", credentials: "same-origin", redirect: "error",
   }), asset === "scene" ? MAX_ROOM_IMPORT_BYTES : MAX_MODEL_BYTES)));
-  return importRoom(new TextDecoder("utf-8", { fatal: true }).decode(bodies[0]), bodies[1]);
+  const source = new TextDecoder("utf-8", { fatal: true }).decode(bodies[0]);
+  const { id } = await roomSourceIdentity(source);
+  // Opening an authenticated development preview explicitly requests its latest
+  // verified model. Read only its Blob handle; do not load the older GLB again.
+  const existing = await storedRoom(id);
+  return importRoom(source, bodies[1], undefined, { replaceModel: !!existing });
 }
 /** The temporary development capability is read once and never copied into a saved room or URL. */
 let pendingBootstrap: { token: string; promise: Promise<RoomRecord> } | undefined;

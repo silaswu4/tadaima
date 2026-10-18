@@ -11,6 +11,8 @@ import { RectAreaLightUniformsLib } from "three/addons/lights/RectAreaLightUnifo
 import { insideFloor, planWindowDaylight } from "./window-daylight";
 import { createFurnitureProxy, placeFurnitureModel } from "./furniture-model";
 import { bindCapturedRoom, bindTexturedRoom, validateLocalCapturedGlb, validateLocalTexturedGlb, type CapturedRoomBinding } from "./textured-model";
+import { applyBakedIndirect } from "./baked-indirect";
+import { prepareWindowGlass } from "./window-glass";
 
 import { createNavigationWorld, findNavigationSpawn, canNavigateAt, createFirstPersonNavigation } from "./navigation";
 import { createWorkspaceXR, type WorkspaceXRShopping } from "./workspace-xr";
@@ -499,7 +501,10 @@ export function createFurnitureWorkspace(
       validateLocalTexturedGlb(options.texturedModel);
       loaded = (await loader.parseAsync(options.texturedModel, "")).scene;
       if (disposed) { release(loaded); return; }
+      prepareWindowGlass(loaded);
+      applyBakedIndirect(loaded);
       const bound = bindTexturedRoom(loaded, plan, options.capturedBinding);
+      prepareWindowGlass(bound.shell);
       if (bound.representation === "photo_informed_parametric") applyIndoorLighting();
       release(shell); shell.clear();
       shell.add(bound.shell);
@@ -515,6 +520,7 @@ export function createFurnitureWorkspace(
             own.transparent = true; wall.materials.push(own); return own;
           });
           mesh.material = Array.isArray(mesh.material) ? materials : materials[0];
+          applyBakedIndirect(mesh);
         }
       }
       callbacks.onPhotoModel?.(true, undefined, bound.representation);
