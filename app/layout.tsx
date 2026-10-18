@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
-import { Geist_Mono, Instrument_Serif } from "next/font/google";
+import { Instrument_Serif } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 
 const serif = Instrument_Serif({
@@ -9,9 +10,11 @@ const serif = Instrument_Serif({
   style: ["normal", "italic"],
 });
 
-const mono = Geist_Mono({
+// paper mono, by paper.design (SIL OFL, see fonts/PaperMono-OFL.txt)
+const mono = localFont({
+  src: "./fonts/PaperMono.woff2",
   variable: "--font-mono",
-  subsets: ["latin"],
+  weight: "100 800",
 });
 
 export const metadata: Metadata = {
