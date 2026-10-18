@@ -69,6 +69,8 @@ PRICE_FET = float(os.getenv("SCOUT_PRICE_FET", "0.05"))
 DENOM = "atestfet"
 FREE_AGENTS = {a.strip() for a in os.getenv("SCOUT_FREE_AGENTS", "").split(",") if a.strip()}
 HUMAN_RUNS_PER_DAY = int(os.getenv("SCOUT_HUMAN_RUNS_PER_DAY", "5"))
+# results per store in chat; unset picks 3 or 4 by how many stores
+CHAT_LIMIT = int(os.getenv("SCOUT_CHAT_LIMIT", "0"))
 LEDGER_REST = os.getenv("SCOUT_LEDGER_REST", "https://rest-dorado.fetch.ai")
 PAY_DEADLINE_S = 5 * 60
 POLL_S = 8
@@ -242,7 +244,7 @@ PARSE_SYSTEM = """You turn a shopper's furniture request into a search for a liv
 PARSE_SCHEMA = {
     "type": "object",
     "properties": {
-        "category": {"type": ["string", "null"], "enum": [*CATEGORIES, None]},
+        "category": {"anyOf": [{"type": "string", "enum": CATEGORIES}, {"type": "null"}]},
         "query": {"type": "string"},
         "max_price_usd": {"type": ["number", "null"]},
         "max_width_m": {"type": ["number", "null"]},
@@ -377,7 +379,7 @@ async def handle_turn(ctx: Context, sender: str, m: ChatMessage):
         max_width_m=parsed.get("max_width_m"),
         max_depth_m=parsed.get("max_depth_m"),
         merchants=merchants,
-        limit=3 if len(merchants) > 2 else 4,
+        limit=CHAT_LIMIT or (3 if len(merchants) > 2 else 4),
         product_url=url,
     )
     ctx.storage.set(f"runs:{sender}:{today()}", runs_today(ctx, sender) + 1)
