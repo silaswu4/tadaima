@@ -55,7 +55,7 @@ export default function AddressLobby({ address, reduced, onExit }: { address: st
           q(".lobby-head > *, .lobby-plan, .lobby-skip"),
           { y: 22, autoAlpha: 0 },
           { y: 0, autoAlpha: 1, duration: 0.9, ease: "power3.out", stagger: 0.08 },
-          0.55,
+          0.7,
         );
     }, el);
     return () => ctx.revert();
@@ -121,7 +121,12 @@ export default function AddressLobby({ address, reduced, onExit }: { address: st
       if (!sc || !last) return;
       // on a phone the plan sits pinned at the top, so the newest node lands just under it
       const pinned = sc.querySelector<HTMLElement>(".lobby-plan");
-      const offset = window.matchMedia("(max-width: 959px)").matches && pinned ? pinned.offsetHeight + 24 : sc.clientHeight * 0.3;
+      const phone = window.matchMedia("(max-width: 959px)").matches && pinned;
+      // nothing to do while the newest node already sits in full view
+      const box = last.getBoundingClientRect();
+      const viewTop = phone ? pinned.getBoundingClientRect().bottom : 0;
+      if (box.top >= viewTop + 8 && box.bottom <= window.innerHeight - 72) return;
+      const offset = phone ? pinned.offsetHeight + 24 : sc.clientHeight * 0.3;
       const target = Math.max(0, last.getBoundingClientRect().top - sc.getBoundingClientRect().top + sc.scrollTop - offset);
       const dist = Math.abs(target - sc.scrollTop);
       if (dist < 4) return;
