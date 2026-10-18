@@ -272,16 +272,16 @@
   padding: 0;
 }
 
-/* same turn as the rooms header: one full spin, landing upright */
+/* same lift as the rooms header */
 .room-x__mark {
   width: 22px;
   height: 22px;
-  transition: transform 0.9s var(--ease);
+  transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .room-x__home:hover .room-x__mark,
 .room-x__home:focus-visible .room-x__mark {
-  transform: rotate(360deg) scale(1.08);
+  transform: translateY(-1px) scale(1.1);
 }
 
 @media (prefers-reduced-motion: reduce) {

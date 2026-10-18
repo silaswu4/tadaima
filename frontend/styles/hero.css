@@ -192,7 +192,7 @@
 }
 .tadaima-hero.is-day .hero-choices { opacity: 1; pointer-events: auto; }
 
-/* logo, top left beside the cord. one full turn on hover, landing upright */
+/* logo, top left beside the cord. lifts a touch on hover */
 .tadaima-hero .hero-mark {
   position: absolute;
   top: 28px;
@@ -206,10 +206,10 @@
   display: block;
   width: 34px;
   height: 34px;
-  transition: transform 0.9s cubic-bezier(0.76, 0, 0.24, 1);
+  transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1);
 }
 .tadaima-hero .hero-mark:hover img,
-.tadaima-hero .hero-mark:focus-visible img { transform: translateY(-2px) rotate(360deg) scale(1.08); }
+.tadaima-hero .hero-mark:focus-visible img { transform: translateY(-2px) scale(1.08); }
 .tadaima-hero .hero-mark:focus-visible { outline: 2px solid var(--hero-fg); outline-offset: 4px; border-radius: 8px; }
 .tadaima-hero .hero-choice { display: flex; flex-direction: column; gap: 18px; width: min(340px, 100%); }
 .tadaima-hero .hero-tile {
