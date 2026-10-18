@@ -239,6 +239,16 @@ export default function Home() {
       </DappledLight>
 
       {/* outside the light's own layer so it can blend with it */}
+      {/* outer-only outline: grow the solid shape by a pixel and keep just the ring,
+          so overlapping strokes inside letters and the mark's panels never show */}
+      <svg className="hero-defs" aria-hidden="true" focusable="false">
+        <filter id="hero-word-outline" x="-2%" y="-2%" width="104%" height="104%">
+          <feMorphology in="SourceAlpha" operator="dilate" radius="1" result="grown" />
+          <feComposite in="grown" in2="SourceAlpha" operator="out" result="ring" />
+          <feFlood floodColor="#f6ebd9" floodOpacity="0.75" />
+          <feComposite in2="ring" operator="in" />
+        </filter>
+      </svg>
       <h1 className="hero-word" aria-label="tadaima">
         {(["fill", "edge"] as const).map((layer) => (
           <span key={layer} className={`hero-word__line hero-word__${layer}`} aria-hidden="true">

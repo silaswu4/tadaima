@@ -135,7 +135,8 @@
   white-space: nowrap;
   pointer-events: none;
 }
-.tadaima-hero .hero-word__line { display: block; overflow: hidden; padding-top: 0.04em; }
+/* the right padding keeps the last letter's edge from being clipped by the tight tracking */
+.tadaima-hero .hero-word__line { display: block; overflow: hidden; padding: 0.04em 0.08em 0 0; }
 /* two copies of the word: a fill blended into the room, so the letters glow where the
    window light lands and the leaf shadows pass through them, and a thin outline on top */
 .tadaima-hero .hero-word__fill { mix-blend-mode: overlay; will-change: transform; }
@@ -145,10 +146,11 @@
 .tadaima-hero .hero-word__edge {
   position: absolute;
   inset: 0;
-  color: transparent;
-  -webkit-text-stroke: 1px rgba(246, 235, 217, 0.7);
+  color: #000;
+  filter: url(#hero-word-outline);
 }
-.tadaima-hero .hero-word__edge .hero-word__mark { background: rgba(246, 235, 217, 0.28); }
+.tadaima-hero .hero-word__edge .hero-word__mark { background: #000; }
+.tadaima-hero .hero-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
 .tadaima-hero .hero-word__char { display: inline-block; }
 /* a little under the ascender height, sat on the baseline, tucked close to the word */
 .tadaima-hero .hero-word__mark {
