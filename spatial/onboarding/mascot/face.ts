@@ -145,13 +145,15 @@ export function projectEyes(g: Gaze, r: number, split: number): [Projected, Proj
 /* ---------- face markup (source: lib/face.ts) ---------- */
 
 const INK = "#1d140d";
+// the head is ink, so the mouth is drawn in cream to read against it
+const CREAM = "#fbf3e6";
 
 const MOUTHS: Record<Mouth, string> = {
-  smile: `<path d="M-.2 0Q0 .16 .2 0" fill="none" stroke="${INK}" stroke-width=".07" stroke-linecap="round"/>`,
-  grin: `<path d="M-.24-.02Q0 .26 .24-.02Z" fill="${INK}" stroke="${INK}" stroke-width=".04" stroke-linejoin="round"/>`,
-  laugh: `<path d="M-.26-.03Q0 .36 .26-.03Z" fill="${INK}" stroke="${INK}" stroke-width=".04" stroke-linejoin="round"/><path d="M-.11 .14Q0 .07 .11 .14Q0 .2-.11 .14Z" fill="#f07a8a"/>`,
-  o: `<ellipse cx="0" cy=".05" rx=".07" ry=".085" fill="${INK}"/>`,
-  flat: `<path d="M-.15 .04H.15" fill="none" stroke="${INK}" stroke-width=".07" stroke-linecap="round"/>`,
+  smile: `<path d="M-.2 0Q0 .16 .2 0" fill="none" stroke="${CREAM}" stroke-width=".07" stroke-linecap="round"/>`,
+  grin: `<path d="M-.24-.02Q0 .26 .24-.02Z" fill="${CREAM}" stroke="${CREAM}" stroke-width=".04" stroke-linejoin="round"/>`,
+  laugh: `<path d="M-.26-.03Q0 .36 .26-.03Z" fill="${CREAM}" stroke="${CREAM}" stroke-width=".04" stroke-linejoin="round"/><path d="M-.11 .14Q0 .07 .11 .14Q0 .2-.11 .14Z" fill="#f07a8a"/>`,
+  o: `<ellipse cx="0" cy=".05" rx=".07" ry=".085" fill="${CREAM}"/>`,
+  flat: `<path d="M-.15 .04H.15" fill="none" stroke="${CREAM}" stroke-width=".07" stroke-linecap="round"/>`,
 };
 
 /**
@@ -178,8 +180,9 @@ export function faceMarkup(x: Expression, o: { r: number; blink: number; ox: num
     const ey = p.y + o.oy;
     const alpha = clamp(p.depth / 0.12);
     placed.push({ x: ex, y: ey, alpha });
-    const w = shape.w * o.r;
-    const h = shape.h * o.r;
+    // eyes a touch bigger than the source: the tour mascot is drawn small
+    const w = shape.w * o.r * 1.22;
+    const h = shape.h * o.r * 1.22;
     const rx = Math.max(w / 2, h * 0.4);
     const ry = (h / 2) * 0.92;
     // pupils drift toward where the eye sits on the head, which is where it looks
@@ -215,7 +218,7 @@ export function faceMarkup(x: Expression, o: { r: number; blink: number; ox: num
       for (const [k, p] of [l, r].entries()) {
         const bx = p.x - uy * 0.36 + (k ? 1 : -1) * ux * 0.08;
         const by = p.y + ux * 0.36 + (k ? 1 : -1) * uy * 0.08;
-        s += `<ellipse cx="${r2(bx)}" cy="${r2(by)}" rx="${r2(D * 0.16)}" ry="${r2(D * 0.09)}" transform="rotate(${angle} ${r2(bx)} ${r2(by)})" fill="#ff7d93" opacity="${r2(alpha * 0.4)}"/>`;
+        s += `<ellipse cx="${r2(bx)}" cy="${r2(by)}" rx="${r2(D * 0.16)}" ry="${r2(D * 0.09)}" transform="rotate(${angle} ${r2(bx)} ${r2(by)})" fill="#ff8fa3" opacity="${r2(alpha * 0.55)}"/>`;
       }
       const mx = (l.x + r.x) / 2 - uy * 0.62;
       const my = (l.y + r.y) / 2 + ux * 0.62;

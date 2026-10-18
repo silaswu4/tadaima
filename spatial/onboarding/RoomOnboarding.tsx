@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Mascot, type MascotHandle, type MascotMotion } from "./mascot/Mascot";
 import { Spring } from "./spring";
-import { availableSteps, findTarget, visibleRect, type TourStep, type TourVariant } from "./steps";
+import { STEPS, availableSteps, findTarget, visibleRect, type TourStep, type TourVariant } from "./steps";
 import "./RoomOnboarding.css";
 
 export const ONBOARDED_KEY = "tadaima:onboarded:v1";
@@ -217,7 +217,7 @@ const isMac = () => typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(n
 function TourOverlay({ vr, touch, onDone }: { vr: boolean; touch?: boolean; onDone: (finished: boolean) => void }) {
   const reduced = useReducedMotion();
   const [variant] = useState<TourVariant>(() => (vr ? "vr" : (touch ?? window.matchMedia("(pointer: coarse)").matches) ? "touch" : "web"));
-  const [steps] = useState<TourStep[]>(() => availableSteps(variant));
+  const [steps, setSteps] = useState<TourStep[]>(() => availableSteps(variant));
   const [mac] = useState(isMac);
   const [index, setIndex] = useState(0);
   const [landed, setLanded] = useState(-1);
@@ -236,7 +236,7 @@ function TourOverlay({ vr, touch, onDone }: { vr: boolean; touch?: boolean; onDo
   const motion = useRef<MascotMotion>({ vx: 0, vy: 0 });
   const aim = useRef<Point | null>(null);
   const [narrowMascot] = useState(() => window.innerWidth < 600);
-  const M = narrowMascot ? 78 : 96;
+  const M = narrowMascot ? 88 : 112;
 
   const step = steps[Math.min(index, steps.length - 1)];
   const last = index >= steps.length - 1;
@@ -258,13 +258,22 @@ function TourOverlay({ vr, touch, onDone }: { vr: boolean; touch?: boolean; onDo
 
   const go = useCallback(
     (dir: 1 | -1) => {
-      let n = index + dir;
-      // a control can vanish mid tour (the inventory empties); skip past it
-      while (n >= 0 && n < steps.length && steps[n].optional && !visibleRect(findTarget(steps[n].target))) n += dir;
-      if (n >= steps.length) finish(true);
-      else if (n >= 0) setIndex(n);
+      // controls come and go (push to talk loads late, the inventory empties), so look again
+      const all = STEPS[variant];
+      const here = all.findIndex((s) => s.id === steps[index]?.id);
+      let n = here + dir;
+      while (n >= 0 && n < all.length && all[n].optional && !visibleRect(findTarget(all[n].target))) n += dir;
+      if (n >= all.length) {
+        finish(true);
+        return;
+      }
+      if (n < 0) return;
+      // all[n] is required or on screen, so it is always in this list
+      const next = availableSteps(variant);
+      setSteps(next);
+      setIndex(next.indexOf(all[n]));
     },
-    [index, steps, finish],
+    [index, steps, variant, finish],
   );
 
   /* --- keys: Esc skips, arrows and Enter step through, everything else stays out of the room --- */
@@ -333,7 +342,7 @@ function TourOverlay({ vr, touch, onDone }: { vr: boolean; touch?: boolean; onDo
 
     const tick = (ts: number) => {
       raf = requestAnimationFrame(tick);
-      const dt = lastTs ? Math.min((ts - lastTs) / 1000, 0.064) : 1 / 60;
+      const dt = lastTs ? Math.min((ts - lastTs) / 1000, 0.1) : 1 / 60;
       lastTs = ts;
       clock += dt;
       const { index: i, steps: list, reduced: still, M: size } = live.current;
@@ -515,14 +524,14 @@ function TourOverlay({ vr, touch, onDone }: { vr: boolean; touch?: boolean; onDo
           <p id={bodyId} className="room-tour__body">
             {step.body}
           </p>
-          {keys?.length ? (
-            <div className="room-tour__keys" aria-label="Keys">
-              {keys.map((k) => (
-                <kbd key={k}>{k}</kbd>
-              ))}
-            </div>
-          ) : null}
           <div className="room-tour__foot">
+            {keys?.length ? (
+              <div className="room-tour__keys" aria-label="Keys">
+                {keys.map((k) => (
+                  <kbd key={k}>{k}</kbd>
+                ))}
+              </div>
+            ) : null}
             <div className="room-tour__nav">
               {index > 0 ? (
                 <button type="button" className="room-tour__back" onClick={() => go(-1)}>

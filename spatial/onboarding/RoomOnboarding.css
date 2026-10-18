@@ -187,7 +187,7 @@ html[data-room-tour] .room-x__hint {
   display: flex;
   flex-wrap: wrap;
   gap: 5px;
-  margin-top: 10px;
+  margin-right: auto;
 }
 
 .room-tour .room-tour__keys kbd {
@@ -210,12 +210,16 @@ html[data-room-tour] .room-x__hint {
 
 .room-tour__foot {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   justify-content: flex-end;
+  gap: 10px 8px;
   margin-top: 12px;
 }
 
 .room-tour__nav {
   display: flex;
+  margin-left: auto;
   align-items: center;
   gap: 6px;
 }
@@ -252,9 +256,10 @@ html[data-room-tour] .room-x__hint {
   transform: scale(0.96);
 }
 
-.room-tour :focus-visible {
+.room-tour .room-tour__card :focus-visible {
   outline: 2px solid #f0b429;
   outline-offset: 2px;
+  box-shadow: none;
 }
 
 /* ---------- help button (place it in the top bar) ---------- */

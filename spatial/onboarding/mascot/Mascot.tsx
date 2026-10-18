@@ -73,8 +73,8 @@ export const Mascot = forwardRef<MascotHandle, Props>(function Mascot({ gesture,
       hop: new Spring(0, { stiffness: 220, ratio: 0.42 }),
       lean: new Spring(0, { stiffness: 120, ratio: 0.8 }),
       antenna: new Spring(0, { stiffness: 110, ratio: 0.2 }),
-      armL: new Spring(22, { stiffness: 150, ratio: 0.45 }),
-      armR: new Spring(-22, { stiffness: 150, ratio: 0.45 }),
+      armL: new Spring(52, { stiffness: 150, ratio: 0.45 }),
+      armR: new Spring(-52, { stiffness: 150, ratio: 0.45 }),
       lookX: new Spring(0, { stiffness: 90, ratio: 1 }),
       lookY: new Spring(0, { stiffness: 90, ratio: 1 }),
       dots: new Spring(0, { stiffness: 120, ratio: 1 }),
@@ -106,7 +106,7 @@ export const Mascot = forwardRef<MascotHandle, Props>(function Mascot({ gesture,
 
     const tick = (ts: number) => {
       raf = requestAnimationFrame(tick);
-      const dt = last ? Math.min((ts - last) / 1000, 0.064) : 0;
+      const dt = last ? Math.min((ts - last) / 1000, 0.1) : 0;
       last = ts;
       clock += dt;
       const { gesture: g, reducedMotion: still, motion: m } = live.current;
@@ -138,8 +138,8 @@ export const Mascot = forwardRef<MascotHandle, Props>(function Mascot({ gesture,
       const flyTilt = clamp(vx / 1500, -0.38, 0.38);
 
       /* --- gesture targets --- */
-      let armL = 22;
-      let armR = -22;
+      let armL = 52;
+      let armR = -52;
       let lean = 0;
       let tilt = flyTilt;
       let lookX = 0;
@@ -152,7 +152,7 @@ export const Mascot = forwardRef<MascotHandle, Props>(function Mascot({ gesture,
       } else if (g === "wave") {
         const waving = age < 2.2 ? 1 : 0.35;
         armR = -150 + Math.sin(age * 11) * 30 * waving * calm;
-        armL = 18;
+        armL = 46;
         tilt += Math.sin(age * 11) * 0.04 * waving * calm - 0.05;
         lookX = -0.2;
       } else if (g === "point" && aim) {
@@ -177,8 +177,8 @@ export const Mascot = forwardRef<MascotHandle, Props>(function Mascot({ gesture,
           nextHop = clock + 0.62;
         }
       } else if (g === "think") {
-        armR = -28;
-        armL = 30;
+        armR = -60;
+        armL = 58;
         tilt += -0.08;
         lookX = 0.45;
         lookY = -0.6;
@@ -285,7 +285,14 @@ export const Mascot = forwardRef<MascotHandle, Props>(function Mascot({ gesture,
   }, [uid]);
 
   return (
-    <svg className={className} width={size} height={size} viewBox="-100 -100 200 200" aria-hidden="true" focusable="false" overflow="visible">
+    <svg className={className} width={size} height={size} viewBox="-80 -80 160 160" aria-hidden="true" focusable="false" overflow="visible">
+      <defs>
+        <radialGradient id={`${uid}-sheen`} cx="0.34" cy="0.26" r="0.75">
+          <stop offset="0" stopColor="#fff" stopOpacity={0.16} />
+          <stop offset="0.55" stopColor="#fff" stopOpacity={0.03} />
+          <stop offset="1" stopColor="#000" stopOpacity={0.18} />
+        </radialGradient>
+      </defs>
       <g ref={confettiRef} />
       <g ref={rootRef}>
         {/* antenna and arms sit behind the head */}
@@ -295,12 +302,14 @@ export const Mascot = forwardRef<MascotHandle, Props>(function Mascot({ gesture,
           <circle cx={-2.6} cy={-2.8} r={2.4} fill="#fff" opacity={0.75} />
         </g>
         <g ref={armLRef}>
-          <rect x={-7} y={-6} width={14} height={36} rx={7} fill={INK} />
+          <rect x={-7} y={-6} width={14} height={32} rx={7} fill={INK} />
         </g>
         <g ref={armRRef}>
-          <rect x={-7} y={-6} width={14} height={36} rx={7} fill={INK} />
+          <rect x={-7} y={-6} width={14} height={32} rx={7} fill={INK} />
         </g>
         <circle cx={0} cy={CY} r={R} fill={INK} />
+        {/* soft sheen so the head reads as round */}
+        <circle cx={0} cy={CY} r={R} fill={`url(#${uid}-sheen)`} />
         <g ref={faceRef} />
         <g ref={dotsRef} opacity={0}>
           <circle cx={44} cy={-44} r={0} fill={INK} />
