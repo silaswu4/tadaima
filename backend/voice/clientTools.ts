@@ -143,7 +143,8 @@ export function voiceClientTools(opts: {
         const p = await post<PlanProposal>(`${base}/proposals`, { intent: request, selectedItemId: opts.getSelectedItemId() });
         proposals.set(p.id, p);
         opts.onProposal?.(p);
-        const failed = p.validations.filter((v) => v.status === "fail");
+        // only what this proposal would break; a check already failing in the room isn't its fault
+        const failed = p.blocking ?? p.validations.filter((v) => v.status === "fail");
         const diff = p.costBefore.knownSubtotal.amountMinor - p.costAfter.knownSubtotal.amountMinor;
         if (p.changes.length === 0) return `No change proposed. ${p.summary}`;
         return `Proposal ${p.id}. ${p.summary} ${
