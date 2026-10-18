@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import * as THREE from "three";
-import { checkWorkspaceXRSupport, createWorkspaceXR, snapTurnXR, teleportXR } from "../room/workspace-xr.ts";
+import { checkWorkspaceXRSupport, createWorkspaceXR, readXRThumbstick, snapTurnXR, teleportXR, walkXR } from "../room/workspace-xr.ts";
 
 const drawnText = [];
 const canvasContext = { clearRect() {}, fillRect() {}, fillText(text) { drawnText.push(text); }, measureText(text) { return { width: text.length * 15 }; } };
@@ -49,6 +49,7 @@ function environment({ failSetSession = false } = {}) {
   scene.add(floor);
   const plan = { geometry: { rooms: [{ floorPolygon: [[-5, -5], [5, -5], [5, 5], [-5, 5]] }] } };
   const options = {
+    locomotion: "teleport",
     renderer: { xr: xrManager }, scene, camera, getPlan: () => plan,
     getFloorMeshes: () => [floor], getItemRoots: () => [],
     getSpawnPoint: () => new THREE.Vector3(1, 0, 2), isFloorSpotValid: (p) => Math.abs(p.x) < 4 && Math.abs(p.z) < 4,
@@ -386,7 +387,7 @@ test("HUD bounds large result sets and text, suppresses unbound confirmation, an
     selectedItemLabel: "selected".repeat(1000), status: "status".repeat(1000), pendingOfferId: "missing-sku", canConfirm: true };
   drawnText.length = 0; xr.setShoppingState(state);
   const hud = env.options.scene.getObjectByName("workspace-xr-shopping");
-  assert.equal(hud.children.length, 4); // header plus three offers, no confirm
+  assert.equal(hud.children.length, 6); // header, three offers, movement + exit; no confirm
   assert.ok(drawnText.every((text) => text.length <= 300));
   const firstCard = hud.children[1]; xr.setShoppingState(state);
   assert.equal(hud.children[1], firstCard); // no new textures for identical state
@@ -395,7 +396,7 @@ test("HUD bounds large result sets and text, suppresses unbound confirmation, an
   const geometries = hud.children.map((child) => child.geometry);
   let disposedGeometries = 0; geometries.forEach((geometry) => geometry.addEventListener("dispose", () => disposedGeometries++));
   xr.setShoppingState({ offers: [], canConfirm: true });
-  assert.equal(disposedGeometries, 4); assert.equal(hud.children.length, 2);
+  assert.equal(disposedGeometries, 6); assert.equal(hud.children.length, 4);
   xr.dispose();
 });
 
@@ -406,7 +407,7 @@ test("a valid desktop-selected offer beyond the first three remains visible and 
   xr.setShoppingState({ offers: Array.from({ length: 6 }, (_, i) => ({ id: `sku-${i}`, label: `Chair ${i}` })), pendingOfferId: "sku-5", canConfirm: true });
   await xr.enter(); xr.update();
   const hud = env.options.scene.getObjectByName("workspace-xr-shopping");
-  assert.equal(hud.children.length, 5);
+  assert.equal(hud.children.length, 7);
   pointControllerAt(env.controllers[1], hud.children[3], env.options.scene);
   assert.deepEqual(previews, ["sku-5"]); assert.deepEqual(confirms, []);
   pointControllerAt(env.controllers[1], hud.children[4], env.options.scene);
@@ -438,4 +439,87 @@ test("browser support failure is explained and permission denial leaves the view
   assert.ok(env.options.camera.position.equals(env.original.position));
   assert.deepEqual(errors, ["Immersive permission denied"]);
   assert.deepEqual(env.changes, []); xr.dispose();
+});
+
+test("Quest thumbstick reads xr-standard axes, removes drift, caps diagonals and refuses nonfinite input", () => {
+  assert.deepEqual(readXRThumbstick([0, 0, 0, -1]), { right: 0, forward: 1 });
+  assert.deepEqual(readXRThumbstick([1, 0]), { right: 1, forward: -0 });
+  assert.deepEqual(readXRThumbstick([0, 0, .1, -.1]), { right: 0, forward: 0 });
+  const diagonal = readXRThumbstick([0, 0, 1, -1]);
+  assert.ok(Math.abs(Math.hypot(diagonal.right, diagonal.forward) - 1) < 1e-10);
+  assert.equal(readXRThumbstick([0, 0, NaN, -1]), null);
+  assert.equal(readXRThumbstick([0]), null);
+});
+
+test("default locomotion walks immediately with the left stick, relative to the head, preserving tracked height", async () => {
+  const env = environment(); delete env.options.locomotion;
+  const xr = createWorkspaceXR(env.options); await xr.enter(); xr.update();
+  const source = { handedness: "left", gamepad: { axes: [0, 0, 0, -1] } };
+  env.controllers[0].dispatchEvent({ type: "connected", data: source });
+  const before = env.head.position.clone(); xr.update(.05);
+  assert.ok(env.head.position.z < before.z - .05);
+  assert.equal(env.head.position.y, before.y);
+  env.head.quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 2);
+  const turned = env.head.position.clone(); xr.update(.05);
+  assert.ok(env.head.position.x < turned.x - .05);
+  assert.ok(Math.abs(env.head.position.z - turned.z) < 1e-10);
+  const rig = env.options.scene.getObjectByName("workspace-xr-rig");
+  assert.equal(rig.position.y, 0); assert.deepEqual(rig.scale.toArray(), [1, 1, 1]);
+  source.gamepad.axes[3] = NaN; const stopped = env.head.position.clone(); xr.update(.05);
+  assert.ok(env.head.position.equals(stopped)); xr.dispose();
+});
+
+test("walking clamps long frames, slides against blocked floor, and delegates swept collision to the shared solver", () => {
+  const rig = new THREE.Group(), head = new THREE.Vector3(0, 1.72, 0), orientation = new THREE.Quaternion();
+  walkXR(rig, head, orientation, { forward: 1, right: 0 }, 50, () => true);
+  assert.ok(Math.abs(rig.position.z + .065) < 1e-10);
+  rig.position.set(0, 0, 0);
+  walkXR(rig, head, orientation, { forward: 1, right: 1 }, .05, (point) => point.z >= -.01);
+  assert.ok(rig.position.x > 0); assert.equal(rig.position.z, 0);
+  let called = false;
+  walkXR(rig, head, orientation, { forward: 1, right: 0 }, 1, () => true, (position, input, dt) => {
+    called = true; assert.ok(dt <= .05); assert.equal(input.forward, 1); assert.equal(Math.abs(input.yaw), 0);
+    return position.clone().add(new THREE.Vector3(.01, 99, -.02));
+  });
+  assert.ok(called); assert.equal(rig.position.y, 0);
+});
+
+test("walking pauses for browser UI and requires a neutral stick before moving again", async () => {
+  const env = environment(); delete env.options.locomotion;
+  const xr = createWorkspaceXR(env.options); await xr.enter(); xr.update();
+  const source = { handedness: "left", gamepad: { axes: [0, 0, 0, -1] } };
+  env.controllers[0].dispatchEvent({ type: "connected", data: source }); xr.update(.05);
+  const before = env.head.position.clone(); env.getSession().visibilityState = "visible-blurred"; xr.update(.05);
+  env.getSession().visibilityState = "visible"; xr.update(.05);
+  assert.ok(env.head.position.equals(before));
+  source.gamepad.axes[3] = 0; xr.update(.05); source.gamepad.axes[3] = -1; xr.update(.05);
+  assert.ok(env.head.position.z < before.z); xr.dispose();
+});
+
+test("walking and snap-turning in the same frame rotate around the moved head without lateral drift", async () => {
+  const env = environment(); delete env.options.locomotion;
+  const xr = createWorkspaceXR(env.options); await xr.enter(); xr.update();
+  env.controllers[0].dispatchEvent({ type: "connected", data: { handedness: "left", gamepad: { axes: [0, 0, 0, -1] } } });
+  env.controllers[1].dispatchEvent({ type: "connected", data: { handedness: "right", gamepad: { axes: [0, 0, 1, 0] } } });
+  const before = env.head.position.clone(); xr.update(.05);
+  assert.ok(Math.abs(env.head.position.x - before.x) < 1e-10);
+  assert.ok(Math.abs(env.head.position.z - (before.z - .065)) < 1e-10);
+  assert.equal(env.head.position.y, before.y); xr.dispose();
+});
+
+test("headset actions are bounded, disabled buttons block click-through, and movement/exit remain available", async () => {
+  const env = environment(); const actions = []; env.options.onAction = (id) => actions.push(id);
+  const xr = createWorkspaceXR(env.options);
+  xr.setShoppingState({ offers: [], actions: Array.from({ length: 1000 }, (_, i) => ({ id: `action-${i}`, label: "Search chairs", disabled: i === 1 })) });
+  await xr.enter(); xr.update();
+  const hud = env.options.scene.getObjectByName("workspace-xr-shopping");
+  assert.equal(hud.children.length, 10); // header + placeholder + six actions + two built-ins
+  pointControllerAt(env.controllers[1], hud.children[2], env.options.scene);
+  assert.deepEqual(actions, ["action-0"]);
+  pointControllerAt(env.controllers[1], hud.children[3], env.options.scene);
+  assert.deepEqual(actions, ["action-0"]); assert.equal(env.floorSelections.length, 0);
+  pointControllerAt(env.controllers[1], hud.children[8], env.options.scene);
+  assert.ok(drawnText.some((text) => text === "Use teleport"));
+  pointControllerAt(env.controllers[1], hud.children[9], env.options.scene);
+  await Promise.resolve(); assert.equal(xr.active, false); xr.dispose();
 });

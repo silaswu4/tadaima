@@ -8,6 +8,7 @@ import { placeAt } from "../../backend/shopping/placement";
 import { evaluate } from "../../backend/shopping/spot";
 import { useRoomShopping } from "../rooms/use-room-shopping";
 import { useRoomFetch } from "../rooms/use-room-fetch";
+import { roomXRActions, roomXRSearch } from "../rooms/xr-actions";
 import type { WalkCallbacks, WalkEnvironment, WalkItem, WalkMode, WalkOptions, WalkScene } from "../room/walk-api";
 import mark from "../assets/tadaima-mark.png";
 import { WipeLink, useWipeHold } from "./PageWipe";
@@ -171,6 +172,8 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
   useLayoutEffect(() => { saveRef.current = onPlanChange; }, [onPlanChange]);
   const previewRef = useRef<(product: ProductCandidate) => void>(() => {});
   const confirmRef = useRef<() => void>(() => {});
+  const xrActionRef = useRef<(id: string) => void>(() => {});
+  const xrActionPending = useRef(false);
   const [panel, setPanel] = useState<Panel>(null);
   const [agentProposal, setAgentProposal] = useState<PlanProposal | null>(null);
   const [swapTarget, setSwapTarget] = useState<WalkItem | null>(null);
@@ -314,6 +317,7 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
       onShoppingFloor(spot) { if (!cancelled) { setFloorSpot(spot); setNotice("Shopping spot selected. Checking pieces that fit here."); searchRef.current(spot, false); } },
       onPreviewOffer(id) { const product = resultsRef.current.find((result) => result.product.id === id)?.product; if (product) previewRef.current(product); },
       onConfirmOffer() { confirmRef.current(); },
+      onXRAction(id) { if (!cancelled) xrActionRef.current(id); },
       onXRChange(value) { if (!cancelled) setPresenting(value); },
       onSelect(selection) {
         if (cancelled) return;
@@ -568,6 +572,35 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
   );
   const inventory = useMemo(() => items.filter((i) => i.stored), [items]);
   const basketTotal = formatTotals(basket);
+  const xrActions = useMemo(() => roomXRActions({ connected: Boolean(shopping.session), busy: blocked, pending: Boolean(pending), moving, selected }), [shopping.session, blocked, pending, moving, selected]);
+  useLayoutEffect(() => {
+    xrActionRef.current = (id) => {
+      if (xrActionPending.current || !xrActions.some((action) => action.id === id && !action.disabled)) return;
+      if (id === "cancel-preview") { cancelProduct(); setNotice("Preview cancelled. Nothing was added."); return; }
+      const request = roomXRSearch(id, merchant);
+      xrActionPending.current = true;
+      void (async () => {
+        if (request) {
+          setNotice(`Finding ${CATEGORY_LABEL[request.category].toLowerCase()} that fit your floor spot…`);
+          await assistantSearch(request);
+          setNotice(null);
+        } else if (selected && !selected.locked && !selected.stored) {
+          // Use the same server-owned queue as the room assistant. The service
+          // rechecks locks, geometry and the current canonical room before saving.
+          if (id === "rotate-selected") {
+            const item = shopping.session?.plan.items.find((entry) => entry.id === selected.id && !entry.stored);
+            if (!item) throw new Error("Select a piece that is still in this room.");
+            await shopping.moveAgentItem(item.id, { roomId: item.roomId, position: [...item.position], rotationY: item.rotationY + ROTATE_STEP });
+            setNotice(`Rotated ${item.label}; position checked to fit this room.`);
+          } else if (id === "store-selected") {
+            await shopping.storeAgentItem(selected.id);
+            setNotice(`Put away ${selected.label}. It is kept in your inventory.`);
+          }
+        }
+      })().catch((cause) => setNotice(cause instanceof Error ? cause.message : "That headset action could not be completed."))
+        .finally(() => { xrActionPending.current = false; });
+    };
+  });
 
   const exportBasket = () => {
     const url = URL.createObjectURL(new Blob([JSON.stringify({ roomId: room.id, room: room.label, previewOnly: true,
@@ -619,9 +652,10 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
     walkRef.current?.setXRShopping({
       offers: results.filter((entry) => entry.fits).slice(0, 3).map(({ product: p, source }) => ({ id: p.id, label: p.label, detail: p.price ? `${formatMoney(p.price.amountMinor, p.price.currency)} · ${p.merchant} · ${source === "live" ? "live search" : "catalog"}` : p.merchant })),
       selectedItemLabel: selected?.label, pendingOfferId: pending?.id, canConfirm: Boolean(pending) && !blocked,
-      status: blocked ? "Saving with room service…" : notice ?? shopping.job?.stage ?? "Search on the page, then preview and confirm furniture here. Trigger selects a spot; left stick teleports.",
+      actions: xrActions,
+      status: `Basket ${basket.length} · ${basketTotal}. ${blocked ? "Working with room service…" : notice ?? shopping.job?.stage ?? "Find furniture here, preview, then confirm placement. Left stick walks; right stick turns."}`,
     });
-  }, [status, results, selected, pending, notice, blocked, shopping.job]);
+  }, [status, results, selected, pending, notice, blocked, shopping.job, shopping.session, moving, basket.length, basketTotal, xrActions]);
 
   const ready = status === "ready";
   const showHint = ready && mode === "walk" && !hintSeen && !panel;
