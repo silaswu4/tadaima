@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "test": "tsx --test 'backend/**/*.test.ts'",
-    "e2e": "tsx --test --test-concurrency=8 'backend/e2e/*.e2e.ts'"
+    "e2e": "tsx --test --test-concurrency=8 'backend/e2e/*.e2e.ts'",
+    "e2e:voice": "tsx --env-file=.env.local --test --test-concurrency=3 backend/e2e/voice.e2e.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.135.0",
