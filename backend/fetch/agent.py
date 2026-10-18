@@ -36,6 +36,9 @@ from uagents_core.contrib.protocols.chat.cards import (
     CarouselCardPayload,
     CarouselItem,
     CtaAction,
+    FormCardPayload,
+    FormField,
+    FormFieldOption,
     ReviewCardPayload,
     ReviewSummaryRow,
     create_card_content,
@@ -421,15 +424,13 @@ DEMO = re.compile(r"^\s*(skip|demo|use (the )?demo)\b", re.I)
 
 
 def form_card(title: str, fields: list[dict], submit_label: str, action: str) -> MetadataContent:
-    """Form cards are hand-built so fields can carry defaults (the live client supports them)."""
-    payload = {"title": title, "fields": fields, "submit_cta": {"label": submit_label, "primary": True, "selection": {"action": action}}}
-    return MetadataContent(metadata={
-        "card_protocol_version": "1",
-        "requires_card_interaction": "true",
-        "card_kind": "form",
-        "card_payload": json.dumps(payload),
-        "card_id": str(uuid4()),
-    })
+    """Strict uagents-core form schema only: ASI:One silently drops a card with fields it doesn't accept (defaults, min/max)."""
+    payload = FormCardPayload(
+        title=title,
+        fields=[FormField(**{**f, "options": [FormFieldOption(**o) for o in f["options"]] if f.get("options") else None}) for f in fields],
+        submit_cta=CtaAction(label=submit_label, primary=True, selection={"action": action}),
+    )
+    return create_card_content(payload, card_id=uuid4())
 
 
 async def account(sender: str) -> dict:
@@ -489,8 +490,17 @@ def owned_fields(plan: dict) -> list[dict]:
             continue
         d = i.get("dimensions")
         size = f" ({d[0]:.2f} x {d[2]:.2f} m)" if d else ""
-        fields.append({"name": f"own_{i['id']}", "kind": "checkbox", "label": f"I already own a {i['category']}{size}", "default": True})
+        fields.append({"name": f"lack_{i['id']}", "kind": "checkbox", "label": f"I don't have a {i['category']}{size}, buy me one"})
     return fields
+
+
+def setup_form(plan: dict) -> MetadataContent:
+    budget = plan["constraints"].get("budget")
+    return form_card("Set up this room", owned_fields(plan) + [
+            {"name": "budget", "kind": "number", "label": "Budget for new furniture (USD)", "placeholder": str(round(budget["amountMinor"] / 100) if budget else 1500)},
+            {"name": "seats", "kind": "number", "label": "People it should seat", "placeholder": str(plan["constraints"].get("minimumSeats") or 4)},
+            {"name": "style", "kind": "select", "label": "Style", "options": [{"value": s, "label": s} for s in STYLES]},
+        ], "Save my room", "confirm")
 
 
 async def onboard_address(ctx: Context, sender: str, sel: dict | None, text: str):
@@ -509,11 +519,7 @@ async def onboard_address(ctx: Context, sender: str, sel: dict | None, text: str
     await ctx.send(sender, msg(
         f"Here's the {room['label'].lower()} at **{where}**{room_size(plan)}, {plan['geometry']['rooms'][0]['height']:.1f} m ceilings, "
         f"{doors} door(s) and {windows} window(s).\n\nTell me what you already own and what you're working with.",
-        form_card("Set up this room", owned_fields(plan) + [
-            {"name": "budget", "kind": "number", "label": "Budget for new furniture (USD)", "default": round(budget["amountMinor"] / 100) if budget else 1500, "minimum": 50},
-            {"name": "seats", "kind": "number", "label": "People it should seat", "default": plan["constraints"].get("minimumSeats") or 4, "minimum": 0, "maximum": 12},
-            {"name": "style", "kind": "select", "label": "Style", "options": [{"value": s, "label": s} for s in STYLES], "default": STYLES[0]},
-        ], "Save my room", "confirm"),
+        setup_form(plan),
     ))
 
 
@@ -522,8 +528,8 @@ async def onboard_confirm(ctx: Context, sender: str, sel: dict | None, text: str
     plan = (await api("GET", f"/api/projects/{project}"))["plan"]
     sel = sel or {}
     if not sel and not APPROVE.match(text or ""):
-        return await ctx.send(sender, msg("Fill in the room form, or say **looks good** to keep the defaults."))
-    owned = [i["id"] for i in plan["items"] if i["origin"] == "existing_owned" and sel.get(f"own_{i['id']}", True) not in (False, "false", "off", 0)]
+        return await ctx.send(sender, msg("Here's the room form again. Fill it in, or say **looks good** to keep the defaults.", setup_form(plan)))
+    owned = [i["id"] for i in plan["items"] if i["origin"] == "existing_owned" and sel.get(f"lack_{i['id']}") not in (True, "true", "on", 1)]
 
     def num(key):
         try:
