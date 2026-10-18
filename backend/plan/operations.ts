@@ -90,7 +90,8 @@ export async function applyPlanChanges(projectId: string, expectedRevision: numb
     throw e;
   }
   const validations = validateChanges(plan, changes, next);
-  if (blocking(plan, changes, next, validations).length) return { ok: false, reason: "validation_failed", validations };
+  const blocked = blocking(plan, changes, next, validations);
+  if (blocked.length) return { ok: false, reason: "validation_failed", validations, blocking: blocked };
 
   const saved = await savePlan(projectId, expectedRevision, next);
   if (!saved.ok) return { ok: false, reason: "stale_revision", currentRevision: saved.revision };

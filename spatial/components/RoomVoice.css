@@ -1,0 +1,108 @@
+/* voice pill in the room's bottom tools, with the agent's latest line above it */
+
+.room-voice {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.room-voice__beam {
+  display: inline-flex;
+  border-radius: 999px;
+}
+
+.room-voice__btn {
+  min-width: 118px;
+}
+
+.room-x__tools .room-voice .room-voice__btn {
+  width: auto;
+  min-width: 118px;
+  padding: 0 16px;
+}
+
+.room-x__tools .room-voice .room-voice__mute {
+  width: auto;
+  padding: 0 12px;
+  font-size: 11px;
+}
+
+.room-voice__transcript-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3;
+  font-size: 11px;
+}
+
+.room-voice__transcript-menu summary {
+  cursor: pointer;
+  color: var(--ink);
+  padding: 3px 6px;
+  background: var(--paper);
+  border-radius: 6px;
+}
+
+.room-voice__transcript-menu .room-agent-voice__transcript {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(360px, calc(100vw - 40px));
+  max-height: min(320px, 50vh);
+  background: var(--paper);
+  border-color: var(--line);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+}
+
+.room-voice__btn[data-live] {
+  border-color: var(--ink);
+  background: var(--paper);
+}
+
+.room-voice__caption {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 14px);
+  width: max-content;
+  max-width: min(420px, calc(100vw - 32px));
+  margin: 0;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--paper-glass, rgba(245, 242, 235, 0.86));
+  -webkit-backdrop-filter: blur(14px) saturate(1.1);
+  backdrop-filter: blur(14px) saturate(1.1);
+  box-shadow: var(--shadow);
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.45;
+  text-align: center;
+  transform: translateX(-50%);
+  animation: room-voice-in 0.4s var(--ease, ease) both;
+  pointer-events: none;
+}
+
+.room-voice__caption[data-error] {
+  color: #8f2d14;
+}
+
+@keyframes room-voice-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 6px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .room-voice__caption {
+    animation: none;
+  }
+}

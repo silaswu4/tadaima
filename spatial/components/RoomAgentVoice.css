@@ -1,6 +1,2 @@
-.room-agent-voice__voice { display: grid; gap: 0.7rem; }
-.room-agent-voice__voice p { margin: 0; }
-.room-agent-voice__controls { display: flex; gap: 0.5rem; flex-wrap: wrap; }
-.room-agent-voice__note { font-size: 0.75rem; line-height: 1.5; opacity: 0.7; }
-.room-agent-voice__error { color: #9a352a; line-height: 1.5; }
 .room-agent-voice__transcript { max-height: 15rem; overflow: auto; display: grid; gap: 0.6rem; padding: 0.8rem; border: 1px solid currentColor; font-size: 0.8rem; line-height: 1.5; overflow-wrap: anywhere; }
+.room-agent-voice__transcript p { margin: 0; }

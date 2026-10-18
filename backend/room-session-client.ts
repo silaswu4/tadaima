@@ -56,5 +56,5 @@ export function localRoomSnapshot(serverPlan: RoomPlan, sourceProjectId: string)
 }
 export function mutationMessage(result: Exclude<ApplyResult, { ok: true }>): string {
   return result.reason === "stale_revision" ? "The room changed on the server. It has been refreshed; please try your edit again."
-    : result.validations.filter((v) => v.status === "fail" || v.status === "unknown").map((v) => v.message).join(" ") || "The server refused this change.";
+    : (result.blocking ?? result.validations.filter((v) => v.status === "fail" || v.status === "unknown")).map((v) => v.message).join(" ") || "The server refused this change.";
 }

@@ -1,14 +1,11 @@
 "use client";
 
-import dynamic from "next/dynamic";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { FloorSpot, FurnitureCategory, Job, PlanChange, PlanProposal, RoomPlan, ShopJobOutput, ShopRequest, ShopResult } from "../../backend/contracts";
+import type { FurnitureCategory, Job, PlanChange, PlanProposal, RoomPlan, ShopJobOutput, ShopRequest, ShopResult } from "../../backend/contracts";
 import type { RoomCapabilities } from "../../backend/room-session-client";
-import { createRoomAgentTools } from "../rooms/agent-tools";
 import { roomProposalBlockers } from "../rooms/agent-operations";
 import "./RoomAssistant.css";
 
-const Voice = dynamic(() => import("./RoomAgentVoice"), { loading: () => <p role="status">Loading voice controls…</p> });
 const money = (minor: number, currency: string) => new Intl.NumberFormat("en-US", { style: "currency", currency }).format(minor / 100);
 const categories: FurnitureCategory[] = ["sofa", "chair", "table", "storage", "desk", "bed", "rug", "lamp", "decor"];
 type Props = {
@@ -17,7 +14,7 @@ type Props = {
   onClose(): void; onBasket(): void; onRefresh(): Promise<unknown>;
   onPropose(request: string): Promise<PlanProposal>; onApply(proposal: PlanProposal): Promise<void>;
   onSearch(request: Omit<ShopRequest, "spot">): Promise<void>; onPreview(result: ShopResult): boolean;
-  getSpot(): FloorSpot; onMove(itemId: string, spot: FloorSpot): Promise<void>; onStore(itemId: string): Promise<void>;
+  proposal: PlanProposal | null; onProposal(proposal: PlanProposal | null): void;
 };
 
 function changeText(change: PlanChange, plan: RoomPlan) {
@@ -43,10 +40,10 @@ export function RoomAssistant(props: Props) {
   const [request, setRequest] = useState("");
   const [category, setCategory] = useState<FurnitureCategory>("chair");
   const [cap, setCap] = useState("300"), [merchant, setMerchant] = useState<"IKEA" | "Target">("IKEA");
-  const [proposal, setProposal] = useState<PlanProposal | null>(null);
+  const proposal = props.proposal;
+  const setProposal = (next: PlanProposal | null) => current.current.onProposal(next);
   const [pending, setPending] = useState(false), [message, setMessage] = useState("");
   const [error, setError] = useState("");
-  const [tools, setTools] = useState<ReturnType<typeof createRoomAgentTools> | null>(null);
   useEffect(() => { active.current = true; closeRef.current?.focus({ preventScroll: true }); return () => { active.current = false; }; }, []);
 
   async function propose(text: string) {
@@ -55,20 +52,6 @@ export function RoomAssistant(props: Props) {
     catch (cause) { if (active.current) { setError(cause instanceof Error ? cause.message : "Planning could not finish."); setMessage(""); } throw cause; }
     finally { if (active.current) setPending(false); }
   }
-  const enableVoice = () => setTools(createRoomAgentTools({
-    projectId: props.plan.projectId, active: () => active.current,
-    context: () => ({ plan: current.current.plan, selectedId: current.current.selectedId, job: current.current.job, results: current.current.results }),
-    refresh: () => current.current.onRefresh(), propose,
-    search: (input) => current.current.onSearch(input), preview: (result) => current.current.onPreview(result),
-    spot: () => current.current.getSpot(), move: (id, spot) => current.current.onMove(id, spot), store: (id) => current.current.onStore(id),
-    liveSearch: props.capabilities.liveSearch,
-  }));
-  const update = useMemo(() => {
-    if (!props.job || props.job.projectId !== props.plan.projectId) return undefined;
-    const output = props.job.output;
-    const results = props.results.slice(0, 6).map((result, i) => `${i + 1}) ${result.product.label}, ${result.product.price ? money(result.product.price.amountMinor, result.product.price.currency) : "price unknown"}, ${result.fits ? "fits" : "does not fit"}${result.withinBudget === false ? ", over budget" : ""}`).join("; ");
-    return { id: `${props.job.id}:${props.job.updatedAt}`, text: `[app update] ${props.job.stage}. ${output?.live === "failed" ? "Live research failed; saved catalog results remain." : output?.live === "skipped" ? "Catalog search only." : ""} ${results || "No results yet."} Previews need on-screen placement confirmation.` };
-  }, [props.job, props.results, props.plan.projectId]);
   const busy = props.busy || pending;
   const stale = !!proposal && (proposal.projectId !== props.plan.projectId || proposal.baseRevision !== props.plan.revision);
   const blockers = useMemo(() => proposal ? roomProposalBlockers(props.plan, proposal) : [], [props.plan, proposal]);
@@ -109,7 +92,7 @@ export function RoomAssistant(props: Props) {
       <p className="room-agent__note" role="status">{props.job && mode === "search" ? `${props.job.stage}${props.job.output?.live === "failed" ? " · live search unavailable" : ""}` : message}</p>
       {mode === "search" && props.job ? <ul className="room-agent__results" aria-label="Assistant furniture results">{props.results.map((result, index) => <li key={result.product.id}><div><strong>{index + 1}. {result.product.label}</strong><p>{result.product.price ? money(result.product.price.amountMinor, result.product.price.currency) : "Price unknown"} · {result.source === "live" ? "live observation" : "saved catalog"}</p><p>{result.fits ? result.withinBudget === false ? "Fits, but exceeds your room budget." : "Fits this spot." : result.problems.join(" ") || "Fit unverified."}</p></div><button className="room-x__chip-btn" disabled={busy || !result.fits || !result.placement} onClick={() => props.onPreview(result)}>Preview</button></li>)}</ul> : null}
       {proposal ? <section className="room-agent__proposal" aria-label="Review proposed room changes"><h3>Review changes</h3><p>{proposal.summary}</p><ul>{proposal.changes.map((change, index) => <li key={index}>{changeText(change, props.plan)}</li>)}</ul><p>New purchases: {money(proposal.costBefore.knownSubtotal.amountMinor, proposal.costBefore.knownSubtotal.currency)} → {money(proposal.costAfter.knownSubtotal.amountMinor, proposal.costAfter.knownSubtotal.currency)}. Shipping and tax are unknown.</p>{proposal.costAfter.unknownPriceItemIds.length ? <p>Some proposed pieces have unknown prices.</p> : null}<ul>{proposal.validations.filter((check) => check.status !== "pass").map((check, i) => <li key={i}>{blockers.includes(check) ? "Blocked" : check.status === "fail" ? "Existing issue" : "Unverified"}: {check.message}</li>)}</ul>{stale ? <p role="status">The room changed. Ask for a fresh proposal.</p> : null}<div className="room-agent__actions"><button className="room-x__chip-btn" disabled={busy} onClick={() => setProposal(null)}>Discard</button><button className="room-x__chip-btn room-x__chip-btn--ink" disabled={busy || stale || !proposal.changes.length || blockers.length > 0} onClick={() => void apply()}>Apply changes</button></div></section> : null}
-      <section className="room-agent__voice"><h3>Talk it through</h3><p className="room-agent__note">Voice can search, draft changes and rearrange unlocked pieces. Review proposals, placements and payments on screen. Opening a preview ends voice.</p>{props.capabilities.voice ? tools ? <Voice projectId={props.plan.projectId} tools={tools} update={update} /> : <button className="room-x__chip-btn" onClick={enableVoice}>Enable voice controls</button> : <p className="room-agent__note">Voice is unavailable here. Text and touch controls still work.</p>}</section>
+      <section className="room-agent__voice"><h3>Talk it through</h3><p className="room-agent__note">{props.capabilities.voice ? "Use Talk in the room tools to search, draft changes and rearrange unlocked pieces. Voice stays connected while you review proposals and placement previews. Apply changes, confirm placements and review payments on screen." : "Voice is unavailable here. Text and touch controls still work."}</p></section>
       <button className="room-x__text-btn" onClick={props.onBasket}>Review basket</button>
     </div>
   </div>;
