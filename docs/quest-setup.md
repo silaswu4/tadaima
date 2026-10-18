@@ -2,7 +2,19 @@
 
 Updated October 18, 2026. This is a browser experience: use Meta Quest Browser, with the same metric room geometry and furniture IDs as the desktop workspace. No native Quest app, Unity project, Quest Link, SteamVR, or APK is needed.
 
-## Connect the headset
+## Fastest path: the hosted site
+
+No cable, Developer Mode, or Mac is needed. In Meta Quest Browser on the headset, open:
+
+`https://tadaima-neon.vercel.app/rooms/scanned-living-room`
+
+The shared scanned living room loads on any device. Wait for the page to report that shopping is connected, then choose **Enter VR**. Before entering VR, tap the voice control once on the flat page and allow the microphone. Otherwise the permission prompt opens inside the immersive session, where Quest Browser can pause or end it. The VR menu previews, places, rotates, and stores furniture, and runs the agent; it never checks out.
+
+Scans from the iPhone also reach the headset: open `/rooms` on the Quest, enter the scan key in the **From your iPhone** panel, then choose **Enter room** (see `reconstruction/service/README.md`). Rooms imported on another device do not sync, because each browser keeps its own rooms.
+
+The hosted site needs these Vercel environment variables: `KV_REST_API_URL`/`KV_REST_API_TOKEN` (Upstash, for room sessions), `ELEVENLABS_API_KEY`/`ELEVENLABS_AGENT_ID` (voice), and `ANTHROPIC_API_KEY` (agent planning). Without KV, every shopping action in VR stays disabled.
+
+## Local development: connect the headset over USB
 
 Yes: connect the Quest 3S to the Mac with a USB data cable, put it on, and accept the USB debugging prompt. For the local development path, enable Developer Mode first using Meta's [device setup instructions](https://developers.meta.com/vr/documentation/native/android/mobile-device-setup/). Developer Mode is for USB debugging; a normal hosted HTTPS WebXR page does not require sideloading an app.
 
