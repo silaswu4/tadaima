@@ -12,6 +12,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 Read `docs/team-ownership.md` and the relevant folder README before editing.
 
+The user requests reconstruction work directly on `main`. Preserve concurrent commits, fetch before pushing, and never force-push the shared branch.
+
 | Area | Owner | Boundary |
 | --- | --- | --- |
 | `backend/` | Matthew | Shared contracts, services, shopping agents, sponsor adapters, integration |
@@ -20,3 +22,5 @@ Read `docs/team-ownership.md` and the relevant folder README before editing.
 | `spatial/` | Silas | Three.js viewer, selection, rendering, Quest/WebXR interactions |
 
 This is one Next.js application. Keep root `app/` as thin route/layout/API wiring and coordinate root configuration and dependency changes with Matthew, the backend integration owner. Do not create four independent apps or duplicate shared room types. `backend/contracts.ts` is browser-safe and type-only; keep server implementations and secrets out of client imports. Coordinate changes to another owner's files and shared interfaces. The current hero remains a demonstration scene, not a live reconstruction or shopping integration.
+
+The user approved an optional native RoomPlan scanning companion for iPhone 14 Pro under `reconstruction/ios/TadaimaScan/`, with its importer in `reconstruction/roomplan/`. This is a bounded scan/preview/export input; the shopping product remains web-based. Do not claim a physical phone scan from unsigned builds or synthetic fixtures. See `docs/native-scan.md` for verification and setup.

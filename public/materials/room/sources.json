@@ -1,0 +1,128 @@
+{
+  "title": "Tadaima Room Lighting Assets",
+  "license": "CC0-1.0",
+  "licenseUrl": "https://polyhaven.com/license",
+  "apiTermsUrl": "https://github.com/Poly-Haven/Public-API/blob/master/ToS.md",
+  "apiDocumentationUrl": "https://api.polyhaven.com/api-docs/swagger.json",
+  "retrievedAt": "2026-10-18T09:07:30.171919+00:00",
+  "notes": [
+    "Downloads are original files returned by the official Poly Haven public API, self-hosted locally with no live runtime API dependency.",
+    "Physical texture dimensions in the Poly Haven API are millimeters and converted to meters here.",
+    "Base color is sRGB. Roughness and OpenGL normal maps are linear non-color data. HDRI stores linear high-dynamic-range radiance.",
+    "Material choices are demonstration styling, not a recovered measurement or material classification of a real room."
+  ],
+  "assets": [
+    {
+      "file": "oak-basecolor.jpg",
+      "assetId": "oak_wood_planks",
+      "name": "Oak Wood Planks",
+      "map": "Diffuse",
+      "resolution": "1k",
+      "format": "jpg",
+      "colorSpace": "sRGB",
+      "sourcePage": "https://polyhaven.com/a/oak_wood_planks",
+      "sourceInfoUrl": "https://api.polyhaven.com/info/oak_wood_planks",
+      "sourceFilesUrl": "https://api.polyhaven.com/files/oak_wood_planks",
+      "downloadUrl": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/oak_wood_planks/oak_wood_planks_diff_1k.jpg",
+      "bytes": 696814,
+      "sha256": "f715ed3e4346e94f971ef8dd61221ff6cc774886c20f65381e01e1dc0bb0a634",
+      "sourceMd5": "e9e25ac7abcc482f73214fda23e2de25",
+      "authors": {
+        "Dimitrios Savva": "All"
+      },
+      "physicalTileMeters": [
+        1.2,
+        1.2
+      ]
+    },
+    {
+      "file": "oak-roughness.jpg",
+      "assetId": "oak_wood_planks",
+      "name": "Oak Wood Planks",
+      "map": "Rough",
+      "resolution": "1k",
+      "format": "jpg",
+      "colorSpace": "linear",
+      "sourcePage": "https://polyhaven.com/a/oak_wood_planks",
+      "sourceInfoUrl": "https://api.polyhaven.com/info/oak_wood_planks",
+      "sourceFilesUrl": "https://api.polyhaven.com/files/oak_wood_planks",
+      "downloadUrl": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/oak_wood_planks/oak_wood_planks_rough_1k.jpg",
+      "bytes": 845590,
+      "sha256": "10ced559145df3c537bf1ccef6dc767ef6c47e134c21a9650bab261fa95ecacf",
+      "sourceMd5": "3609ef0a3155ae90b69395431bf8cec1",
+      "authors": {
+        "Dimitrios Savva": "All"
+      },
+      "physicalTileMeters": [
+        1.2,
+        1.2
+      ]
+    },
+    {
+      "file": "oak-normal.jpg",
+      "assetId": "oak_wood_planks",
+      "name": "Oak Wood Planks",
+      "map": "nor_gl",
+      "resolution": "1k",
+      "format": "jpg",
+      "colorSpace": "linear",
+      "sourcePage": "https://polyhaven.com/a/oak_wood_planks",
+      "sourceInfoUrl": "https://api.polyhaven.com/info/oak_wood_planks",
+      "sourceFilesUrl": "https://api.polyhaven.com/files/oak_wood_planks",
+      "downloadUrl": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/oak_wood_planks/oak_wood_planks_nor_gl_1k.jpg",
+      "bytes": 392213,
+      "sha256": "b4272cb2818f8f33f2620a2dc093c962f34920e9d485a4e132eb6d69de1ba950",
+      "sourceMd5": "6a71c23551887b77b29623bb871aefbf",
+      "authors": {
+        "Dimitrios Savva": "All"
+      },
+      "physicalTileMeters": [
+        1.2,
+        1.2
+      ]
+    },
+    {
+      "file": "plaster-normal.jpg",
+      "assetId": "white_plaster_02",
+      "name": "White Plaster 02",
+      "map": "nor_gl",
+      "resolution": "1k",
+      "format": "jpg",
+      "colorSpace": "linear",
+      "sourcePage": "https://polyhaven.com/a/white_plaster_02",
+      "sourceInfoUrl": "https://api.polyhaven.com/info/white_plaster_02",
+      "sourceFilesUrl": "https://api.polyhaven.com/files/white_plaster_02",
+      "downloadUrl": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/white_plaster_02/white_plaster_02_nor_gl_1k.jpg",
+      "bytes": 652310,
+      "sha256": "eb572ca3630d5bfde72e2601b1f02412da23ca005cd19384dced8690be4cb783",
+      "sourceMd5": "55fc03203ebf1dc703a380fde93ff502",
+      "authors": {
+        "Rob Tuytel": "All"
+      },
+      "physicalTileMeters": [
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "file": "studio-small-09-1k.hdr",
+      "assetId": "studio_small_09",
+      "name": "Studio Small 09",
+      "map": "hdri",
+      "resolution": "1k",
+      "format": "hdr",
+      "colorSpace": "linear HDR",
+      "sourcePage": "https://polyhaven.com/a/studio_small_09",
+      "sourceInfoUrl": "https://api.polyhaven.com/info/studio_small_09",
+      "sourceFilesUrl": "https://api.polyhaven.com/files/studio_small_09",
+      "downloadUrl": "https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/studio_small_09_1k.hdr",
+      "bytes": 1615248,
+      "sha256": "e7cfda5f4e98e623db12b8bfd0184e048488e4855d9c83e2751fb44a32e80c45",
+      "sourceMd5": "d5d7eb9d26d341d6aa4d11c1a54fd97c",
+      "authors": {
+        "Sergej Majboroda": "All"
+      },
+      "physicalTileMeters": null
+    }
+  ]
+}

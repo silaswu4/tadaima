@@ -1,6 +1,6 @@
 # Proposed system architecture
 
-**Status:** Recommended architecture, not the current implementation. The repository currently has a WebGL ASCII landing hero, an earlier Three.js room renderer, and type-only backend/reconstruction scaffolding, with no running application backend. Work is divided into [four owned folders](team-ownership.md) within one Next.js application. The choice of database, storage, queue, authentication, deployment platform, and reconstruction/model providers remains open.
+**Status:** Most of the shared application architecture remains proposed. A [local geometry-to-Blender/GLB worker](../reconstruction/README.md), address-evidence pipeline, browser capture/bundle processing, and photo-only vision proposal path exist. The optional SwiftUI/RoomPlan companion compiles locally and its importer has passed a Swift-export-to-Blender/GLB synthetic check; consult [native scan status](native-scan.md) for evidence and limitations. Physical iPhone capture and hosted upload, authentication, storage, and job integration are not verified. Work remains divided into [four owned folders](team-ownership.md) around one Next.js shopping application; the native companion is a bounded input adapter.
 
 ## One shared plan, several interfaces
 
@@ -10,8 +10,10 @@ The backend owns a canonical, versioned `RoomPlan`. Desktop, iPhone, Quest, Elev
 flowchart TD
   A[Address and unit] --> B[Public plan and photo research]
   C[iPhone web guided capture] --> D[Private media upload and capture checks]
+  C2[Optional native RoomPlan companion] --> D2[Private native export and validated import]
   B --> E[Evidence and metric geometry proposal]
   D --> E
+  D2 --> E
   E --> F[User confirms layout and dimensions]
   F --> G[Canonical RoomPlan revision]
   G --> H[Trusted Blender worker]
@@ -40,7 +42,8 @@ Paper belongs in the design workflow, not in this runtime graph. A selected Sola
 | Next.js web application | Onboarding, review screens, shared viewer, touch controls, job progress | All browsers support XR, microphone, or the same camera codecs |
 | Application API | Authorization, schema validation, plan revisions, tool execution, job lifecycle | LLM output is trusted state |
 | Evidence store | Source URLs, retrieval time, observations, dimension provenance | A search result or extracted JSON is verified truth |
-| Capture pipeline | Uploads, frame selection, reconstruction proposals, measurement requests | RGB video contains native tracking poses or exact scale |
+| Capture pipeline | Private photo bundles, actual image inputs, inferred proposals, optional measurement mode | RGB photos contain native tracking poses or verified scale |
+| Optional RoomPlan adapter | Native sensor capture/export and validated surface import | Surface planes include measured wall thickness or guaranteed interior-side orientation |
 | Blender worker | Deterministic scene construction, export, asset validation | It should execute arbitrary model-generated Python |
 | Product research worker | Browser Use tasks, structured candidates, rechecks, cart evidence | Merchant sessions or carts are interchangeable |
 | Planner and validators | Constraint-aware proposals, item placement, cost calculations, diffs | The language model alone proves geometric feasibility |
@@ -53,9 +56,9 @@ For the hackathon, these can be modules in one backend plus one worker process. 
 ## Input to reconstruction
 
 1. Create a project and a capture/research job.
-2. Address input produces candidate plan sources with explicit exact-unit/model/building/unknown scope. Capture input produces private media and quality observations.
+2. Address input produces candidate plan sources with explicit exact-unit/model/building/unknown scope. Browser capture produces private photos and quality observations; optional native capture produces RoomPlan surfaces and transforms for validated import.
 3. Propose geometry with evidence attached to important measurements. Keep conflicting evidence visible.
-4. Ask the user to confirm the layout, mirrored orientation, known wall measurements, openings, and existing furniture to keep.
+4. Ask the user to review the layout, mirrored orientation, openings, existing furniture, and dimensional uncertainty. Browser photo-only input does not require tape measurements; its inferred scale remains unverified. Native sensor output is also reviewable, not survey-grade truth.
 5. Save the confirmed geometry revision before generating the scene. Unconfirmed dimensions may still be previewed, but must remain visibly inferred.
 6. Generate the shell with a controlled Blender script from structured input. Save the source plan, `.blend`, and GLB, each linked to its input revision and generator version.
 

@@ -11,7 +11,11 @@ Project context, product decisions, architecture, capture research, sponsor requ
 | [`frontend/`](frontend/README.md) | Angelina | Screens, onboarding, responsive UI, products and basket |
 | [`spatial/`](spatial/README.md) | Silas | 3D viewer, selection, placement, Quest/browser interaction |
 
-See [team ownership and first tasks](docs/team-ownership.md) and [copy-paste agent prompts](docs/agent-prompts.md). These are four working areas inside one application; run the commands below from the repository root. `app/` holds thin Next.js entry points and `public/` holds shared static assets.
+See [team ownership and first tasks](docs/team-ownership.md) and [copy-paste agent prompts](docs/agent-prompts.md). These are four working areas inside one web application; run the commands below from the repository root. `app/` holds thin Next.js entry points and `public/` holds shared static assets. The approved optional iPhone RoomPlan companion lives under reconstruction; shopping, design, and Quest remain on the web.
+
+The [reconstruction worker](reconstruction/README.md) converts validated room geometry to an editable `.blend`, a GLB, and a revision-bound manifest. Local [address research](reconstruction/address/README.md) and [browser photo capture/inference](reconstruction/capture/README.md) feed the same worker. Photo-only input does not require tape measurements; its visual estimates remain uncalibrated and require review. Hosted upload authorization, persistence, and job integration are still pending.
+
+The user also approved a thin SwiftUI/RoomPlan companion for an **iPhone 14 Pro**. See [native scanning and import status](docs/native-scan.md) before building or claiming device support. Native capture is an optional input, not a replacement shopping app; a physical iPhone scan has not yet been verified. [Modeling/export research](reconstruction/RESEARCH.md) remains applicable to all inputs.
 
 ## Application setup
 

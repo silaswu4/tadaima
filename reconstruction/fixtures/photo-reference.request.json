@@ -1,0 +1,226 @@
+{
+  "jobId": "photo-finish-reference",
+  "projectId": "photo-finish-reference",
+  "inputRevision": 1,
+  "geometry": {
+    "units": "m",
+    "coordinateSystem": "right-handed-y-up",
+    "rooms": [
+      {
+        "id": "living-room",
+        "label": "Synthetic 4.2 by 3.5 meter room",
+        "floorPolygon": [
+          [
+            0.0,
+            0.0
+          ],
+          [
+            4.2,
+            0.0
+          ],
+          [
+            4.2,
+            3.5
+          ],
+          [
+            0.0,
+            3.5
+          ]
+        ],
+        "height": 2.7,
+        "evidenceIds": [
+          "synthetic-reference"
+        ]
+      }
+    ],
+    "walls": [
+      {
+        "id": "back",
+        "start": [
+          0.0,
+          0.0
+        ],
+        "end": [
+          4.2,
+          0.0
+        ],
+        "height": 2.7,
+        "thickness": 0.12,
+        "evidenceIds": [
+          "synthetic-reference"
+        ]
+      },
+      {
+        "id": "right",
+        "start": [
+          4.2,
+          0.0
+        ],
+        "end": [
+          4.2,
+          3.5
+        ],
+        "height": 2.7,
+        "thickness": 0.12,
+        "evidenceIds": [
+          "synthetic-reference"
+        ]
+      },
+      {
+        "id": "front",
+        "start": [
+          4.2,
+          3.5
+        ],
+        "end": [
+          0.0,
+          3.5
+        ],
+        "height": 2.7,
+        "thickness": 0.12,
+        "evidenceIds": [
+          "synthetic-reference"
+        ]
+      },
+      {
+        "id": "left",
+        "start": [
+          0.0,
+          3.5
+        ],
+        "end": [
+          0.0,
+          0.0
+        ],
+        "height": 2.7,
+        "thickness": 0.12,
+        "evidenceIds": [
+          "synthetic-reference"
+        ]
+      }
+    ],
+    "openings": [
+      {
+        "id": "entry",
+        "wallId": "front",
+        "kind": "door",
+        "offset": 0.9,
+        "width": 0.9,
+        "height": 2.1,
+        "sillHeight": 0.0,
+        "evidenceIds": [
+          "synthetic-reference"
+        ]
+      },
+      {
+        "id": "window",
+        "wallId": "back",
+        "kind": "window",
+        "offset": 1.4,
+        "width": 1.4,
+        "height": 1.2,
+        "sillHeight": 0.9,
+        "evidenceIds": [
+          "synthetic-reference"
+        ]
+      }
+    ]
+  },
+  "evidence": [
+    {
+      "id": "synthetic-reference",
+      "sourceUrl": null,
+      "privateAssetId": null,
+      "observedAt": "2026-10-17T19:00:00Z",
+      "claim": "Synthetic test dimensions, not a physical measurement or a real home",
+      "dimensionStatus": "inferred",
+      "confirmedByUserAt": "2026-10-17T19:00:00Z"
+    },
+    {
+      "id": "gallery-living-photo",
+      "sourceUrl": "https://www.atrium-westwood.com/wp-content/uploads/2025/08/rwselby-atrium-livingroom2.jpg",
+      "privateAssetId": null,
+      "observedAt": "2026-10-18T00:00:00Z",
+      "claim": "Public building gallery living room: taupe paint and muted dark wood-look flooring; exact unit and layout are unverified. Finishes estimated visually by Codex from the actual image.",
+      "dimensionStatus": null,
+      "confirmedByUserAt": null
+    }
+  ],
+  "appearance": {
+    "schemaVersion": "room-appearance/1.0",
+    "reviewRequired": true,
+    "scope": "building_reference",
+    "sources": [
+      {
+        "evidenceId": "gallery-living-photo",
+        "sha256": "3305fde1b8d250fe1dc50f9231917c0a31ee6e0e0388436b1f3c5d23f16b765a"
+      }
+    ],
+    "surfaces": [
+      {
+        "entityId": "living-room",
+        "finish": "wood",
+        "color": "#b4afa8",
+        "roughness": 0.72,
+        "tileMeters": 1.2,
+        "rotationDegrees": 90,
+        "confidence": "medium",
+        "evidenceIds": [
+          "gallery-living-photo"
+        ]
+      },
+      {
+        "entityId": "back",
+        "finish": "paint",
+        "color": "#c5c1b7",
+        "roughness": 0.92,
+        "tileMeters": 1,
+        "rotationDegrees": 0,
+        "confidence": "medium",
+        "evidenceIds": [
+          "gallery-living-photo"
+        ]
+      },
+      {
+        "entityId": "right",
+        "finish": "paint",
+        "color": "#c5c1b7",
+        "roughness": 0.92,
+        "tileMeters": 1,
+        "rotationDegrees": 0,
+        "confidence": "medium",
+        "evidenceIds": [
+          "gallery-living-photo"
+        ]
+      },
+      {
+        "entityId": "front",
+        "finish": "paint",
+        "color": "#c5c1b7",
+        "roughness": 0.92,
+        "tileMeters": 1,
+        "rotationDegrees": 0,
+        "confidence": "medium",
+        "evidenceIds": [
+          "gallery-living-photo"
+        ]
+      },
+      {
+        "entityId": "left",
+        "finish": "paint",
+        "color": "#c5c1b7",
+        "roughness": 0.92,
+        "tileMeters": 1,
+        "rotationDegrees": 0,
+        "confidence": "medium",
+        "evidenceIds": [
+          "gallery-living-photo"
+        ]
+      }
+    ],
+    "notes": [
+      "Finishes estimated from inspected building gallery photo. Synthetic geometry and window dimensions are unchanged; this is not unit 314.",
+      "Wood is an oak proxy tinted toward the photo, not a recovered texture or exact SKU. Unknown exposure/white balance limit color accuracy."
+    ]
+  }
+}

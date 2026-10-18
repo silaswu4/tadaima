@@ -1,0 +1,39 @@
+{
+  "jobId": "demo-shell-001",
+  "projectId": "synthetic-living-room",
+  "inputRevision": 1,
+  "geometry": {
+    "units": "m",
+    "coordinateSystem": "right-handed-y-up",
+    "rooms": [
+      {
+        "id": "living-room",
+        "label": "Synthetic 4.2 by 3.5 meter room",
+        "floorPolygon": [[0, 0], [4.2, 0], [4.2, 3.5], [0, 3.5]],
+        "height": 2.7,
+        "evidenceIds": ["synthetic-reference"]
+      }
+    ],
+    "walls": [
+      { "id": "back", "start": [0, 0], "end": [4.2, 0], "height": 2.7, "thickness": 0.12, "evidenceIds": ["synthetic-reference"] },
+      { "id": "right", "start": [4.2, 0], "end": [4.2, 3.5], "height": 2.7, "thickness": 0.12, "evidenceIds": ["synthetic-reference"] },
+      { "id": "front", "start": [4.2, 3.5], "end": [0, 3.5], "height": 2.7, "thickness": 0.12, "evidenceIds": ["synthetic-reference"] },
+      { "id": "left", "start": [0, 3.5], "end": [0, 0], "height": 2.7, "thickness": 0.12, "evidenceIds": ["synthetic-reference"] }
+    ],
+    "openings": [
+      { "id": "entry", "wallId": "front", "kind": "door", "offset": 0.9, "width": 0.9, "height": 2.1, "sillHeight": 0, "evidenceIds": ["synthetic-reference"] },
+      { "id": "window", "wallId": "back", "kind": "window", "offset": 1.4, "width": 1.4, "height": 1.2, "sillHeight": 0.9, "evidenceIds": ["synthetic-reference"] }
+    ]
+  },
+  "evidence": [
+    {
+      "id": "synthetic-reference",
+      "sourceUrl": null,
+      "privateAssetId": null,
+      "observedAt": "2026-10-17T19:00:00Z",
+      "claim": "Synthetic test dimensions, not a physical measurement or a real home",
+      "dimensionStatus": "inferred",
+      "confirmedByUserAt": "2026-10-17T19:00:00Z"
+    }
+  ]
+}

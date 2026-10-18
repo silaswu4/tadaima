@@ -4,6 +4,8 @@ Owner: **Silas**. Build the browser-based 3D viewer and Quest 3S interaction lay
 
 ## What is here
 
+There are two RoomPlan renderers in this folder for now: the pencil-style plan viewer at `/spatial` (selection, placement previews, revisions, Quest) and the PBR furniture workspace at `/room` (explode, lighting, photo finishes). Both take the shared `RoomPlan` and stable item IDs. Folding them into one renderer is an open decision between Silas and Stephen.
+
 | File | What it does |
 | --- | --- |
 | [`components/RoomViewer.tsx`](components/RoomViewer.tsx) | The plan viewer to import. Renders a `RoomPlan`, controlled selection, drag and keyboard placement previews, size card and dimension labels, headset entry. |
@@ -14,6 +16,11 @@ Owner: **Silas**. Build the browser-based 3D viewer and Quest 3S interaction lay
 | [`room/benchmark.ts`](room/benchmark.ts) | Fetch, parse, triangle, texture and scale checks for GLB files. |
 | [`room/pencil.ts`](room/pencil.ts), [`room/labels.ts`](room/labels.ts) | Pencil drawing materials, and canvas text for panels inside the headset. |
 | [`fixtures/demoRoom.ts`](fixtures/demoRoom.ts) | Synthetic two-revision `RoomPlan`. Interim, until `backend/` publishes the shared fixture. |
+| [`components/FurnitureWorkspace.tsx`](components/FurnitureWorkspace.tsx) | Responsive furniture workspace at `/room`, with explode/return, camera reset, selectable inventory, loading/error states, and model dimensions. See [Furniture explode workspace](#furniture-explode-workspace). |
+| [`room/workspace-scene.ts`](room/workspace-scene.ts) | Lazy Three.js cutaway renderer for `/room`: GLB loading with Meshopt, orbit/pan/zoom, raycast selection, camera framing, reduced motion, GPU cleanup. `createFurnitureWorkspace(canvas, callbacks, options)` accepts an optional `RoomPlan` and snapshots it. |
+| [`room/lighting.ts`](room/lighting.ts), [`room/window-daylight.ts`](room/window-daylight.ts), [`room/photo-reference.ts`](room/photo-reference.ts) | PBR surfaces, local image-based lighting, window-derived daylight, and photo-reference finishes for `/room`. |
+| [`room/explode.ts`](room/explode.ts) | Size-aware inventory layout and reversible explode animation keyed by stable item IDs. |
+| [`room/import-room.ts`](room/import-room.ts), [`room/workspace-fixture.ts`](room/workspace-fixture.ts) | Local reconstruction JSON import and the nine-piece demonstration plan for `/room`. |
 | [`components/AsciiHero.tsx`](components/AsciiHero.tsx), [`components/AsciiField.tsx`](components/AsciiField.tsx) | Current homepage hero. Unchanged. |
 | [`components/RoomHero.tsx`](components/RoomHero.tsx), [`room/scene.ts`](room/scene.ts), [`room/parts.ts`](room/parts.ts) | Earlier pencil-room hero. Retained unchanged; the plan viewer copies its look rather than editing it. |
 
@@ -78,7 +85,8 @@ Measured on a MacBook in desktop Chrome (not Quest): the six bundled models are 
 ## Checks
 
 ```bash
-node --test spatial/room/*.test.mjs   # plan validation, diffs, footprints, scale verdicts (Node 24+)
+node --test spatial/room/*.test.mjs   # plan viewer: validation, diffs, footprints, scale verdicts (Node 24+)
+node --experimental-strip-types --test spatial/tests/test-room-appearance.mjs spatial/tests/test-explode.mjs   # /room workspace
 npm run lint
 npm run build
 ```
@@ -92,3 +100,43 @@ Angelina owns screen layout, forms, product panels, capture UI, and basket revie
 The viewer never writes the plan, researches products, or prices anything. Shared plan coordinates do not align with a physical room on their own; the headset alignment is local to one session.
 
 Keep heavy renderer code lazy-loaded and browser-only. Use type-only shared contracts; do not import provider SDKs or backend implementations into the renderer. See [team ownership](../docs/team-ownership.md) and [platform UX](../docs/platforms-and-ux.md).
+
+## Furniture explode workspace
+
+Open `/room`, choose **Explode furniture**, select a model or an item in the inventory, and choose **Return furniture** to restore the room. Drag to orbit, scroll/pinch to zoom, and right-drag/two-finger drag to pan. Selecting a settled inventory piece frames it for closer inspection, which also helps on narrow screens; **Reset view** restores the current mode's overview. The list supports keyboard selection without interacting with the canvas. Selection persists across modes. Reduced motion places objects immediately.
+
+The shell stays together while each furnishing moves to a temporary inventory position. Explode is presentation state, not a revision or placement command: no canonical plan coordinates, purchase state, or Blender file are changed. Model dimensions are local model bounds and explicitly unverified against retailer sizes. Missing furniture assets display a labeled box proxy rather than a silent empty scene. Null assets outside the known demo rug/lamp also use proxies.
+
+The renderer takes validated, meter-based, Y-up geometry and independent furniture instances. It creates floor polygons and walls with door/window apertures; front-facing boundary walls and interior partitions fade for the cutaway. There is no live plan loading UI or placement editor on this route yet. A single flattened GLB cannot be exploded into semantic furniture automatically: the importer must supply separate item IDs, transforms, and assets. Quest/WebXR entry is not implemented by this change, and mobile browser emulation is not physical iPhone verification.
+
+All seven existing GLBs require Meshopt decoding and embedded WebP support. Their combined download is approximately 1.52 MB / 47,371 triangles, but decoded textures use substantially more memory. The workspace caps mobile pixel ratio at 1.5 and uses a single shadow-casting directional light without the pencil viewer's postprocessing. It disposes controls, observers, animation frames, geometry, materials, textures, environment render targets, and late-arriving assets on unmount.
+
+### PBR appearance and lighting
+
+The workspace uses AgX tone mapping, a local 1K HDRI prefiltered once through Three.js PMREM, a low-intensity hemisphere fill, and filtered PCF shadows. The shadow camera covers both the assembled room and the exploded inventory, so pieces retain contact shadows during transitions. This Three.js version removed `PCFSoftShadowMap`; the implementation uses supported `PCFShadowMap` with a non-default filter radius. No external asset service is required at runtime.
+
+CC0 oak base-color, roughness, and OpenGL normal maps and a plaster normal map are served from [`public/materials/room/`](../public/materials/room/). Floor UVs repeat every 1.2 meters in both directions, matching the source material's physical tile; wall plaster repeats every meter with subtle normal strength. Base color is decoded as sRGB; roughness and normal maps remain linear data. Room resizing changes the number of repeats rather than stretching the material. Existing furniture keeps its merchant/model materials and textures. Asset sources, physical scale, licensing, and checksums are recorded in [`sources.json`](../public/materials/room/sources.json).
+
+If an appearance texture cannot load, its material remains a plain PBR surface. If the HDRI fails, a generated `RoomEnvironment` supplies reflection lighting instead. Furniture assets still follow their separate labeled-proxy behavior. These fallbacks keep the workspace inspectable; they do not establish that every requested asset loaded. There is no live reconstruction of the captured room's real materials or light sources.
+
+The HDRI is a generic studio lighting environment, and PCF shadow filtering approximates softness. This browser renderer does not reproduce Blender Cycles light bounces, path tracing, baked lightmaps, or measured real-room illumination. It favors an interactive desktop/mobile view over offline-render parity; physical iPhone and Quest performance still need device testing.
+
+Run the focused behavior checks from the repository root:
+
+```bash
+node --experimental-strip-types spatial/tests/test-explode.mjs
+npm run lint
+npm run build
+```
+
+The 13 layout/controller checks cover variable sizes, pivots, rotated/scaled roots, transformed parents, non-overlap, deterministic ordering, exact restoration, rapid reversals, reduced motion, immutable bounds/input, and disposal. Browser checks should additionally cover actual asset loading, canvas/list selection, camera controls, narrow-screen framing, and navigation/unmount.
+
+Navigation regression check: explode the room, select a piece, follow **Capture a room**, then go back. Both the inventory mode and selection must reappear in the renderer as well as the controls. Next.js Activity preserves React state but cleans up effects, so the asynchronous scene initialization explicitly reapplies the latest committed view state.
+
+## Photo finishes and window daylight
+
+The workspace accepts optional shared `RoomAppearance` estimates per floor/wall, including tint, roughness, physical texture scale and UV rotation. The default photo reference styles sample geometry using an inspected building gallery image and explicitly labels its unverified unit attribution. Toggle Photo reference finishes to compare styling defaults. Open room file reads a bounded local reconstruction request/scene JSON without uploading it; imported shells contain no furniture.
+
+`window-daylight.ts` derives exterior-window centers and inward normals via polygon probes, including concave rooms and shared partitions. Sized RectAreaLights supply PBR illumination; one window-aligned directional proxy supplies approximate shadows. No established windows means a disclosed studio fallback. This is not measured illumination, solar positioning or realtime indirect illumination. See [photo appearance](../docs/photo-appearance.md) for input/provenance and rendering limits.
+
+Run `node --experimental-strip-types --test spatial/tests/test-room-appearance.mjs spatial/tests/test-explode.mjs` for the pure window/import/UV and furniture behavior checks.
