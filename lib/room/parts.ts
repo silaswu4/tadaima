@@ -45,11 +45,7 @@ const g = (...parts: THREE.Object3D[]) => {
 const INK = "#24221f";
 
 export function rug(w: number, d: number, color: string) {
-  const out = g(
-    place(block(w, 0.012, d, surface(color, 1), 0.004), 0, 0, 0),
-    place(block(w - 0.2, 0.014, d - 0.2, surface(new THREE.Color(color).multiplyScalar(1.08).getStyle(), 1), 0.004), 0, 0, 0),
-  );
-  return out;
+  return g(place(block(w, 0.012, d, surface(color, 1), 0), 0, 0, 0));
 }
 
 export function standingLamp() {

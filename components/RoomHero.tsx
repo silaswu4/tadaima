@@ -28,7 +28,12 @@ export function RoomHero() {
             setPicked(null);
             return;
           }
-          if (tag.current) tag.current.style.transform = `translate(${p.screen.x}px, ${p.screen.y}px)`;
+          if (tag.current) {
+            // label hangs off the box's corner, flipping left near the right edge
+            const flip = p.screen.x > window.innerWidth * 0.7;
+            tag.current.style.transform = `translate(${p.screen.x}px, ${p.screen.y}px)`;
+            tag.current.dataset.flip = flip ? "1" : "";
+          }
           if (p.name !== last) {
             last = p.name;
             setPicked({ name: p.name, size: p.size });
@@ -55,7 +60,8 @@ export function RoomHero() {
 
       <div ref={tag} className="pointer-events-none absolute top-0 left-0" aria-live="polite">
         {picked && (
-          <div className="flex -translate-x-1/2 -translate-y-full flex-col items-center">
+          <div className="flex -translate-y-1/2 items-center in-data-[flip=1]:-translate-x-full in-data-[flip=1]:flex-row-reverse">
+            <div className="h-px w-8 bg-ink" />
             <div className="min-w-[180px] bg-ink px-3 py-2 text-[12px] leading-[1.6] text-surface-soft">
               <div>{picked.name}</div>
               <div className="flex gap-3 text-surface-soft/70">
@@ -68,13 +74,12 @@ export function RoomHero() {
                 {inch(picked.size[0])} × {inch(picked.size[1])} × {inch(picked.size[2])} in
               </div>
             </div>
-            <div className="h-6 w-px bg-ink" />
           </div>
         )}
       </div>
 
       {count > 0 && (
-        <div className="pointer-events-none absolute right-4 bottom-6 bg-surface/85 px-3 py-2 text-[12px] text-ink backdrop-blur-md md:right-10">
+        <div className="pointer-events-none absolute right-4 bottom-6 border border-ink/15 bg-surface px-3 py-2 text-[12px] text-ink md:right-10">
           {count} objects &middot; {picked ? picked.name : "Hover any of them"}
         </div>
       )}

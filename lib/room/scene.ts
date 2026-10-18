@@ -2,12 +2,11 @@ import * as THREE from "three";
 import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
 import { GTAOPass } from "three/addons/postprocessing/GTAOPass.js";
-import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
 import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
-import { block, place, rug, standingLamp, surface } from "./parts";
+import { block, place, rug, standingLamp } from "./parts";
 
 export type Picked = {
   name: string;
@@ -20,8 +19,63 @@ type Item = {
   root: THREE.Group;
   box: THREE.Box3;
   size: [number, number, number];
-  mats: { m: THREE.MeshStandardMaterial; emissive: THREE.Color; intensity: number }[];
+  fill: THREE.MeshBasicMaterial;
+  line: THREE.LineBasicMaterial;
 };
+
+// drawing palette: white paper, graphite edges
+const PAPER = "#ffffff";
+const INK = "#141414";
+const PICKED_FILL = "#e9e9e7";
+
+// flat white, unlit, pushed back a touch so the ink edges never z-fight
+function sheet(color = PAPER) {
+  return new THREE.MeshBasicMaterial({
+    color,
+    side: THREE.DoubleSide,
+    polygonOffset: true,
+    polygonOffsetFactor: 1,
+    polygonOffsetUnits: 1,
+  });
+}
+
+// back-face hull pushed out along the normal in view space, so the contour is
+// the same pencil weight at any distance
+const contour = new THREE.MeshBasicMaterial({ color: INK, side: THREE.BackSide });
+contour.onBeforeCompile = (shader) => {
+  shader.vertexShader = shader.vertexShader.replace(
+    "#include <project_vertex>",
+    `vec4 mvPosition = modelViewMatrix * vec4( transformed, 1.0 );
+    mvPosition.xyz += normalize( normalMatrix * normal ) * ( -mvPosition.z ) * 0.0017;
+    gl_Position = projectionMatrix * mvPosition;`,
+  );
+};
+
+function contours(root: THREE.Object3D) {
+  const meshes: THREE.Mesh[] = [];
+  root.traverse((o) => {
+    if (o instanceof THREE.Mesh && o.geometry.attributes.normal) meshes.push(o);
+  });
+  for (const m of meshes) {
+    const hull = new THREE.Mesh(m.geometry, contour);
+    hull.raycast = () => {};
+    hull.userData.noEdges = true;
+    m.add(hull);
+  }
+}
+
+// outline every mesh under root with its hard edges
+function inkEdges(root: THREE.Object3D, line: THREE.LineBasicMaterial, angle = 30) {
+  const meshes: THREE.Mesh[] = [];
+  root.traverse((o) => {
+    if (o instanceof THREE.Mesh && !o.userData.noEdges) meshes.push(o);
+  });
+  for (const m of meshes) {
+    const edges = new THREE.LineSegments(new THREE.EdgesGeometry(m.geometry, angle), line);
+    edges.raycast = () => {};
+    m.add(edges);
+  }
+}
 
 // room interior, metres. x right, y up, z toward the viewer.
 const X0 = -3;
@@ -32,8 +86,8 @@ const H = 2.7;
 const WIN = { z0: -1.75, z1: 0.15, y0: 0.72, y1: 2.28 };
 
 function buildShell(scene: THREE.Scene) {
-  const wall = surface("#ebe5da", 0.95);
-  const trim = surface("#f2eee7", 0.7);
+  const wall = sheet();
+  const trim = sheet();
   const t = 0.12;
   const solid = (w: number, h: number, d: number, x: number, y: number, z: number, m = wall) => {
     const mesh = place(block(w, h, d, m, 0), x, y, z);
@@ -49,28 +103,19 @@ function buildShell(scene: THREE.Scene) {
   const uv = floorGeo.attributes.uv;
   const pos = floorGeo.attributes.position;
   for (let i = 0; i < pos.count; i++) uv.setXY(i, pos.getX(i) / 2.2, pos.getZ(i) / 2.2);
-  const tex = new THREE.TextureLoader();
-  const load = (name: string, color = false) => {
-    const t = tex.load(`/textures/wood_floor_${name}.jpg`);
-    t.wrapS = t.wrapT = THREE.RepeatWrapping;
-    t.anisotropy = 8;
-    if (color) t.colorSpace = THREE.SRGBColorSpace;
-    return t;
-  };
-  const floor = new THREE.Mesh(
-    floorGeo,
-    new THREE.MeshStandardMaterial({
-      map: load("diff", true),
-      normalMap: load("nor_gl"),
-      roughnessMap: load("rough"),
-      color: "#f2e6d6",
-    }),
-  );
+  const floor = new THREE.Mesh(floorGeo, sheet());
+  floor.userData.noEdges = true;
   floor.receiveShadow = true;
   scene.add(floor);
+  const grid = new THREE.GridHelper(12, 48, INK, INK);
+  const gm = grid.material as THREE.LineBasicMaterial;
+  gm.transparent = true;
+  gm.opacity = 0.1;
+  grid.position.set(0, 0.002, 0.7);
+  scene.add(grid);
 
   // ceiling
-  solid(X1 - X0 + 2 * t, t, Z1 - Z0 + t, 0, H, (Z0 + Z1) / 2, surface("#f1ede6", 1));
+  solid(X1 - X0 + 2 * t, t, Z1 - Z0 + t, 0, H, (Z0 + Z1) / 2);
   // back and right walls
   solid(X1 - X0 + 2 * t, H, t, 0, 0, Z0 - t / 2);
   solid(t, H, Z1 - Z0, X1 + t / 2, 0, (Z0 + Z1) / 2);
@@ -82,7 +127,7 @@ function buildShell(scene: THREE.Scene) {
   solid(t, H, Z1 - WIN.z1, lx, 0, (WIN.z1 + Z1) / 2);
 
   // window frame and mullion
-  const frame = surface("#f4f1eb", 0.5);
+  const frame = sheet();
   const fw = 0.05;
   const zc = (WIN.z0 + WIN.z1) / 2;
   solid(0.08, fw, WIN.z1 - WIN.z0, X0 + 0.0, WIN.y0, zc, frame);
@@ -96,8 +141,9 @@ function buildShell(scene: THREE.Scene) {
   // bright daylight behind the glass
   const sky = new THREE.Mesh(
     new THREE.PlaneGeometry(6, 4),
-    new THREE.MeshBasicMaterial({ color: new THREE.Color("#fff6e8").multiplyScalar(1.15), toneMapped: true }),
+    new THREE.MeshBasicMaterial({ color: PAPER }),
   );
+  sky.userData.noEdges = true;
   sky.rotation.y = Math.PI / 2;
   sky.position.set(X0 - 1.2, 1.5, zc);
   scene.add(sky);
@@ -125,7 +171,6 @@ const SPECS: Spec[] = [
   { name: "Lounge chair", model: "mid_century_lounge_chair", at: [-1.85, 0, -0.45], rot: Math.PI / 2 + 0.45 },
   { name: "Cabinet", model: "modern_wooden_cabinet", at: [2.72, 0, -0.35], rot: -Math.PI / 2 },
   { name: "Shelves", model: "wooden_display_shelves_01", at: [2.15, 0, -2.2], rot: Math.PI / 2 },
-  { name: "Plant", model: "potted_plant_01", at: [-2.42, 0, -1.85] },
   { name: "Side table", model: "side_table_01", at: [1.38, 0, -2.08] },
   { name: "Vase", model: "ceramic_vase_01", at: [1.38, 0, -2.08], on: "Side table" },
   { name: "Floor lamp", make: () => standingLamp(), at: [-1.2, 0, -2.08] },
@@ -151,18 +196,17 @@ export function createRoom(
 ) {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: "high-performance" });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, lite ? 1.5 : 2));
-  renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 0.92;
-  renderer.shadowMap.enabled = true;
+  renderer.toneMapping = THREE.NoToneMapping;
+  renderer.shadowMap.enabled = false;
   renderer.shadowMap.type = THREE.PCFShadowMap;
   renderer.shadowMap.autoUpdate = false;
 
   let shadowFrames = 3;
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color("#e9e3d8");
+  scene.background = new THREE.Color(PAPER);
   const pmrem = new THREE.PMREMGenerator(renderer);
   scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-  scene.environmentIntensity = 0.2;
+  scene.environmentIntensity = 0.35;
 
   const camera = new THREE.PerspectiveCamera(50, 1, 0.05, 40);
   const eye = new THREE.Vector3(0, 1.45, 3.2);
@@ -171,9 +215,10 @@ export function createRoom(
   camera.lookAt(look);
 
   buildShell(scene);
+  inkEdges(scene, new THREE.LineBasicMaterial({ color: INK, transparent: true, opacity: 0.5 }), 20);
 
-  // daylight through the window: warm sun plus a cool sky fill
-  const sun = new THREE.DirectionalLight("#ffd6a0", 4.2);
+  // soft, even daylight so the drawing reads, with quiet shadows for depth
+  const sun = new THREE.DirectionalLight("#fffaf2", 1.5);
   sun.position.set(X0 - 5, 3.4, -2.2);
   sun.target.position.set(-0.6, 0, 0.2);
   sun.castShadow = true;
@@ -181,10 +226,10 @@ export function createRoom(
   Object.assign(sun.shadow.camera, { left: -5, right: 5, top: 5, bottom: -5, near: 0.5, far: 16 });
   sun.shadow.bias = -0.0004;
   sun.shadow.normalBias = 0.025;
-  sun.shadow.radius = 4;
+  sun.shadow.radius = 6;
   scene.add(sun, sun.target);
-  scene.add(new THREE.HemisphereLight("#f3ebdf", "#6f604f", 0.32));
-  const bounce = new THREE.PointLight("#fff1dd", 0.45, 7, 1.4);
+  scene.add(new THREE.HemisphereLight("#ffffff", "#d8d1c4", 1.5));
+  const bounce = new THREE.PointLight("#fffaf2", 0.6, 8, 1.2);
   bounce.position.set(0.6, 2.3, 1.2);
   scene.add(bounce);
 
@@ -207,44 +252,40 @@ export function createRoom(
         const b = new THREE.Box3().setFromObject(root);
         root.position.z += Z0 - b.min.z + 0.005;
       }
-      const mats: Item["mats"] = [];
+      const fill = sheet();
+      const line = new THREE.LineBasicMaterial({ color: INK, transparent: true, opacity: 0.72 });
+      const lights: THREE.Light[] = [];
       root.traverse((o) => {
         if (o instanceof THREE.Mesh) {
           o.castShadow = s.casts !== false;
           o.receiveShadow = true;
-          for (const m of (Array.isArray(o.material) ? o.material : [o.material]) as THREE.MeshStandardMaterial[]) {
-            if (!m.emissive || mats.some((e) => e.m === m)) continue;
-            mats.push({ m, emissive: m.emissive.clone(), intensity: m.emissiveIntensity });
-          }
+          o.material = fill;
         }
-        if (o instanceof THREE.PointLight) {
-          o.castShadow = true;
-          o.shadow.mapSize.set(512, 512);
-          o.shadow.bias = -0.002;
-          o.shadow.normalBias = 0.03;
-          o.shadow.radius = 5;
-        }
+        if (o instanceof THREE.PointLight) lights.push(o);
       });
+      for (const l of lights) l.removeFromParent();
+      inkEdges(root, line, s.name === "Sofa" ? 70 : 45);
+      contours(root);
       scene.add(root);
       root.updateMatrixWorld(true);
       const box = new THREE.Box3().setFromObject(root);
       const v = box.getSize(new THREE.Vector3());
-      items.push({ name: s.name, root, box, size: [v.x, v.y, v.z], mats });
+      items.push({ name: s.name, root, box, size: [v.x, v.y, v.z], fill, line });
       roots.push(root);
     }
     shadowFrames = 3;
   })();
 
-  const outline = new THREE.Box3Helper(new THREE.Box3(), new THREE.Color("#1f1d1a"));
+  const outline = new THREE.Box3Helper(new THREE.Box3(), new THREE.Color(INK));
   const outlineMat = outline.material as THREE.LineBasicMaterial;
   outlineMat.transparent = true;
-  outlineMat.opacity = 0.75;
+  outlineMat.opacity = 0.9;
   outlineMat.depthTest = false;
   outline.renderOrder = 10;
   outline.visible = false;
   scene.add(outline);
 
-  // post: multisampled target, ambient occlusion, a touch of bloom on the bright window
+  // post: multisampled target and ambient occlusion for depth
   const target = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 });
   const composer = new EffectComposer(renderer, target);
   composer.addPass(new RenderPass(scene, camera));
@@ -253,11 +294,9 @@ export function createRoom(
     gtao = new GTAOPass(scene, camera, 1, 1);
     gtao.updateGtaoMaterial({ radius: 0.32, distanceExponent: 1.6, thickness: 1.0, scale: 1.0, samples: 24 });
     gtao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 10, rings: 3, samples: 24 });
-    gtao.blendIntensity = 1;
+    gtao.blendIntensity = 0.55;
     composer.addPass(gtao);
   }
-  const bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.16, 0.25, 1.0);
-  composer.addPass(bloom);
   composer.addPass(new OutputPass());
 
   const resize = () => {
@@ -315,18 +354,15 @@ export function createRoom(
 
   function setHover(next: Item | null) {
     if (next === hovered) return;
-    if (hovered) for (const e of hovered.mats) {
-      e.m.emissive.copy(e.emissive);
-      e.m.emissiveIntensity = e.intensity;
+    if (hovered) {
+      hovered.fill.color.set(PAPER);
+      hovered.line.opacity = 0.72;
     }
     hovered = next;
     canvas.style.cursor = next ? "pointer" : "";
     if (next) {
-      for (const e of next.mats) {
-        if (e.intensity > 1) continue; // leave the glowing lamp shade alone
-        e.m.emissive.set("#ffe9cc");
-        e.m.emissiveIntensity = 0.05;
-      }
+      next.fill.color.set(PICKED_FILL);
+      next.line.opacity = 1;
       outline.box.copy(next.box).expandByScalar(0.015);
       outline.visible = true;
     } else {
@@ -344,7 +380,7 @@ export function createRoom(
     }
     if (hovered) {
       const b = hovered.box;
-      anchor.set((b.min.x + b.max.x) / 2, b.max.y, (b.min.z + b.max.z) / 2).project(camera);
+      anchor.set(b.max.x, b.max.y, b.max.z).project(camera);
       onPick({
         name: hovered.name,
         size: hovered.size,
@@ -372,6 +408,8 @@ export function createRoom(
       canvas.removeEventListener("pointerleave", onLeave);
       canvas.removeEventListener("pointerup", onTap);
       scene.traverse((o) => {
+        if (o instanceof THREE.LineSegments) o.geometry.dispose();
+        if (o.userData.noEdges && o instanceof THREE.Mesh && o.material === contour) return;
         if (o instanceof THREE.Mesh) {
           o.geometry.dispose();
           const m = o.material as THREE.MeshStandardMaterial;
