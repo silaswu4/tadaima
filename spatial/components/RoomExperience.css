@@ -1323,3 +1323,7 @@
 .room-x__carry .room-x__carry-fit { margin-top: 2px; color: #2f6b3f; font-size: 12px; }
 .room-x__carry .room-x__carry-fit[data-level="snap"] { color: #8a6416; }
 .room-x__carry .room-x__carry-fit[data-level="blocked"] { color: #9b3a24; }
+
+/* the button the first-person crosshair is aimed at */
+.room-x [data-aimed] { outline: 2px solid rgba(255, 255, 255, 0.95); outline-offset: 3px; transform: translateY(-2px) scale(1.06); transition: transform 0.12s ease; }
+.room-x .room-x__tool[data-aimed] { background: linear-gradient(180deg, #fff, rgba(255, 255, 255, 0.8)); }

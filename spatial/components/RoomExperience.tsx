@@ -363,6 +363,52 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
     window.addEventListener("keydown", onTab);
     return () => { document.removeEventListener("pointerlockchange", sync); window.removeEventListener("keydown", onTab); };
   }, [panel]);
+  // First person has no cursor: aim the crosshair (screen center) at an on-screen button and click,
+  // like a game. The button under the crosshair lights up; the click goes to it instead of the room.
+  useEffect(() => {
+    if (!looking) return;
+    const CLICKABLE = "button:not(:disabled), a[href], [role=button]";
+    let raf = 0;
+    let lit: HTMLElement | null = null;
+    // look through the crosshair and other non-interactive overlays to the first real button
+    const under = () => {
+      for (const hit of document.elementsFromPoint(window.innerWidth / 2, window.innerHeight / 2)) {
+        if (!(hit instanceof HTMLElement) || hit.closest("canvas")) continue;
+        const el = hit.closest<HTMLElement>(CLICKABLE);
+        if (el && el.closest(".room-x")) return el;
+      }
+      return null;
+    };
+    const tick = () => {
+      const el = under();
+      if (el !== lit) { lit?.removeAttribute("data-aimed"); el?.setAttribute("data-aimed", ""); lit = el; }
+      raf = requestAnimationFrame(tick);
+    };
+    let pressing = false;
+    const click = (e: MouseEvent) => {
+      // let our own press of the aimed button through
+      if (pressing || !document.pointerLockElement || e.button !== 0) return;
+      const el = under();
+      if (!el) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      if (e.type === "mousedown") {
+        pressing = true;
+        try { el.click(); } finally { pressing = false; }
+      }
+    };
+    raf = requestAnimationFrame(tick);
+    window.addEventListener("mousedown", click, true);
+    window.addEventListener("mouseup", click, true);
+    window.addEventListener("click", click, true);
+    return () => {
+      cancelAnimationFrame(raf);
+      lit?.removeAttribute("data-aimed");
+      window.removeEventListener("mousedown", click, true);
+      window.removeEventListener("mouseup", click, true);
+      window.removeEventListener("click", click, true);
+    };
+  }, [looking]);
   const showResultsRef = useRef(false);
   const inventoryRef = useRef<WalkItem[]>([]);
   const carryOutRef = useRef<(item: WalkItem) => void>(() => {});
