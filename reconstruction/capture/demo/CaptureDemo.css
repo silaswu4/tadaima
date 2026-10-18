@@ -11,11 +11,7 @@
   min-height: 100dvh;
   overflow-x: clip;
   color: var(--cap-fg);
-  /* a soft echo of the landing's window light, top right */
-  background:
-    radial-gradient(70% 55% at 88% 6%, rgba(240, 182, 76, 0.16), transparent 70%),
-    radial-gradient(40% 35% at 70% 0%, rgba(240, 182, 76, 0.1), transparent 70%),
-    var(--cap-bg);
+  background: var(--cap-bg);
   font-family: var(--font-body), system-ui, sans-serif;
   font-size: 15px;
 }
