@@ -97,7 +97,7 @@ export const voiceAgentConfig = {
           {
             type: "client",
             name: "move_here",
-            description: "Move a piece in the room to the spot the shopper is looking at, adjusted so it fits.",
+            description: "Move a piece to the spot the shopper is looking at, adjusted so it fits. Also brings a piece back out of inventory.",
             parameters: {
               type: "object",
               properties: {

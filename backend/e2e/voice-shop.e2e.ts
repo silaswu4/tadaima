@@ -172,4 +172,21 @@ describe("voice shopping for a spot", { skip: !(KEY && AGENT) && "needs ELEVENLA
     assert.ok(calls(sim).some((c) => c.name === "move_here"));
     judged(sim);
   });
+
+  test("'put the armchair away': puts it away, says seating dropped, and doesn't claim it's gone for good", { timeout: 4 * 60 * 1000 }, async () => {
+    const sim = await simulate(
+      "You want the armchair out of the way for now. Keep replies short. End once the assistant confirms.",
+      "Put the armchair away for now.",
+      { put_away: "ok: STOCKHOLM 2025 armchair, Djurmo gray/white is put away in inventory and out of the cart. The room now seats 3, under the 4 wanted." },
+      [
+        { id: "seats_mentioned", prompt: "The agent told the shopper the room now seats 3, under the 4 they wanted." },
+        { id: "inventory_not_deleted", prompt: "The agent described it as put away / stored (can come back), not deleted or removed for good." },
+      ],
+    );
+    console.log(transcript(sim));
+    const put = calls(sim).find((c) => c.name === "put_away");
+    assert.ok(put, "called put_away");
+    assert.equal(put.params.item_id, "item_armchair");
+    judged(sim);
+  });
 });
