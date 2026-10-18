@@ -360,7 +360,7 @@ export default function Home() {
         </div>
 
         <footer className="hero-credit">
-          <p>Built at LA Hacks 2026</p>
+          <p>Built at AI Hackathon 2026 by LA Hacks</p>
           <nav aria-label="Project links">
             <a href="https://github.com/silaswu4/tadaima" target="_blank" rel="noreferrer">
               GitHub ↗
