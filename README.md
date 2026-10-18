@@ -1,6 +1,17 @@
 # Tadaima
 
-Project context, product decisions, architecture, capture research, sponsor requirements, Solana options, and the implementation plan live in **[docs/README.md](docs/README.md)**. Start there before building. The current UI and package still use the working name Michael; the implemented application is a Three.js landing-page hero.
+Project context, product decisions, architecture, capture research, sponsor requirements, Solana options, and the implementation plan live in **[docs/README.md](docs/README.md)**. Start there before building. The current UI and package still use the working name Michael. The homepage uses the latest WebGL ASCII hero; the earlier Three.js room hero is retained in `spatial/`.
+
+## Team working folders
+
+| Folder | Owner | Work |
+| --- | --- | --- |
+| [`backend/`](backend/README.md) | You / project lead | Shared contracts, agents, shopping, services, integration |
+| [`reconstruction/`](reconstruction/README.md) | Matthew | Address/capture processing, room geometry, Blender exports |
+| [`frontend/`](frontend/README.md) | Angelina | Screens, onboarding, responsive UI, products and basket |
+| [`spatial/`](spatial/README.md) | Silas | 3D viewer, selection, placement, Quest/browser interaction |
+
+See [team ownership and first tasks](docs/team-ownership.md). These are four working areas inside one application; run the commands below from the repository root. `app/` holds thin Next.js entry points and `public/` holds shared static assets.
 
 ## Application setup
 
@@ -22,7 +33,9 @@ bun dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Edit the screen in `frontend/HomePage.tsx` and the current hero in `spatial/components/AsciiHero.tsx`. The earlier 3D viewer is in `spatial/components/RoomHero.tsx`. The root `app/page.tsx` mounts the screen. The page auto-updates as you edit the files.
+
+The current ASCII hero references `/art/japan.mp4`, a test clip intentionally excluded by `.gitignore`. A fresh clone will not include that background footage; supply an appropriately licensed asset before shipping it. The scaffold preserves the incoming hero without adding third-party test media.
 
 This project uses `next/font/local` to load the bundled Paper Mono typeface. Its license is in [app/fonts/PaperMono-OFL.txt](app/fonts/PaperMono-OFL.txt).
 

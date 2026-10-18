@@ -1,24 +1,31 @@
 # Repository state and implementation plan
 
-Repository inspected October 17, 2026 at base commit `cbbe48fe69b1b12afa4b1fb9c245bce6b83e84c4` on `main`. This document separates observed code from proposed work.
+Repository originally inspected October 17, 2026 at base commit `cbbe48fe69b1b12afa4b1fb9c245bce6b83e84c4`; paths below are updated for the subsequent four-folder scaffold and incoming ASCII hero change `34e581c`. This document separates observed code from proposed work. See [team ownership](team-ownership.md) before editing.
 
 ## What exists
 
 | Path | Observed responsibility |
 | --- | --- |
-| `app/page.tsx` | Full-height hero, “Michael” headline, placeholder `#` sign-in and scan links |
+| `app/page.tsx` | Thin Next.js entry point for `frontend/HomePage.tsx` |
+| `frontend/HomePage.tsx` | Latest dark ASCII hero composition, “Michael” headline, placeholder `#` sign-in and scan links |
 | `app/layout.tsx` | Local Paper Mono font and Michael page metadata |
-| `app/globals.css` | Light surface/ink tokens, grain overlay, some unused-looking warm accent tokens; no cleanup requested |
-| `components/RoomHero.tsx` | Client component, lazy scene import, loading fade, selection label, centimeter/inch display, coarse-pointer lightweight mode |
-| `lib/room/scene.ts` | Hardcoded room shell and furniture, GLB loading, pencil contours/edges, fixed camera, raycast hover/touch selection, render loop/disposal |
-| `lib/room/parts.ts` | Procedural meter-based objects and materials; local parts use floor origin and front `+Z` |
+| `frontend/styles/globals.css` | Light surface/ink tokens, grain overlay, some unused-looking warm accent tokens; no cleanup requested |
+| `spatial/components/AsciiHero.tsx` | Current homepage renderer configuration and playback/visibility state |
+| `spatial/components/AsciiField.tsx` | Incoming WebGL2 live ASCII renderer |
+| `spatial/components/RoomHero.tsx` | Earlier pencil-room client component, lazy scene import, selection labels, coarse-pointer mode; retained but not mounted on homepage |
+| `spatial/room/scene.ts` | Hardcoded room shell and furniture, GLB loading, pencil contours/edges, fixed camera, raycast hover/touch selection, render loop/disposal |
+| `spatial/room/parts.ts` | Procedural meter-based objects and materials; local parts use floor origin and front `+Z` |
+| `backend/contracts.ts` | Type-only starting subset of room/evidence/product contracts; no runtime service or validators |
+| `reconstruction/contracts.ts` | Type-only confirmed-geometry-to-artifacts worker boundary; no running processor |
 | `public/models/` | Seven bundled GLB models, referenced by the hero |
 | `app/fonts/` | Paper Mono WOFF2 and SIL Open Font License text |
 | `HANDOFF.md` | Earlier Michael product/design handoff; partially superseded by web-only requirements |
-| `AGENTS.md` | Next.js-generated warning to read installed version-specific guides before writing application code |
+| `AGENTS.md` | Next.js version-specific guidance plus the team's four working boundaries |
 | `README.md` | Mostly create-next-app starter text; the docs entry link points here |
 
-The hero creates nine object entries: rug, sofa, coffee table, lounge chair, cabinet, shelves, side table, vase, and floor lamp. The scene has a fixed camera and a hardcoded room approximately 6 by 6.2 meters, with 2.7-meter wall height. These values describe a demonstration scene, not a reconstruction of the user's home.
+The earlier Three.js room hero creates nine object entries: rug, sofa, coffee table, lounge chair, cabinet, shelves, side table, vase, and floor lamp. The scene has a fixed camera and a hardcoded room approximately 6 by 6.2 meters, with 2.7-meter wall height. These values describe a demonstration scene, not a reconstruction of the user's home. The newer homepage uses the separate ASCII renderer instead.
+
+The ASCII configuration references `/art/japan.mp4`, third-party test footage deliberately excluded in the incoming `.gitignore`. It is not available in a fresh clone. The scaffold preserves that incoming work and its exclusion; licensed replacement media is required before claiming the background ships with the repository.
 
 The label dimensions are calculated from scene object bounding boxes after transforms. They are not merchant specifications or independently verified physical measurements. Rotated world-space bounds can differ from intrinsic product width/depth. Treat this code as a useful interaction/rendering starting point, not a finished fit engine.
 
@@ -26,7 +33,7 @@ Commit `07d83cb` attributes the bundled furniture models to CC0 Poly Haven asset
 
 ## What does not exist
 
-No address search, upload route, room-capture pipeline, Apple RoomPlan import, Blender job, structured room plan, backend persistence, authentication, product catalog, real retailer search, cart preparation, checkout, WebXR session, shared-device state, voice agent, Fetch agent, wallet, or Solana contract was found in the inspected source tree. No automated application test suite is configured in `package.json`.
+No address search, upload route, room-capture pipeline, Apple RoomPlan import, Blender job, runtime room-plan service, backend persistence, authentication, product catalog, real retailer search, cart preparation, checkout, WebXR session, shared-device state, voice agent, Fetch agent, wallet, or Solana contract exists yet. Shared TypeScript types do not implement these behaviors. No automated application test suite is configured in `package.json`.
 
 ## Dependencies and local setup
 
@@ -53,7 +60,9 @@ npm run build
 npm run start
 ```
 
-`start` runs a production build after one has been produced; it is not a substitute for `build`. These are documented commands, not claims that they were executed successfully during the documentation task.
+`start` runs a production build after one has been produced; it is not a substitute for `build`.
+
+The final four-folder scaffold, including the incoming ASCII update, passed `npm run lint` and `npm run build`. A production browser smoke check verified the dark homepage layout, copy, and controls; the excluded background test clip is absent, so footage playback was not verified. A source comparison confirmed that the incoming page/renderers were preserved except for import paths. The initial move also loaded the earlier nine-object 3D hero before the ASCII update arrived. Documentation links and JSON examples passed checks. These results do not establish any unimplemented shopping, reconstruction, mobile hardware, or Quest capability. Installation reported five high-severity npm audit findings in the existing dependency tree; dependency versions and the lockfile were not changed in this scaffold.
 
 Before application changes, follow `AGENTS.md` and read the relevant installed Next.js guides under `node_modules/next/dist/docs/`. Do not assume older framework conventions apply to this version.
 
@@ -121,6 +130,6 @@ Prefer one well-measured room over a visually impressive but ungrounded entire a
 
 Cut research-grade reconstruction, unlimited merchants, automated delivery/assembly booking, and broad marketplace integrations before cutting product evidence, locked-item behavior, plan revisions, cost honesty, or the explicit purchase boundary.
 
-## Suggested ownership boundaries
+## Assigned ownership boundaries
 
-If dividing work, establish the room-plan/tool contract first. Good independent boundaries are capture/reconstruction, viewer/Quest, research/planner, and commerce/sponsor adapters. Avoid separate copies of state or competing schema definitions. No actual team member assignments or skills have been confirmed in this documentation.
+The user assigned four working areas and requested that Silas and Angelina focus on frontend work. The project lead owns `backend/`, Matthew owns `reconstruction/`, Angelina owns `frontend/`, and Silas owns `spatial/`. This reflects the user's later request to swap Silas and Angelina. See [team ownership](team-ownership.md) for tasks and handoffs; prior experience and registration status are not inferred from these assignments. Avoid separate copies of state or competing schema definitions.

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
-import "./globals.css";
+import "@/frontend/styles/globals.css";
 
 // paper mono, by paper.design (SIL OFL, see fonts/PaperMono-OFL.txt)
 const mono = localFont({

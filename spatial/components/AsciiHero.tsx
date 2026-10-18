@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { AsciiField, type AsciiConfig } from "@/components/AsciiField";
+import { AsciiField, type AsciiConfig } from "@/spatial/components/AsciiField";
 
 // the room loop as live ascii. module scope so the gl program is built once
 const ROOM: AsciiConfig = {

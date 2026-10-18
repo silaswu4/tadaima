@@ -29,7 +29,7 @@ Recommended evidence:
 - Deliberate responsive layouts for touch, desktop, and the headset.
 - Honest progress, failure, measurement, and checkout states.
 
-Paper can help author the design. There is no reason to put a design editor in the production runtime just to mention its name. Preserve the existing repository's black-and-white pencil/blueprint direction, Paper Mono typography, sentence case, and restrained copy until the team deliberately revises that direction.
+Paper can help author the design. There is no reason to put a design editor in the production runtime just to mention its name. Preserve the latest ASCII landing-page work, Paper Mono typography, sentence case, and restrained copy. The original pencil/blueprint room renderer is retained as earlier design context; the scaffold does not reverse the incoming homepage update.
 
 ## Browser Use: Make Browsing Produce Verifiable Results
 

@@ -17,7 +17,7 @@ Updated October 17, 2026. These are concrete unresolved project choices, not req
 | Solana feature | Research complete; user choice pending | Select sell-to-upgrade or bounded mandate, or defer; do not assume approval |
 | Wallet UX/provider | Unselected | Verify new-app availability, web/iPhone support, key custody, and test-network flow |
 | Checkout depth | Agentic buying ambition | First prove real cart preparation and approval; actual purchases need explicit authorization |
-| Team ownership and capacity | Not confirmed | Allocate responsibilities around shared contracts; do not infer VR experience from owning a Quest |
+| Team capacity and registration | Working areas assigned in [team ownership](team-ownership.md); capacity/registration not confirmed | Coordinate the shared contracts and verify actual event registration; do not infer VR experience from owning a Quest |
 
 ## Capability gates
 

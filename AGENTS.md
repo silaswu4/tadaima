@@ -7,3 +7,16 @@ This version has breaking changes — APIs, conventions, and file structure may 
 This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
 
 <!-- END:nextjs-agent-rules -->
+
+## Team working areas
+
+Read `docs/team-ownership.md` and the relevant folder README before editing.
+
+| Area | Owner | Boundary |
+| --- | --- | --- |
+| `backend/` | User / project lead | Shared contracts, services, shopping agents, sponsor adapters, integration |
+| `reconstruction/` | Matthew | Address/capture processing, metric geometry, Blender, generated artifacts |
+| `frontend/` | Angelina | Product screens, capture UI, responsive styles, product/basket panels |
+| `spatial/` | Silas | Three.js viewer, selection, rendering, Quest/WebXR interactions |
+
+This is one Next.js application. Keep root `app/` as thin route/layout/API wiring and coordinate root configuration and dependency changes with the lead. Do not create four independent apps or duplicate shared room types. `backend/contracts.ts` is browser-safe and type-only; keep server implementations and secrets out of client imports. Coordinate changes to another owner's files and shared interfaces. The current hero remains a demonstration scene, not a live reconstruction or shopping integration.

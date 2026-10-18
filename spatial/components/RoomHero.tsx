@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { Picked } from "@/lib/room/scene";
+import type { Picked } from "@/spatial/room/scene";
 
 const cm = (m: number) => Math.round(m * 100);
 const inch = (m: number) => (m / 0.0254).toFixed(1);
@@ -17,7 +17,7 @@ export function RoomHero() {
     let dispose: (() => void) | undefined;
     let alive = true;
     let last = "";
-    import("@/lib/room/scene").then(({ createRoom }) => {
+    import("@/spatial/room/scene").then(({ createRoom }) => {
       if (!alive || !canvas.current) return;
       const lite = window.matchMedia("(max-width: 767px), (pointer: coarse)").matches;
       const room = createRoom(

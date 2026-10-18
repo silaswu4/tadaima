@@ -1,6 +1,6 @@
 # Proposed data model and contracts
 
-**Status:** A recommended implementation contract. None of these application types, endpoints, or persistence tables exists at the documentation base commit. Use this to agree on boundaries before coding; do not treat illustrative field names as a shipped API.
+**Status:** A recommended implementation contract. A small browser-safe starting subset now exists in [`backend/contracts.ts`](../backend/contracts.ts), with a worker adapter in [`reconstruction/contracts.ts`](../reconstruction/contracts.ts). These are compile-time scaffolding, not runtime validation, endpoints, persistence tables, or a complete implementation of this proposal. Coordinate changes through the [team boundaries](team-ownership.md).
 
 ## Conventions
 

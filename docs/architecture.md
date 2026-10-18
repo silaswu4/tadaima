@@ -1,6 +1,6 @@
 # Proposed system architecture
 
-**Status:** Recommended architecture, not the current implementation. The repository currently has a client-rendered Three.js landing hero and no application backend. The choice of database, storage, queue, authentication, deployment platform, and reconstruction/model providers remains open.
+**Status:** Recommended architecture, not the current implementation. The repository currently has a WebGL ASCII landing hero, an earlier Three.js room renderer, and type-only backend/reconstruction scaffolding, with no running application backend. Work is divided into [four owned folders](team-ownership.md) within one Next.js application. The choice of database, storage, queue, authentication, deployment platform, and reconstruction/model providers remains open.
 
 ## One shared plan, several interfaces
 

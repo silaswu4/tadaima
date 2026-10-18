@@ -6,6 +6,8 @@ The repository is named `tadaima`; the existing UI, package, and older handoff s
 
 ## Start here
 
+For active development, start with [Team ownership and working boundaries](team-ownership.md): the project lead owns `backend/`, Matthew `reconstruction/`, Angelina `frontend/`, and Silas `spatial/`. The four areas share one application and one root development command.
+
 1. Read [Project context and decisions](project-context.md) for what the user actually requested.
 2. Read [Repository state and implementation plan](implementation-plan.md) before changing code. The current application is a landing-page hero, not an implemented shopping agent.
 3. Read [Product](product.md), [Architecture](architecture.md), and [Data model](data-model.md) for the proposed experience and system boundaries.
@@ -15,6 +17,7 @@ The repository is named `tadaima`; the existing UI, package, and older handoff s
 
 | Document | Purpose |
 | --- | --- |
+| [Team ownership](team-ownership.md) | Four working areas, named owners, initial tasks, and handoff boundaries |
 | [Project context](project-context.md) | Confirmed requirements, recommendations, rejected directions, and handoff |
 | [Product](product.md) | Thesis, concise user flow, scope, and Homebuddy differentiation |
 | [Architecture](architecture.md) | Data flow, shared state, jobs, integrations, and trust boundaries |
@@ -32,7 +35,7 @@ The repository is named `tadaima`; the existing UI, package, and older handoff s
 ## Reading the status of a statement
 
 - **Confirmed requirement:** explicitly requested by the user, including later corrections.
-- **Observed:** found in the repository or a cited source. Repository observations refer to base commit `cbbe48f`.
+- **Observed:** found in the repository or a cited source. The original inventory used base commit `cbbe48f`; the implementation, platform, data-model, and team documents now also describe the subsequent four-folder scaffold explicitly.
 - **Recommended:** a proposed design or scope decision, not an approval or an implemented feature.
 - **Open:** needs a team decision, access confirmation, or device test.
 - **Rejected:** deliberately excluded by the user or superseded by later direction.

@@ -17,9 +17,11 @@ Quest browsing must not become a requirement for signing in, entering an address
 
 ## What the repository currently implements
 
-At the inspected baseline, `app/page.tsx` renders a single full-screen landing hero. `components/RoomHero.tsx` loads `lib/room/scene.ts`, which builds a fixed-camera living room from local GLB furniture assets and procedural pieces.
+At the current scaffold, `app/page.tsx` mounts `frontend/HomePage.tsx`, which composes the latest full-screen ASCII landing hero through `spatial/components/AsciiHero.tsx` and `AsciiField.tsx`. The earlier `spatial/components/RoomHero.tsx` still loads `spatial/room/scene.ts` but is no longer mounted on the homepage. Angelina owns the surrounding screens/styles in `frontend/`; Silas owns both renderers and the spatial interface in `spatial/`. See [team ownership](team-ownership.md).
 
-Current behavior includes:
+The current homepage preserves the incoming dark ASCII design from commit `34e581c`. Its `/art/japan.mp4` test source is deliberately gitignored and absent from a fresh clone; licensed media must be supplied before shipping that background. This update is preserved rather than replaced by the earlier design.
+
+The retained earlier room renderer includes:
 
 - A straight-on room composition with monochrome surfaces, contour lines, and a floor grid.
 - "Michael" on the back wall, placeholder introduction, a "Scan your room" link, and a placeholder sign-in link.
@@ -42,7 +44,7 @@ The existing handoff sets a clear direction:
 - Human, direct wording without generic marketing language.
 - The room itself as the visual anchor.
 
-The stylesheet contains clay accent tokens, but their existence is not approval to turn the interface into a colorful dashboard. Extend the current visual system deliberately. Keep a strong distinction between the expressive landing illustration and evidence-heavy shopping controls, where legibility and clear status matter more than decorative treatment.
+These describe the original pencil-room design. The later ASCII homepage supersedes that landing composition, while retaining Paper Mono and the earlier viewer code. Preserve the latest work during integration. The stylesheet contains clay accent tokens; extend the visual system deliberately rather than treating their existence as a design decision. Evidence-heavy shopping controls still need clear status and legibility.
 
 Paper's role is design and implementation craft, potentially through its MCP integration. It is not a runtime requirement for a user to view their room. Its event brief emphasizes design fundamentals, ease of use, and personal craft. [Paper LA Hacks brief](https://paper.design/la-hacks), [Paper MCP documentation](https://paper.design/docs/mcp)
 
