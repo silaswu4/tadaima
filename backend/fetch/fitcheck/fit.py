@@ -107,8 +107,10 @@ def check_space(w: float, d: float, space_w: float, space_d: float | None, clear
     if v == "yes":
         tight = sd < clearance
         front = f"{cm(sd)} in front" + (f", less than the {cm(clearance)} you'd want to walk past" if tight else "")
-        turned = " It only fits turned 90 degrees." if label != "as listed" and options[0][5] != "yes" else ""
-        return Check("space", "yes", f"{m(along)} x {m(out)} in a {m(space_w)} x {m(space_d)} space: {cm(sw)} to spare across, {front}.{turned}"), label, tight
+        if label == "as listed":
+            return Check("space", "yes", f"{m(w)} wide, {m(d)} deep in a {m(space_w)} x {m(space_d)} space: {cm(sw)} to spare across, {front}."), label, tight
+        only = "It only fits turned 90 degrees" if options[0][5] != "yes" else "Turned 90 degrees it fits best"
+        return Check("space", "yes", f"{only}: {m(along)} along the {m(space_w)} side and {m(out)} into the {m(space_d)}, {cm(sw)} to spare across, {front}."), label, tight
     if v == "unknown":
         return Check("space", "unknown", f"{m(along)} x {m(out)} in a {m(space_w)} x {m(space_d)} space is within {cm(MARGIN)} of a wall. Too close to call, measure again."), None, False
     listed = options[0]
