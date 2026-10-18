@@ -4,7 +4,7 @@ import { toDataURL } from "qrcode";
 import gsap from "gsap";
 import { useCallback, useLayoutEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type FormEvent } from "react";
 import mark from "@/spatial/assets/tadaima-mark.png";
-import { WipeLink, useWipe, wipeInProgress } from "@/spatial/components/PageWipe";
+import { WipeLink, useWipe, wipeInProgress, whenWipeLifts } from "@/spatial/components/PageWipe";
 import { DappledLight } from "./DappledLight";
 import "./styles/hero.css";
 
@@ -90,8 +90,10 @@ export default function Home() {
   const reduced = useSyncExternalStore(subscribeToMotion, readMotion, () => false);
   const root = useRef<HTMLElement>(null);
   // arriving by a page wipe means the wipe already covered the screen, so skip the loader
-  const [revealed, setRevealed] = useState(() => typeof window !== "undefined" && wipeInProgress());
-  const [loaderGone, setLoaderGone] = useState(revealed);
+  // and start the intro as the panel lifts instead
+  const [arrivedByWipe] = useState(() => typeof window !== "undefined" && wipeInProgress());
+  const [revealed, setRevealed] = useState(false);
+  const [loaderGone, setLoaderGone] = useState(arrivedByWipe);
   const [open, setOpen] = useState<"scan" | "type" | null>(null);
   const [qr, setQr] = useState<string | null>(null);
   const [captureUrl, setCaptureUrl] = useState("/capture");
@@ -100,6 +102,7 @@ export default function Home() {
   const addressRef = useRef<HTMLInputElement>(null);
   const reveal = useCallback(() => setRevealed(true), []);
   const finishLoading = useCallback(() => setLoaderGone(true), []);
+  useLayoutEffect(() => (arrivedByWipe ? whenWipeLifts(reveal) : undefined), [arrivedByWipe, reveal]);
 
   // The hero sets in as the loader lifts: letters rise out of the floor, then the three ways in.
   useLayoutEffect(() => {
