@@ -4,6 +4,21 @@ FastAPI job service around the existing reconstruction pipelines: raw geometry, 
 
 Jobs run in-process on a bounded worker pool. Job records live in SQLite and artifacts on disk under `TADAIMA_DATA_DIR`. One container, no queue or object store. A restart marks unfinished jobs `failed` with error `Interrupted`; resubmit them.
 
+## Phone scan to room (demo)
+
+```bash
+reconstruction/service/demo.sh     # starts this service + Next on :3000, prints the phone settings
+```
+
+1. Install TadaimaScan on the iPhone (see `reconstruction/ios/TadaimaScan/README.md`). Optionally bake the settings in: add `TADAIMA_SERVER=http://<mac>.local:3000 TADAIMA_UPLOAD_KEY=<key>` to the `xcodebuild` command.
+2. Phone and Mac on the same network. Venue Wi-Fi often isolates clients; use the phone's hotspot if the upload can't connect.
+3. Scan, then tap **Send to Tadaima**. The app uploads the scan (with photos when captured) to `/api/scans` and waits for the rebuild.
+4. On the Mac, open `http://localhost:3000/rooms`. The **From your iPhone** panel lists the scan; **Enter room** saves it to the browser and opens it for shopping.
+
+Layout-only scans (no photos) open with measured furniture stand-ins; the viewer binds only photo-textured models. The `/api/scans` routes accept requests from this machine (by `Host` header) or with `x-tadaima-upload-key`. On untrusted networks someone could spoof the `Host` header to list and download your scans, so use a trusted network or the hotspot.
+
+Keep `TADAIMA_DATA_DIR` outside the repository. Next's file watcher reloads pages whenever files under the repo change.
+
 ## Run locally
 
 From the repository root:
@@ -12,7 +27,7 @@ From the repository root:
 uv venv reconstruction/service/.venv -p 3.12
 VIRTUAL_ENV=reconstruction/service/.venv uv pip install -r reconstruction/service/requirements-dev.txt
 
-export TADAIMA_DATA_DIR="$PWD/reconstruction/output/service"   # gitignored; never under public/
+export TADAIMA_DATA_DIR="$HOME/Library/Application Support/tadaima-reconstruction/data"   # outside the repo
 export TADAIMA_API_KEY="$(openssl rand -hex 24)"
 export BLENDER_BIN="/Applications/Blender.app/Contents/MacOS/Blender"
 reconstruction/service/.venv/bin/python -m reconstruction.service   # http://localhost:8000/docs
