@@ -2,9 +2,11 @@
 
 Research consolidated: October 17, 2026. This document describes the proposed pipeline and its limitations. It does not certify a working scanner, reconstruction service, or device integration in the repository.
 
-The current product requirement is **web only**, with two entry points: an address and unit number, or guided capture in an iPhone browser. Both must converge on a user-confirmed, dimensioned room model. Neither entry point guarantees an accurate reconstruction of an arbitrary apartment.
+Implementation update, October 18: the [address research pipeline](../reconstruction/address/README.md) and [mobile photo capture](../reconstruction/capture/README.md) now feed the [validated geometry → editable Blender → GLB worker](../reconstruction/README.md). The mobile `/capture` page now collects four wall photos without tape measurements or numerical forms. Its worker can accept a hash-bound Codex vision handoff or an explicitly configured hosted vision provider, validate estimated dimensions/openings, and render a reviewable rectangular shell. Model-derived scale, dimensions and shape remain inferred rather than measured or user-confirmed. Calibrated multi-view reconstruction, physical iPhone camera testing, real-room accuracy, production uploads and product integration remain outstanding. The broader capture sequence below describes future multi-view evaluation rather than a proven four-photo scanning specification.
 
-The earlier root `HANDOFF.md` mentions Apple's room scan. That describes an earlier concept: native Apple RoomPlan is outside the current web-only scope. Existing RoomPlan output could be an optional future import without making a native application part of the core flow.
+The current product remains web-based for design/shopping/viewing, with three capture inputs: address research, photo-only iPhone web capture, and an optional [native RoomPlan companion](native-scan.md) approved on October 18 for the user's iPhone 14 Pro. All converge on reviewable geometry; none guarantees an accurate reconstruction of an arbitrary apartment. The browser flow requires no tape measurements.
+
+The earlier web-only capture restriction is superseded for the optional native scanner. The companion is limited to scanning/preview/export; the rest of the product and the address/photo fallbacks remain on the web. Its structured sensor-derived export feeds the existing Blender/GLB worker; physical device testing remains required.
 
 ## Shared outcome
 
@@ -59,7 +61,7 @@ There is no verified universal address-to-floor-plan API for this project. Zillo
 - Listing photographs can help identify windows, finishes, and fixtures. They do not reliably establish absolute scale on their own.
 - Missing, contradictory, or stale dimensions should trigger a targeted user correction, not invented precision.
 
-When no credible plan is found, retain the address as private project metadata and offer guided capture or manual room dimensions. Do not block the whole product on successful public-property research.
+When no credible plan is found, retain the address as private project metadata and offer photo capture or the optional native scanner. Do not block the whole product on successful public-property research.
 
 ## Option 2: Capture my space on iPhone web
 
@@ -76,7 +78,7 @@ Apple's [RoomPlan](https://developer.apple.com/augmented-reality/roomplan/) is a
 ### Recommended capture sequence
 
 1. Explain that images will be uploaded and processed, then request rear-camera access.
-2. Ask the user to choose one room and identify a known dimension, ideally a measured wall or opening.
+2. Ask the user to choose one room. Numeric measurements are optional evaluation aids, never a required step in the current product flow.
 3. Guide the user through overlapping views of corners, doorways, windows, and fixed obstacles. Encourage translated viewpoints; rotating in place provides limited geometric information.
 4. Capture an overview plus views along each wall. Avoid rapid movement, changing exposure, mirrors, and heavy motion blur where possible.
 5. Reject or request replacement for clearly blurred, dark, duplicated, or incomplete frames.
@@ -86,7 +88,7 @@ Apple's [RoomPlan](https://developer.apple.com/augmented-reality/roomplan/) is a
 
 Starting with roughly 16–32 sharp, overlapping frames is an evaluation idea, not a proven capture specification or a latency promise. The correct count depends on room size, overlap, reconstruction method, and compute. Measure it before making it product copy.
 
-If the user denies camera permission, offer file upload and manual dimensions. If a recording is interrupted, retain successfully captured material and allow continuation. The non-camera path must remain usable.
+If the user denies camera permission, offer existing-photo selection or another capture input. If a recording is interrupted, retain successfully captured material and allow continuation. The non-camera path must remain usable.
 
 ### Why an attractive reconstruction may still be wrong
 

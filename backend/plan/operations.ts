@@ -11,6 +11,8 @@ import { getPlan, getProposal, resetPlan, savePlan, saveProposal } from "@/backe
  */
 
 export class NotFound extends Error {}
+/** The request is well formed but can't be done, e.g. a spot that isn't on the floor. */
+export class Unprocessable extends Error {}
 
 async function mustGetPlan(projectId: string) {
   const plan = await getPlan(projectId);

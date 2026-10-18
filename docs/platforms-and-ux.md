@@ -1,15 +1,16 @@
 # Platforms and user experience
 
-Documentation baseline: October 17, 2026. This is a proposed cross-device experience grounded in the current repository and platform research. It is not a hardware test report.
+Documentation updated October 18, 2026. This is a proposed cross-device experience grounded in the current repository and platform research. It is not a hardware test report.
 
 ## Platform contract
 
-The complete shopping workflow must work in a browser without a native Tadaima app. Desktop and mobile provide the full baseline. Meta Quest 3S adds immersive viewing and interaction with the same underlying plan.
+The complete shopping workflow must work in a browser. Desktop and mobile provide the full baseline; Meta Quest 3S adds immersive viewing and interaction with the same underlying plan. The user approved an optional scan-only SwiftUI/RoomPlan companion for iPhone 14 Pro. That bounded native input does not move shopping or design out of the website.
 
 | Surface | Required baseline | Proposed enhancement | Current evidence |
 | --- | --- | --- | --- |
 | Desktop browser | Input, plan review, product comparison, editing, budget, basket review | Voice and immersive entry when supported | Existing landing hero uses Three.js and pointer hover. No full shopping flow is implemented. |
-| iPhone browser | Guided capture or photo upload, measurements, plan review, touch selection, text changes, basket review | Voice; optional supported 3D viewing handoff | Existing hero has coarse-pointer rendering adjustments and touch selection. Target iPhone model and browser version are unknown. |
+| iPhone browser | Guided photos or existing-photo input, plan review, touch selection, text changes, basket review | Voice; optional supported 3D viewing handoff | `/capture` and local bundle/vision processing exist. No tape measurements are required in photo-only mode. The available phone is iPhone 14 Pro; physical browser capture remains unverified. |
+| Optional iPhone companion | Native RoomPlan capture and export/import into the shared reconstruction pipeline | Return to browser design and shopping | Approved for iPhone 14 Pro; [native implementation/build status](native-scan.md). Physical-device scanning is not yet verified. |
 | Quest 3S browser | Access the saved room and inspect it through the website | WebXR immersive viewing, controller selection, object-grounded voice, optional passthrough placement | Available headset is confirmed. Actual compatibility and performance are not yet tested. |
 | ASI:One | Complete the sponsor-required primary agent workflow through conversation | Cards and links to optional spatial inspection | Integration is not present. This is a separate sponsor eligibility surface. |
 
@@ -29,9 +30,9 @@ The retained earlier room renderer includes:
 - A selected-object label displaying geometry bounding-box dimensions in centimeters and inches.
 - Responsive camera aspect handling, a wider field of view on narrow screens, and a lighter rendering configuration for coarse pointers or small screens.
 
-The displayed dimensions come from the demonstration geometry. They are not verified retailer product specifications or a measurement of the user's room. There is no implemented scan, address lookup, account flow, saved plan, voice service, WebXR session, shopping agent, or checkout behind the hero's placeholder links.
+The displayed dimensions come from the demonstration geometry. They are not verified retailer product specifications or a measurement of the user's room. Local address research and browser-photo processing now exist separately from the hero; there is still no connected account, saved-plan service, voice service, WebXR session, shopping agent, or checkout behind its placeholder links.
 
-The older `HANDOFF.md` mentions Apple's room scan as an input. The later user requirement to remain web only takes precedence: the baseline is guided iPhone browser capture, not a native RoomPlan integration.
+The earlier web-only capture decision has been superseded specifically for the approved optional native RoomPlan input. Browser photos and address research remain supported fallbacks. The native companion is not required to finish the web shopping workflow; see [native scanning](native-scan.md).
 
 ## Preserve the current design direction
 
@@ -73,20 +74,20 @@ Show the evidence next to the candidate layout. "Building brochure, unit match u
 
 The baseline sequence is:
 
-1. Explain what to capture and what measurements will be needed.
+1. Offer browser photos or the optional native scan; explain the difference in geometry and scale evidence.
 2. Request camera permission after the user starts capture.
 3. Guide the user through overlapping views with actual movement between positions.
 4. Allow review and replacement of blurry or missing views.
-5. Upload with visible, resumable job status where implemented.
-6. Ask for anchor measurements and review the proposed room outline.
+5. Export the private photo bundle for local processing; use authorized uploads and resumable job status when that backend is connected.
+6. Review the proposed outline and uncertainty. Photo-only inference does not require tape measurements; weak evidence should lead to additional photos.
 
 Use feature detection for camera APIs and recording formats. Safari's recording support does not make every codec, camera feature, or interruption behavior identical across iPhones. HTTPS and browser permission are prerequisites for normal camera capture. [WebKit MediaRecorder documentation](https://webkit.org/blog/11353/mediarecorder-api/)
 
-Do not assume iPhone Safari offers the same WebXR room-scanning APIs as a native app. Native RoomPlan uses Apple's framework and supported device hardware. A third-party browser tracking SDK, if evaluated, still needs separate proof that its output supports the required room geometry and scale. [Apple RoomPlan](https://developer.apple.com/augmented-reality/roomplan/), [WebKit iOS WebXR discussion](https://bugs.webkit.org/show_bug.cgi?id=309550)
+Do not assume iPhone Safari offers the same WebXR room-scanning APIs as a native app. The optional RoomPlan companion uses Apple's framework and supported hardware; the browser path does not. A third-party browser tracking SDK, if evaluated, still needs separate proof that its output supports the required room geometry and scale. [Apple RoomPlan](https://developer.apple.com/augmented-reality/roomplan/), [WebKit iOS WebXR discussion](https://bugs.webkit.org/show_bug.cgi?id=309550)
 
 Provide clear failure recovery:
 
-- Permission denied: upload existing photos and enter measurements.
+- Permission denied: use existing photos, address research, or the optional native input.
 - Interrupted recording: keep completed uploads and explain what needs recapture.
 - Weak reconstruction: show the proposed outline and ask for correction rather than presenting an authoritative room.
 - Long processing: allow the user to leave and reopen the job.

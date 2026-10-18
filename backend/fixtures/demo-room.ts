@@ -1,5 +1,6 @@
 import type { Evidence, ProductCandidate, RoomPlan } from "@/backend/contracts";
 import realCatalogFile from "@/backend/fixtures/real-catalog.json";
+import { assetUrlFor } from "@/backend/shopping/assets";
 
 /**
  * Synthetic demo living room (not a real home) furnished from real IKEA
@@ -105,7 +106,7 @@ export const demoPlan: RoomPlan = {
   evidence: [...evidence, ...realEvidence],
   items: [
     // owned and locked
-    { id: "item_sofa", roomId: "room_living", label: "Your sofa", category: "sofa", origin: "existing_owned", productId: null, assetUrl: null, position: [2.5, 0, 3.7], rotationY: Math.PI, dimensions: [2.1, 0.85, 0.95], seats: 3, locked: true },
+    { id: "item_sofa", roomId: "room_living", label: "Your sofa", category: "sofa", origin: "existing_owned", productId: null, assetUrl: assetUrlFor("sofa", [2.1, 0.85, 0.95]), position: [2.5, 0, 3.7], rotationY: Math.PI, dimensions: [2.1, 0.85, 0.95], seats: 3, locked: true },
     { id: "item_desk", roomId: "room_living", label: "Your desk", category: "desk", origin: "existing_owned", productId: null, assetUrl: null, position: [1.0, 0, 0.32], rotationY: 0, dimensions: [1.2, 0.75, 0.6], seats: null, locked: true },
     // proposed purchases
     ...(
@@ -125,7 +126,7 @@ export const demoPlan: RoomPlan = {
         category: p.category,
         origin: "proposed_purchase" as const,
         productId,
-        assetUrl: null,
+        assetUrl: assetUrlFor(p.category, p.dimensions),
         position,
         rotationY,
         dimensions: p.dimensions,

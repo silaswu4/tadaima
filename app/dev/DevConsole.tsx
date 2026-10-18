@@ -1,11 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ApplyResult, Job, PlanChange, PlanProposal, ResearchJobOutput, RoomPlan, ValidationResult } from "@/backend/contracts";
+import type { ApplyResult, FloorSpot, Job, PlanChange, PlanProposal, ResearchJobOutput, RoomPlan, ShopJobOutput, ValidationResult } from "@/backend/contracts";
 import { api, failingIds, meters, money, seatsOf, type ProjectView } from "./api";
 import { RoomMap } from "./RoomMap";
 import { VoicePanel } from "./VoicePanel";
 import { CheckoutPanel } from "./CheckoutPanel";
+import { ShopPanel, type Ghost } from "./ShopPanel";
 
 interface LogEntry {
   id: number;
@@ -44,6 +45,18 @@ export function DevConsole() {
   const [mapMode, setMapMode] = useState<"current" | "proposed">("current");
   const [log, setLog] = useState<LogEntry[]>([]);
   const [notice, setNotice] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+  const [spot, setSpot] = useState<FloorSpot | null>(null);
+  const [ghost, setGhost] = useState<Ghost | null>(null);
+  const [shopJob, setShopJob] = useState<Job<ShopJobOutput> | null>(null);
+  const spotRef = useRef<FloorSpot | null>(null);
+  useEffect(() => {
+    spotRef.current = spot;
+  }, [spot]);
+  const clearShop = () => {
+    setSpot(null);
+    setGhost(null);
+    setShopJob(null);
+  };
 
   // log every same-origin /api call, including the ones voice tools make
   useEffect(() => {
@@ -109,6 +122,7 @@ export function DevConsole() {
     setNotice(r.ok ? { kind: "ok", text: `Reset to revision ${r.data?.revision}` } : { kind: "err", text: `Reset failed: ${r.error}` });
     setProposal(null);
     setMapMode("current");
+    clearShop();
     await refresh();
   }
 
@@ -130,6 +144,7 @@ export function DevConsole() {
               setSelectedId(null);
               setProposal(null);
               setMapMode("current");
+              clearShop();
             }}
           >
             <label className="text-xs text-zinc-500" htmlFor="pid">
@@ -191,6 +206,9 @@ export function DevConsole() {
                     failing={failingIds(mapValidations)}
                     selectedId={selectedId}
                     onSelect={setSelectedId}
+                    spot={spot}
+                    onSpot={setSpot}
+                    ghost={ghost}
                   />
                 </div>
               ) : (
@@ -236,11 +254,24 @@ export function DevConsole() {
                 onResearchDone={refresh}
               />
             )}
+            <ShopPanel
+              key={`shop:${base}`}
+              base={base}
+              plan={plan}
+              spot={spot}
+              selectedId={selectedId}
+              job={shopJob}
+              onJob={setShopJob}
+              onGhost={setGhost}
+              onPlanChanged={refresh}
+            />
             <section className="card">
               <div className="card-title">Voice</div>
               <VoicePanel
                 projectId={projectId}
                 getSelectedItemId={() => selectedRef.current}
+                getSpot={() => spotRef.current}
+                onShop={setShopJob}
                 onPlan={() => void refresh()}
                 onProposal={(p) => {
                   setProposal(p);

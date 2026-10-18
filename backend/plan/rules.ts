@@ -6,6 +6,7 @@ import type {
   RoomPlan,
   ValidationResult,
 } from "@/backend/contracts";
+import { assetUrlFor } from "@/backend/shopping/assets";
 
 /**
  * Deterministic plan logic: apply changes, cost a plan, validate it.
@@ -13,7 +14,7 @@ import type {
  */
 
 // items that sit under or beside others without blocking floor space
-const NO_FOOTPRINT = new Set(["rug"]);
+export const NO_FOOTPRINT = new Set(["rug"]);
 
 export class PlanChangeError extends Error {}
 
@@ -55,7 +56,7 @@ export function applyChanges(plan: RoomPlan, changes: PlanChange[]): RoomPlan {
         category: p.category,
         origin: "proposed_purchase",
         productId: p.id,
-        assetUrl: null,
+        assetUrl: assetUrlFor(p.category, p.dimensions),
         dimensions: p.dimensions,
         seats: p.seats,
       };
@@ -78,7 +79,7 @@ export function costOf(plan: RoomPlan): CostSummary {
 }
 
 /** Corners of an item's footprint on the floor, after rotation about +Y. */
-export function footprint(item: PlacedItem, grow = 0): PointXZ[] | null {
+export function footprint(item: Pick<PlacedItem, "position" | "rotationY" | "dimensions">, grow = 0): PointXZ[] | null {
   if (!item.dimensions) return null;
   const [w, , d] = item.dimensions;
   const hw = w / 2 + grow;
@@ -97,7 +98,7 @@ export function footprint(item: PlacedItem, grow = 0): PointXZ[] | null {
   ).map(([x, z]) => [cx + x * c + z * s, cz - x * s + z * c] as PointXZ);
 }
 
-function inside(p: PointXZ, poly: readonly PointXZ[]) {
+export function inside(p: PointXZ, poly: readonly PointXZ[]) {
   const eps = 1e-6;
   let hit = false;
   for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
@@ -113,7 +114,7 @@ function inside(p: PointXZ, poly: readonly PointXZ[]) {
 }
 
 /** Separating axis test for two convex quads. Touching edges do not count as overlap. */
-function overlaps(a: PointXZ[], b: PointXZ[]) {
+export function overlaps(a: PointXZ[], b: PointXZ[]) {
   for (const poly of [a, b]) {
     for (let i = 0; i < poly.length; i++) {
       const [x1, z1] = poly[i];

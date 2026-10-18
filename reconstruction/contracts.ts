@@ -1,11 +1,11 @@
 import type { Evidence, RoomGeometry } from "@/backend/contracts";
 
-/** Adapter boundary for a future server-side worker, not an implementation. */
+/** Input to the local headless worker. Geometry uses wall centerlines in meters. */
 export interface ReconstructionRequest {
   jobId: string;
   projectId: string;
   inputRevision: number;
-  /** Only confirmed/validated geometry should reach scene generation. */
+  /** Structurally validated geometry; source accuracy/review status remains upstream. */
   geometry: RoomGeometry;
   evidence: Evidence[];
 }
@@ -25,4 +25,33 @@ export interface ReconstructionResult {
 
 export interface ReconstructionProcessor {
   generate(request: ReconstructionRequest): Promise<ReconstructionResult>;
+}
+
+export interface ReconstructionArtifactFile {
+  assetId: string;
+  fileName: string;
+  mediaType: string;
+  byteLength: number;
+  sha256: string;
+}
+
+/** Local artifact IDs are handles for the backend to upload/map to private storage. */
+export interface ReconstructionManifest extends ReconstructionResult {
+  schemaVersion: "1.0";
+  inputSha256: string;
+  blenderVersion: string;
+  units: "m";
+  coordinateSystem: "right-handed-y-up";
+  wallAlignment: "centerline";
+  floorThicknessMeters: number;
+  bounds: { min: [number, number, number]; max: [number, number, number] };
+  files: {
+    sceneJson: ReconstructionArtifactFile;
+    blend: ReconstructionArtifactFile;
+    glb: ReconstructionArtifactFile;
+  };
+  objects: Array<{ id: string; role: "room_floor" | "wall" | "opening"; name: string; evidenceIds: string[] }>;
+  statistics: { meshCount: number; triangleCount: number; entityCount: number };
+  warnings: string[];
+  preview?: { fileName: string; mediaType: string; byteLength: number; sha256: string };
 }

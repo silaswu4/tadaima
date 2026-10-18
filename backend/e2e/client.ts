@@ -3,7 +3,7 @@
  *   E2E_BASE      default http://localhost:3009
  *   E2E_BYPASS    Vercel protection bypass secret, for protected deploys
  */
-import type { ApplyResult, Cart, Job, Mandate, Order, PaymentMethod, PlanChange, PlanProposal, Recheck, ResearchJobOutput, RoomPlan, ValidationResult } from "@/backend/contracts";
+import type { ApplyResult, Cart, FloorSpot, Job, Mandate, Order, PaymentMethod, PlaceResult, PlanChange, PlanProposal, Recheck, ResearchJobOutput, RoomPlan, ShopJobOutput, ShopRequest, ValidationResult } from "@/backend/contracts";
 
 import type { ShoppingBrief } from "@/backend/shopping/roomBrief";
 
@@ -45,6 +45,10 @@ export const api = (projectId: string) => {
     testCard: () => call<PaymentMethod & { error?: string }>("POST", `${p}/checkout/card/test`),
     approve: (cartDigest: string, paymentMethodId: string) => call<Mandate & { error?: string }>("POST", `${p}/checkout/approve`, { cartDigest, paymentMethodId }),
     execute: () => call<Order & { error?: string; refused?: boolean }>("POST", `${p}/checkout/execute`),
+    shop: (req: ShopRequest | Record<string, unknown>) => call<Job<ShopJobOutput>>("POST", `${p}/shop`, req),
+    shopJob: (jobId: string) => call<Job<ShopJobOutput>>("GET", `${p}/shop/${jobId}`),
+    place: (productId: string, spot: FloorSpot, expectedRevision?: number, jobId?: string) => call<PlaceResult>("POST", `${p}/place`, { productId, spot, expectedRevision, jobId }),
+    moveTo: (itemId: string, spot: FloorSpot, unlock?: boolean) => call<PlaceResult>("POST", `${p}/items/${itemId}/move-to`, { spot, unlock }),
   };
 };
 

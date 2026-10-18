@@ -174,7 +174,7 @@ export type JobState = "queued" | "running" | "needs_input" | "succeeded" | "fai
 export interface Job<Output = unknown> {
   id: string;
   projectId: string;
-  type: "product_research" | "product_recheck" | "cart_preparation" | "reconstruction";
+  type: "product_research" | "shop_at_spot" | "product_recheck" | "cart_preparation" | "reconstruction";
   state: JobState;
   /** Human stage label, e.g. "Checking IKEA for sofas under $900". */
   stage: string;
@@ -198,6 +198,73 @@ export interface ResearchJobOutput {
   addedAtRevision: number | null;
   costUsd: number | null;
 }
+
+/** A point on the floor the shopper is looking at or tapped. y is ignored. */
+export interface FloorSpot {
+  position: Vector3Meters;
+  /** Facing to use instead of the automatic one (back to the nearest wall, front into the room). */
+  rotationY?: number | null;
+  roomId?: string | null;
+}
+
+/** Where a piece would go for a spot: always passes in_room and no_overlap for the plan it was computed on. */
+export interface Placement {
+  roomId: string;
+  position: Vector3Meters;
+  rotationY: number;
+  /** Distance from the picked point to where the piece's center landed. */
+  distanceM: number;
+  againstWallId: string | null;
+}
+
+export interface ShopRequest {
+  category: FurnitureCategory;
+  spot: FloorSpot;
+  /** The shopper's own price cap ("under $300"). The plan's budget is checked separately. */
+  maxPriceUsd?: number | null;
+  /** Style words in the shopper's own terms, e.g. "gray, mid-century". */
+  request?: string | null;
+  merchant?: "IKEA" | "Target";
+  /** Also browse the store live (minutes). False returns catalog matches only. Default true. */
+  live?: boolean;
+}
+
+export interface ShopResult {
+  product: ProductCandidate;
+  /** Already in our catalog, or found by this search's live browse. */
+  source: "catalog" | "live";
+  /** Fits at the spot (or slid nearby) as the room is right now. */
+  fits: boolean;
+  placement: Placement | null;
+  /** Why it doesn't fit, or where it would go instead. */
+  problems: string[];
+  /** Whether adding it keeps new purchases within the plan's budget. Null when there's no budget or no price. */
+  withinBudget: boolean | null;
+  overBudgetUsd: number | null;
+  /** Library 3D model for the viewer; scale it to product.dimensions (see backend/shopping/assets.ts). */
+  assetUrl: string | null;
+}
+
+/** Output of a shop_at_spot job. Results are re-checked against the live plan each time the job is read. */
+export interface ShopJobOutput {
+  request: ShopRequest;
+  /** The room facts the live search was built from. */
+  brief: string;
+  /** Best first: fits, then within budget, then style match, then price. */
+  results: ShopResult[];
+  live: "running" | "done" | "failed" | "skipped";
+  addedAtRevision: number | null;
+  costUsd: number | null;
+  /** Plan revision the results were checked against. */
+  checkedAtRevision: number;
+}
+
+export type PlaceResult =
+  | { ok: true; plan: RoomPlan; itemId: string; placement: Placement }
+  | { ok: false; reason: "no_fit"; message: string; nearest: Placement | null }
+  | { ok: false; reason: "locked"; message: string }
+  | { ok: false; reason: "stale_revision"; currentRevision: number }
+  | { ok: false; reason: "validation_failed"; validations: ValidationResult[] };
 
 // ---------- cart and checkout ----------
 

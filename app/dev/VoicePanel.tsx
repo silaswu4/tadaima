@@ -2,7 +2,7 @@
 
 import { ConversationProvider, useConversation } from "@elevenlabs/react";
 import { useEffect, useRef, useState } from "react";
-import type { PlanProposal, RoomPlan } from "@/backend/contracts";
+import type { FloorSpot, Job, PlanProposal, RoomPlan, ShopJobOutput } from "@/backend/contracts";
 import { voiceClientTools } from "@/backend/voice/clientTools";
 import { api } from "./api";
 
@@ -14,6 +14,8 @@ interface Line {
 export function VoicePanel(props: {
   projectId: string;
   getSelectedItemId: () => string | null;
+  getSpot: () => FloorSpot | null;
+  onShop: (job: Job<ShopJobOutput>) => void;
   onPlan: (plan: RoomPlan) => void;
   onProposal: (p: PlanProposal) => void;
 }) {
@@ -27,11 +29,15 @@ export function VoicePanel(props: {
 function Voice({
   projectId,
   getSelectedItemId,
+  getSpot,
+  onShop,
   onPlan,
   onProposal,
 }: {
   projectId: string;
   getSelectedItemId: () => string | null;
+  getSpot: () => FloorSpot | null;
+  onShop: (job: Job<ShopJobOutput>) => void;
   onPlan: (plan: RoomPlan) => void;
   onProposal: (p: PlanProposal) => void;
 }) {
@@ -41,9 +47,9 @@ function Voice({
   const push = (l: Line) => setLines((xs) => [...xs.slice(-60), l]);
 
   // keep callbacks fresh without rebuilding the tools mid-session
-  const cb = useRef({ getSelectedItemId, onPlan, onProposal });
+  const cb = useRef({ getSelectedItemId, getSpot, onShop, onPlan, onProposal });
   useEffect(() => {
-    cb.current = { getSelectedItemId, onPlan, onProposal };
+    cb.current = { getSelectedItemId, getSpot, onShop, onPlan, onProposal };
   });
 
   const buildTools = () => {
@@ -52,6 +58,14 @@ function Voice({
       getSelectedItemId: () => cb.current.getSelectedItemId(),
       onPlan: (p) => cb.current.onPlan(p),
       onProposal: (p) => cb.current.onProposal(p),
+      getSpot: () => cb.current.getSpot(),
+      onShop: (job) => cb.current.onShop(job),
+      isActive: () => activeRef.current,
+      // a finished live search speaks up through the agent, tagged so it knows the app sent it
+      onShopUpdate: (msg) => {
+        push({ role: "system", text: msg });
+        if (activeRef.current) convoRef.current?.sendUserMessage(msg);
+      },
     });
     // log each tool call into the transcript
     return Object.fromEntries(
@@ -74,6 +88,12 @@ function Voice({
   });
 
   const live = convo.status === "connected" || convo.status === "connecting";
+  const activeRef = useRef(false);
+  const convoRef = useRef<typeof convo | null>(null);
+  useEffect(() => {
+    activeRef.current = convo.status === "connected";
+    convoRef.current = convo;
+  });
 
   async function start() {
     setErr(null);

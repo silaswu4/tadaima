@@ -1,4 +1,4 @@
-> Historical handoff: the current project context is in [docs/README.md](docs/README.md). Later requirements keep capture web-only on iPhone; native Apple RoomPlan is not the baseline. The active repository is `silaswu4/tadaima`, while the UI still uses Michael. The original design notes below are retained for context.
+> Historical handoff: the current project context is in [docs/README.md](docs/README.md). On October 18 the user approved an optional thin SwiftUI/RoomPlan scan companion for iPhone 14 Pro, superseding the earlier web-only restriction for this input alone. Shopping, design, and Quest remain web-based; address and browser-photo inputs remain available without tape measurements. See [native scan status](docs/native-scan.md); physical capture is not yet verified. The active repository is `silaswu4/tadaima`, while the UI still uses Michael. The original design notes below are retained for context.
 
 # Michael: what we're building
 
