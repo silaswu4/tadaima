@@ -393,11 +393,10 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
         if (cancelled) return;
         setFloorSpot(spot);
         if (immersiveMode.current) {
-          // A floor trigger supplies context to the agent, not an unsolicited
-          // category search. A new intent will search this spot automatically.
-          shoppingRef.current.stopSearch(); walkRef.current?.cancelProductPreview();
-          setPending(null); setPendingPlacement(null); setSearchSpot(null); setSwapTarget(null);
-          setNotice("Spot selected. Tell Tadaima what you’d like here.");
+          // In VR a floor trigger only marks where the next piece should go. It must not cancel a
+          // preview or a running search: a ray that just misses a menu button lands on the floor.
+          walkRef.current?.select(null); // pointing at open floor puts the selected piece's toolbar away
+          setNotice("Spot selected. Pick a category or tell Tadaima what you’d like here.");
         } else { setNotice("Shopping spot selected. Checking pieces that fit here."); searchRef.current(spot, false); }
       },
       onXRChange(value) { immersiveMode.current = value; },
@@ -744,7 +743,6 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
     ...roomXRActions({ connected: Boolean(shopping.session), busy: blocked, pending: Boolean(pending), moving, selected }),
     ...roomXRVoiceActions({ available: voiceAvailable, ...voiceState }),
     ...items.slice(0, 100).flatMap((item) => [
-      { id: `select-item:${item.id}`, label: "Select piece", disabled: blocked || moving || Boolean(pending) || item.stored },
       ...(item.stored ? [{ id: `take-out:${item.id}`, label: "Bring into room", disabled: !shopping.session || blocked || moving || Boolean(pending) }] : []),
       ...(item.origin === "proposed_purchase" && !item.stored ? [{ id: `remove-item:${item.id}`, label: "Remove from room", disabled: blocked || moving || Boolean(pending) }] : []),
     ]),
@@ -752,16 +750,17 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
   useLayoutEffect(() => {
     xrActionRef.current = (id) => {
       // Microphone controls remain reachable while a shopping tool is working.
-      if (id === "voice-toggle" || id === "voice-stop") {
-        if (!xrActions.some((action) => action.id === id && !action.disabled)) return;
+      if (id === "voice-release") { voiceControls.current?.release(); return; }
+      if (id === "voice-toggle" || id === "voice-stop" || id === "voice-press") {
+        // A/X push-to-talk is gated by the same availability as the Talk button.
+        if (!xrActions.some((action) => action.id === (id === "voice-press" ? "voice-toggle" : id) && !action.disabled)) return;
         const controls = voiceControls.current;
         if (!controls) { setNotice("The voice agent is still loading. Try again in a moment."); return; }
-        if (id === "voice-toggle") controls.toggleListening(); else controls.stop();
+        if (id === "voice-toggle") controls.toggleListening(); else if (id === "voice-press") controls.press(); else controls.stop();
         return;
       }
       if (xrActionPending.current || !xrActions.some((action) => action.id === id && !action.disabled)) return;
       if (id === "cancel-preview") { cancelProduct(); setNotice("Preview cancelled. Nothing was added."); return; }
-      if (id.startsWith("select-item:")) { api()?.select(id.slice("select-item:".length)); return; }
       if (id.startsWith("remove-item:")) {
         const item = items.find((entry) => entry.id === id.slice("remove-item:".length) && entry.origin === "proposed_purchase" && !entry.stored);
         if (item) remove(item);
@@ -776,7 +775,8 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
           setNotice(null);
         } else if (id.startsWith("take-out:")) {
           const item = items.find((entry) => entry.id === id.slice("take-out:".length) && entry.stored);
-          const spot = api()?.getShoppingSpot();
+          // The chosen floor spot, not the floor under the gaze: in VR the wearer is looking down at the menu.
+          const spot = floorSpot ?? api()?.getShoppingSpot();
           if (!item || !spot) throw new Error("Choose a clear floor spot before bringing this piece back.");
           await shopping.moveAgentItem(item.id, spot, item.locked);
           setNotice(`Brought ${item.label} back into your room.`);

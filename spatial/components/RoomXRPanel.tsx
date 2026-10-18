@@ -1,6 +1,6 @@
 "use client";
 
-import { useLayoutEffect, useState, type ReactNode } from "react";
+import { Component, useLayoutEffect, useState, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import type { FurnitureCategory } from "../../backend/contracts";
 import type { WorkspaceXRShopping, WorkspaceXRLocomotion, WorkspaceXROffer, WorkspaceXRItem } from "../room/workspace-xr";
@@ -29,7 +29,9 @@ export type XRPanelProps = {
 
 const HOTBAR_SLOTS = 9;
 const CATEGORIES: Array<[FurnitureCategory, string]> = [["sofa", "Sofas"], ["chair", "Chairs"], ["table", "Tables"], ["desk", "Desks"], ["storage", "Storage"], ["bed", "Beds"], ["rug", "Rugs"], ["lamp", "Lamps"], ["decor", "Decor"]];
-const shortName = (label: string) => label.split(",")[0];
+/** html2canvas draws no text-overflow ellipsis, so long names are shortened before rendering. */
+const clip = (text: string, max: number) => text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text;
+const shortName = (label: string, max = 40) => clip(label.split(",")[0], max);
 
 /**
  * The room website's own overlay markup and `room-x` classes, laid out for one in-world
@@ -38,7 +40,7 @@ const shortName = (label: string) => label.split(",")[0];
  */
 export function RoomXRPanel(props: XRPanelProps) {
   const { state, tab, locomotion } = props;
-  const [category, setCategory] = useState<FurnitureCategory>("chair");
+  const [category, setCategory] = useState<FurnitureCategory | null>(null);
   const actions = new Map((state.actions ?? []).map((action) => [action.id, action]));
   const enabled = (id: string) => actions.has(id) && !actions.get(id)?.disabled;
   const pending = state.offers.find((offer) => offer.id === state.pendingOfferId);
@@ -104,7 +106,7 @@ export function RoomXRPanel(props: XRPanelProps) {
           <img src={mark.src} alt="" className="room-x__mark" />
         </span>
       </div>
-      <h1 className="room-x__title">{state.roomLabel || "Your room"}</h1>
+      <h1 className="room-x__title">{clip(state.roomLabel || "Your room", 28)}</h1>
       <div className="room-x__bar-end">
         {hit("tab-controls", "room-x__pill room-x__help", "?", () => toggle("controls"), { ariaLabel: "Controls", pressed: tab === "controls" })}
         {hit("tab-room", "room-x__pill", <span>Inventory{stored.length ? ` · ${stored.length}` : ""}</span>, () => toggle("room"), { ariaLabel: "Inventory", pressed: tab === "room" })}
@@ -137,7 +139,7 @@ export function RoomXRPanel(props: XRPanelProps) {
     {/* ---------- selected piece: toolbar and details ---------- */}
     {selected && !pending ? <>
       <div className="room-x__toolbar" data-docked role="toolbar" aria-label={`Edit ${selected.label}`} data-xr-solid>
-        <span className="room-x__toolbar-name">{shortName(selected.label)}</span>
+        <span className="room-x__toolbar-name">{shortName(selected.label, 24)}</span>
         {action("rotate-selected", "room-x__tool", <>{Icon.rotate}<span className="room-x__key">R</span></>, "Rotate")}
         {action("store-selected", "room-x__tool", <>{Icon.close}<span className="room-x__key">Del</span></>, "Put away in inventory")}
       </div>
@@ -147,13 +149,16 @@ export function RoomXRPanel(props: XRPanelProps) {
       </div>
     </> : null}
 
+    {/* ---------- the agent's latest line (the website floats it above Talk; here it sits clear of the cards) ---------- */}
+    {agent?.caption || agent?.activity || agent?.error ? <p className="room-voice__caption" data-error={agent.error ? true : undefined} role="status" data-xr-solid>
+      {clip(agent.error || agent.caption || agent.activity || "", 160)}</p> : null}
+
     {/* ---------- bottom tools and hotbar ---------- */}
     <div className="room-x__bottom">
       <div className="room-x__tools" data-xr-solid>
         <div className="room-voice">
-          {agent?.caption || agent?.activity || agent?.error ? <p className="room-voice__caption" data-error={agent.error ? true : undefined} role="status">{agent.error || agent.caption || agent.activity}</p> : null}
           {agent?.available ? <>
-            <span className="room-voice__beam">{action("voice-toggle", "room-x__pill room-voice__btn", <>{agent.listening ? "Send" : "Talk"}<span className="room-voice__key" aria-hidden="true">hold A</span></>)}</span>
+            <span className="room-voice__beam">{action("voice-toggle", "room-x__pill room-voice__btn", <>{agent.listening ? agent.connected ? "Listening" : "Connecting…" : "Talk"}<span className="room-voice__key" aria-hidden="true">hold A/X</span></>)}</span>
             {agent.connected || agent.listening ? action("voice-stop", "room-x__pill room-voice__mute", "End") : null}
           </> : <span className="room-x__pill room-voice__btn" aria-disabled="true">Voice unavailable</span>}
         </div>
@@ -171,7 +176,7 @@ export function RoomXRPanel(props: XRPanelProps) {
 
     {/* ---------- drawers: the website's catalog, basket and inventory panels ---------- */}
     {drawer === "shop" ? <div className="room-x__panel room-x__catalog" role="dialog" aria-label="Add furniture" data-open data-xr-solid>
-      {head("Add furniture", "At your selected floor spot")}
+      {head("Add furniture")}
       <div className="room-x__chips" role="group" aria-label="What kind of piece">
         {CATEGORIES.map(([id, label]) => <span key={id}>{hit(`action:search-${id}`, "room-x__chip", label, () => { setCategory(id); props.onAction(`search-${id}`); },
           { pressed: category === id, disabled: !enabled(`search-${id}`) || state.busy })}</span>)}
@@ -197,7 +202,10 @@ export function RoomXRPanel(props: XRPanelProps) {
     {drawer === "room" ? <div className="room-x__panel" role="dialog" aria-label="Inventory" data-open data-xr-solid>
       {head("Inventory")}
       {stored.length === 0 ? <p className="room-x__empty">Nothing put away.</p>
-        : <ul className="room-x__lines" data-xr-scroll>{stored.map((item) => line(item, action(`take-out:${item.id}`, "room-x__text-btn", "Take out", `Take out ${item.label}`)))}</ul>}
+        : <ul className="room-x__lines" data-xr-scroll>{stored.map((item) => line(item,
+          // Its own ray id: the hotbar slot for the same piece also sends take-out, and ids must be unique.
+          hit(`drawer-take-out:${item.id}`, "room-x__text-btn", "Take out", () => props.onAction(`take-out:${item.id}`),
+            { disabled: !enabled(`take-out:${item.id}`) || state.busy, ariaLabel: `Take out ${item.label}` })))}</ul>}
     </div> : null}
 
     {drawer === "controls" ? <div className="room-x__panel" role="dialog" aria-label="Controls" data-open data-xr-solid>
@@ -222,11 +230,19 @@ export function RoomXRPanel(props: XRPanelProps) {
   </div>;
 }
 
+/** A render error must show the adapter's failure panel, not leave a frozen texture with dead buttons. */
+class PanelBoundary extends Component<{ onError(): void; children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() { return { failed: true }; }
+  componentDidCatch(error: unknown) { console.error("[xr-menu] panel render failed", error); this.props.onError(); }
+  render() { return this.state.failed ? null : this.props.children; }
+}
+
 /** Imperative renderer for the Three.js adapter; never moves focus or opens a microphone. */
-export function mountXRPanel(host: HTMLElement, props: XRPanelProps) {
+export function mountXRPanel(host: HTMLElement, props: XRPanelProps, onError: () => void = () => {}) {
   const root = createRoot(host);
   let disposed = false;
-  const update = (next: XRPanelProps) => { if (!disposed) root.render(<RoomXRPanel {...next} />); };
+  const update = (next: XRPanelProps) => { if (!disposed) root.render(<PanelBoundary onError={onError}><RoomXRPanel {...next} /></PanelBoundary>); };
   update(props);
   // Unmounting inside a React render (an XR session ending mid-update) must wait for that render to finish.
   return { update, dispose() { if (disposed) return; disposed = true; queueMicrotask(() => root.unmount()); } };

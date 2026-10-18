@@ -221,7 +221,9 @@ test("Inventory, hotbar and Basket render supplied items, prices and canonical i
   await click("tab-room");
   assert.match(dom.document.querySelector('[aria-label="Inventory"].room-x__panel').textContent, /Saved lamp/);
   assert.doesNotMatch(dom.document.querySelector('[aria-label="Inventory"].room-x__panel').textContent, /Captured chair/);
-  await click("action:take-out:stored:lamp");
+  // The drawer's button has its own ray id (the hotbar slot for the same piece also exists) and still takes it out.
+  assert.ok(menu.targets.some((target) => target.id === "drawer-take-out:stored:lamp"), "drawer Take out is a ray target");
+  await click("drawer-take-out:stored:lamp");
   await click("tab-basket"); assert.match(dom.document.body.textContent, /New oak chair/);
   assert.match(dom.document.querySelector(".room-x__total").textContent, /Total\s*\$129\.00/);
   await click("action:remove-item:new:chair");
@@ -272,4 +274,46 @@ test("only painted UI owns the ray; transparent gaps between the website's cards
   assert.equal(menu.covers(at(150, 100)), true, "a ray on a card must not select furniture behind it");
   assert.equal(menu.covers(at(950, 650)), false, "a ray through empty space selects the room, as clicking the website's canvas does");
   assert.equal(menu.covers(new THREE.Vector2(NaN, .5)), false);
+});
+
+test("a painted button stays clickable while a newer state is still capturing", async (t) => {
+  const { dom, menu, state, calls, uv } = await fixture(t);
+  const target = uv("preview:sku:chair"), started = deferred(), finish = deferred();
+  dom.setCaptureHook(async (_host, canvas) => { started.resolve(); await finish.promise; return canvas; });
+  // A voice caption arrives; the chair card does not move.
+  menu.setState({ ...state, agent: { ...state.agent, caption: "Here are chairs that fit." } }, "walk"); await started.promise;
+  menu.activate(target);
+  assert.deepEqual(calls, [["preview", "sku:chair"]], "voice updates must not swallow presses on unchanged buttons");
+  finish.resolve(); await settleXRMenu(menu);
+});
+
+test("unrelated repaint requests during a capture do not disable clicks on the published picture", async (t) => {
+  const { dom, menu, state, calls, uv } = await fixture(t);
+  const started = deferred(), finish = deferred(); let first = true;
+  dom.setCaptureHook(async (_host, canvas) => { if (first) { first = false; started.resolve(); await finish.promise; } return canvas; });
+  menu.setState({ ...state, status: "Checking IKEA live for more" }, "walk"); await started.promise;
+  dom.document.querySelector("[data-tadaima-xr-host]").dispatchEvent(new dom.window.Event("load")); // a product image finished
+  finish.resolve(); await settleXRMenu(menu);
+  assert.ok(menu.targets.length > 0, "the capture still matches the layout, so it is interactive");
+  menu.activate(uv("preview:sku:chair")); assert.deepEqual(calls, [["preview", "sku:chair"]]);
+});
+
+test("outside an immersive session the panel never captures; entering paints the current state", async (t) => {
+  const { dom, menu, state } = await fixture(t);
+  menu.setActive(false); const before = dom.captures();
+  menu.setState({ ...state, status: "Changed on the flat page" }, "walk"); await settleXRMenu(menu);
+  assert.equal(dom.captures(), before, "no 60–120 ms capture stalls the flat page");
+  menu.setActive(true); await settleXRMenu(menu);
+  assert.equal(dom.captures(), before + 1);
+  assert.match(dom.document.body.textContent, /Changed on the flat page/);
+});
+
+test("a capture that never finishes shows the failure panel instead of freezing the menu", async (t) => {
+  const { dom, menu, state, calls } = await fixture(t);
+  dom.runtime.captureTimeoutMs = 50;
+  dom.setCaptureHook(() => new Promise(() => {})); // e.g. an image that never loads in the clone
+  menu.setState({ ...state, status: "Stalls" }, "walk");
+  await settleXRMenu(menu); // resolves only because the stalled capture timed out
+  assert.equal(menu.targets.length, 0); menu.activate(new THREE.Vector2(.5, .5)); assert.deepEqual(calls, []);
+  assert.equal(menu.covers(new THREE.Vector2(.5, .5)), true, "the failure panel still owns the ray");
 });

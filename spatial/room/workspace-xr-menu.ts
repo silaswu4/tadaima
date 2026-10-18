@@ -17,6 +17,7 @@ export type XRMenuRuntime = {
   document?: Document; mountPanel?: typeof mountXRPanel;
   capture?: (host: HTMLElement) => Promise<HTMLCanvasElement>;
   minCaptureIntervalMs?: number;
+  captureTimeoutMs?: number;
 };
 type TargetRecord = { target: XRMenuTarget; button: HTMLElement; radius: number };
 type Rect = { x: number; y: number; width: number; height: number };
@@ -24,6 +25,14 @@ type Rect = { x: number; y: number; width: number; height: number };
 const HOST_SCALE = XR_MENU_WIDTH / 640, HOST_WIDTH = 640, HOST_HEIGHT = Math.round(XR_MENU_HEIGHT / HOST_SCALE);
 const TABS: readonly XRMenuTab[] = ["agent", "shop", "room", "basket", "controls"];
 let nextHostId = 0;
+
+/** A stalled image or font load must fail the capture (and show the failure panel), never freeze the menu. */
+function withTimeout<T>(work: Promise<T>, ms: number): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("VR menu capture timed out")), ms);
+    work.then((value) => { clearTimeout(timer); resolve(value); }, (error) => { clearTimeout(timer); reject(error); });
+  });
+}
 
 async function captureDOM(host: HTMLElement) {
   const { default: html2canvas } = await import("html2canvas");
@@ -34,7 +43,9 @@ async function captureDOM(host: HTMLElement) {
     // Match the live viewport so media queries lay the clone out like the measured buttons.
     imageTimeout: 1500, scrollX: 0, scrollY: 0, windowWidth: host.ownerDocument.defaultView?.innerWidth ?? 1440,
     windowHeight: host.ownerDocument.defaultView?.innerHeight ?? 900,
-    ignoreElements: (element) => element.tagName === "CANVAS" && !host.contains(element),
+    // Clone only the panel and the stylesheets it needs. Cloning the whole room page costs time on
+    // every capture and can wait forever on the website's own lazy images.
+    ignoreElements: (element) => !(host.contains(element) || element.contains(host) || element.closest("head") || ["STYLE", "LINK"].includes(element.tagName)),
     onclone(document) {
       const clone = document.querySelector<HTMLElement>(`[data-tadaima-xr-host="${identity}"]`);
       if (clone) { clone.style.left = "0"; clone.style.top = "0"; clone.style.transform = "none"; }
@@ -77,12 +88,12 @@ export function createXRMenu(callbacks: XRMenuCallbacks, runtime: XRMenuRuntime 
   let state: WorkspaceXRShopping = { offers: [] };
   let locomotion: WorkspaceXRLocomotion = "walk", tab: XRMenuTab = "agent";
   let hoveredIds: string[] = [], stateKey = "";
-  let stateEpoch = 0, committedEpoch = -1, paintedState = -1;
-  let layoutEpoch = 0, paintedLayout = -1, layoutKey = "";
+  let stateEpoch = 0, committedEpoch = -1;
+  let layoutEpoch = 0, layoutKey = "";
   let paintRequest = 0, lastStarted = -Infinity;
   let disposed = false, capturing = false, dirty = false, failed = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
-  let records: TargetRecord[] = [], solids: Rect[] = [], panel: ReturnType<typeof mountXRPanel> | undefined;
+  let records: TargetRecord[] = [], solids: Rect[] = [], paintedSolids: Rect[] = [], active = true, panel: ReturnType<typeof mountXRPanel> | undefined;
   const waiters = new Set<() => void>();
   // One html2canvas pass blocks the Quest's main thread for ~60–120 ms (5–9 frames at 72 Hz), so content
   // changes are coalesced to at most one capture per 400 ms and hover never captures at all.
@@ -167,17 +178,19 @@ export function createXRMenu(callbacks: XRMenuCallbacks, runtime: XRMenuRuntime 
     return items;
   }
   function settle() {
-    if (!disposed && (capturing || timer || dirty || committedEpoch !== stateEpoch)) return;
+    if (!disposed && active && (capturing || timer || dirty || committedEpoch !== stateEpoch)) return;
     for (const resolve of waiters) resolve(); waiters.clear();
   }
   function requestPaint() {
     if (disposed) return;
     dirty = true; paintRequest++;
+    // Outside an immersive session nobody can see the panel: keep it current in the DOM, capture on entry.
+    if (!active) { settle(); return; }
     if (capturing || timer || committedEpoch !== stateEpoch) return;
     timer = setTimeout(() => { timer = undefined; void paint(); }, Math.max(0, interval - (Date.now() - lastStarted)));
   }
   function drawFailure() {
-    records = []; paintedState = paintedLayout = -1;
+    records = []; paintedSolids = [];
     context!.clearRect(0, 0, XR_MENU_WIDTH, XR_MENU_HEIGHT);
     context!.fillStyle = "#f5f2eb"; context!.fillRect(0, 0, XR_MENU_WIDTH, XR_MENU_HEIGHT);
     context!.fillStyle = XR_MENU_INK; context!.font = "500 42px system-ui, sans-serif";
@@ -185,11 +198,11 @@ export function createXRMenu(callbacks: XRMenuCallbacks, runtime: XRMenuRuntime 
     context!.fillText("Exit and enter VR to try again.", 80, 490); texture.needsUpdate = true;
   }
   async function paint() {
-    if (disposed || capturing || !dirty || committedEpoch !== stateEpoch) { settle(); return; }
+    if (disposed || !active || capturing || !dirty || committedEpoch !== stateEpoch) { settle(); return; }
     dirty = false; capturing = true; lastStarted = Date.now();
-    const items = refreshLayout(), request = paintRequest, expectedState = stateEpoch, expectedLayout = layoutEpoch;
+    const items = refreshLayout(), itemSolids = solids, request = paintRequest, expectedState = stateEpoch, expectedLayout = layoutEpoch;
     try {
-      const result = await capture(host);
+      const result = await withTimeout(capture(host), runtime.captureTimeoutMs ?? 3000);
       if (disposed) return;
       refreshLayout();
       if (expectedState !== stateEpoch) { dirty = true; return; }
@@ -198,11 +211,14 @@ export function createXRMenu(callbacks: XRMenuCallbacks, runtime: XRMenuRuntime 
       // interactive. New tabs, products, prices or other state never reuse an
       // older capture, even when the visible button IDs happen to match.
       context!.clearRect(0, 0, XR_MENU_WIDTH, XR_MENU_HEIGHT); context!.drawImage(result, 0, 0, XR_MENU_WIDTH, XR_MENU_HEIGHT);
+      result.width = result.height = 0; // release the 1440x1000 capture buffer now, not at the next GC
       texture.needsUpdate = true; failed = false;
-      if (request === paintRequest && expectedLayout === layoutEpoch) {
-        records = items; paintedState = expectedState; paintedLayout = expectedLayout; placeHighlights();
+      // Interactive iff the picture matches the current layout. Unrelated repaint requests (an image
+      // finishing, a font) that left the layout unchanged must not cancel clicks on what is shown.
+      if (expectedLayout === layoutEpoch) {
+        records = items; paintedSolids = itemSolids; placeHighlights();
       } else {
-        records = []; paintedState = paintedLayout = -1; dirty = true; placeHighlights();
+        records = []; paintedSolids = itemSolids; dirty = true; placeHighlights();
       }
     } catch {
       if (!disposed && request === paintRequest && expectedState === stateEpoch) { failed = true; drawFailure(); }
@@ -236,7 +252,8 @@ export function createXRMenu(callbacks: XRMenuCallbacks, runtime: XRMenuRuntime 
   const ResizeObserverClass = doc.defaultView?.ResizeObserver;
   const observer = ResizeObserverClass ? new ResizeObserverClass(layoutChanged) : undefined;
   observer?.observe(host);
-  try { panel = (runtime.mountPanel ?? mountXRPanel)(host, props()); }
+  const renderFailed = () => { if (!disposed) { failed = true; drawFailure(); settle(); } };
+  try { panel = (runtime.mountPanel ?? mountXRPanel)(host, props(), renderFailed); }
   catch (error) {
     disposed = true; if (timer) clearTimeout(timer); observer?.disconnect();
     host.removeEventListener("load", layoutChanged, true); host.removeEventListener("error", layoutChanged, true); host.removeEventListener("scroll", layoutChanged, true);
@@ -249,7 +266,10 @@ export function createXRMenu(callbacks: XRMenuCallbacks, runtime: XRMenuRuntime 
     if (disposed || failed) return !disposed;
     if (![uv.x, uv.y].every(Number.isFinite) || uv.x < 0 || uv.x > 1 || uv.y < 0 || uv.y > 1) return false;
     const x = uv.x * XR_MENU_WIDTH, y = (1 - uv.y) * XR_MENU_HEIGHT;
-    return solids.some((rect) => x >= rect.x && x <= rect.x + rect.width && y >= rect.y && y <= rect.y + rect.height);
+    const inside = (rect: Rect) => x >= rect.x && x <= rect.x + rect.width && y >= rect.y && y <= rect.y + rect.height;
+    // The wearer sees the painted picture; the DOM may already be ahead of it. Either one owns the ray,
+    // so a card that is visible (or about to be) never lets a click fall through to the room.
+    return paintedSolids.some(inside) || solids.some(inside);
   }
   function hit(uv: THREE.Vector2) {
     if (disposed || ![uv.x, uv.y].every(Number.isFinite) || uv.x < 0 || uv.x > 1 || uv.y < 0 || uv.y > 1) return;
@@ -260,6 +280,12 @@ export function createXRMenu(callbacks: XRMenuCallbacks, runtime: XRMenuRuntime 
     mesh,
     get targets(): readonly XRMenuTarget[] { return records.map(({ target }) => target); },
     get activeTab(): XRMenuTab { return tab; }, focusAgent() { navigate("agent"); },
+    /** Capture only while presenting; entering VR paints the current state. */
+    setActive(next: boolean) {
+      if (disposed || active === next) return;
+      active = next;
+      if (active) { refreshLayout(); requestPaint(); } else { if (timer) clearTimeout(timer); timer = undefined; settle(); }
+    },
     /** Whether a ray at this UV lands on painted UI (and so must not reach the room behind). */
     covers,
     setState(next: WorkspaceXRShopping, nextLocomotion: WorkspaceXRLocomotion) {
@@ -274,13 +300,15 @@ export function createXRMenu(callbacks: XRMenuCallbacks, runtime: XRMenuRuntime 
       stateKey = key; state = projected; locomotion = nextLocomotion; stateEpoch++; render();
     },
     setHovered(uvs: readonly THREE.Vector2[]) {
-      if (disposed || paintedState !== stateEpoch || paintedLayout !== layoutEpoch) return;
+      if (disposed) return;
       const ids = [...new Set(uvs.map(hit).filter((item): item is TargetRecord => !!item && !item.target.disabled).map(({ target }) => target.id))].sort();
       if (JSON.stringify(ids) === JSON.stringify(hoveredIds)) return;
       hoveredIds = ids; placeHighlights();
     },
     activate(uv: THREE.Vector2) {
-      if (disposed || paintedState !== stateEpoch || paintedLayout !== layoutEpoch) return;
+      // A newer state may still be capturing (voice captions update often). The painted button is
+      // clickable as long as the same element is still exactly where the wearer sees it.
+      if (disposed) return;
       const item = hit(uv);
       if (!item || item.target.disabled || buttonDisabled(item.button) || !item.button.isConnected || !host.contains(item.button)) return;
       const current = measure().find(({ target, button }) => button === item.button && target.id === item.target.id);
@@ -296,7 +324,8 @@ export function createXRMenu(callbacks: XRMenuCallbacks, runtime: XRMenuRuntime 
       if (scroller.scrollTop !== before) layoutChanged();
     },
     whenIdle(): Promise<void> {
-      if (disposed || (!capturing && !timer && !dirty && committedEpoch === stateEpoch)) return Promise.resolve();
+      // An inactive panel never captures, so there is nothing to wait for.
+      if (disposed || !active || (!capturing && !timer && !dirty && committedEpoch === stateEpoch)) return Promise.resolve();
       return new Promise((resolve) => waiters.add(resolve));
     },
     dispose() {

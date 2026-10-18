@@ -6,7 +6,8 @@ import { VoiceBeam } from "voice-glow";
 import "./RoomVoice.css";
 
 /** Shared by the flat-screen pill and the immersive Agent tab. No second session. */
-export type RoomVoiceControls = { toggleListening(): void; stop(): void };
+/** press/release are hold-to-talk (a quick tap latches hands-free), as with the Space key. */
+export type RoomVoiceControls = { toggleListening(): void; stop(): void; press(): void; release(): void };
 export type RoomVoiceState = { status: string; listening: boolean; connected: boolean; caption?: string; error?: string; activity?: string; transcript?: string };
 
 export type RoomAgentVoiceProps = {
@@ -196,10 +197,11 @@ function VoiceSession({ getTools, disabled = false, update, onControls, onStateC
     }
   }
 
-  const controls = useRef<RoomVoiceControls>({ toggleListening, stop });
-  useLayoutEffect(() => { controls.current = { toggleListening, stop }; });
+  const controls = useRef<RoomVoiceControls>({ toggleListening, stop, press, release });
+  useLayoutEffect(() => { controls.current = { toggleListening, stop, press, release }; });
   useEffect(() => {
-    onControls?.({ toggleListening: () => controls.current.toggleListening(), stop: () => controls.current.stop() });
+    onControls?.({ toggleListening: () => controls.current.toggleListening(), stop: () => controls.current.stop(),
+      press: () => controls.current.press(), release: () => controls.current.release() });
     return () => onControls?.(null);
   }, [onControls]);
 
