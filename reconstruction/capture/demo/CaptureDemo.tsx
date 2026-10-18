@@ -237,7 +237,7 @@ export default function CaptureDemo() {
       link.click();
       setTimeout(() => URL.revokeObjectURL(url), 10_000);
       setNotice(
-        "Capture downloaded. Your photos are ready for AI reconstruction processing.",
+        "Capture downloaded. Process this ZIP with the reconstruction worker, then open its room JSON and optional matching GLB from Your rooms.",
       );
     } catch (failure) {
       if (alive.current)
@@ -257,7 +257,7 @@ export default function CaptureDemo() {
         <Link href="/" className="capture-brand">
           tadaima / capture
         </Link>
-        <span>one room at a time</span>
+        <Link href="/rooms" className="capture-brand">Back to rooms</Link>
       </header>
       <section className="capture-intro">
         <p className="capture-eyebrow">mobile room capture</p>
@@ -449,12 +449,13 @@ export default function CaptureDemo() {
               </div>
             </dl>
             <p className="capture-help">
-              AI will estimate layout and scale from these photos. Dimensions
-              will be approximate; review the resulting model.
+              Reconstruction processing can estimate layout and scale from these photos.
+              Dimensions will be approximate; review the resulting model.
             </p>
             <p className="capture-help">
-              This page prepares your capture. Download it to continue
-              reconstruction.
+              This page prepares a photo ZIP; it does not generate a room automatically.
+              Download it for reconstruction processing. Already have a processed room?
+              {" "}<Link href="/rooms">Open a processed room</Link> from Your rooms.
             </p>
             <div className="capture-actions">
               <button

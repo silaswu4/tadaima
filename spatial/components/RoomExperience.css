@@ -1202,3 +1202,14 @@
     transition-delay: 0s !important;
   }
 }
+
+.room-x__placement { position: absolute; z-index: 9; left: 50%; bottom: 100px; transform: translateX(-50%); width: min(480px, calc(100% - 32px)); padding: 20px; border-radius: 20px; background: #f5f2ebf5; box-shadow: 0 8px 40px #2b1a1026; }
+.room-x__placement p { margin: 8px 0 14px; font-size: 12px; }
+.room-x__placement > div { display: flex; gap: 10px; flex-wrap: wrap; }
+.room-x__source { position: absolute; bottom: 18px; left: 24px; max-width: calc(100% - 48px); pointer-events: none; font-size: 11px; color: #6e5844; padding: 5px 8px; border-radius: 5px; background: #f5f2ebc9; }
+@media (max-width: 767px) {
+  .room-x__modes { flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+  .room-x__bar-end { min-width: 0; }
+  .room-x__source { bottom: 6px; left: 8px; font-size: 9px; }
+  .room-x__placement { bottom: 106px; padding: 14px; }
+}

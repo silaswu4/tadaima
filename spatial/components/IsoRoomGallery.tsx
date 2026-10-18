@@ -1,10 +1,12 @@
 "use client";
 
+import Link from "next/link";
+import type { WalkOptions } from "../room/walk-api";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { RoomPlan } from "../../backend/contracts";
 import type { BakedRoom, IsoGallery } from "../room/iso-gallery";
 
-export type GalleryRoom = { id: string; label: string; plan?: RoomPlan; baked?: BakedRoom };
+export type GalleryRoom = { id: string; label: string; plan?: RoomPlan; baked?: BakedRoom; description?: string; reconstruction?: WalkOptions["reconstruction"] };
 import "./IsoRoomGallery.css";
 
 type Props = {
@@ -52,7 +54,7 @@ function Swap({ text, dir, axis }: { text: string; dir: Dir; axis: "x" | "y" }) 
   );
 }
 
-export function IsoRoomGallery({ rooms, initial = 0, hrefFor = () => "/room", className }: Props) {
+export function IsoRoomGallery({ rooms, initial = 0, hrefFor = (room) => `/rooms/${room.id}`, className }: Props) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const engine = useRef<IsoGallery | null>(null);
   const busy = useRef(false);
@@ -68,10 +70,10 @@ export function IsoRoomGallery({ rooms, initial = 0, hrefFor = () => "/room", cl
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     import("../room/iso-gallery")
       .then(({ createIsoGallery }) => {
-        if (cancelled || !canvas.current) return;
+        if (cancelled || !canvas.current || rooms.length === 0) return;
         const g = createIsoGallery(
           canvas.current,
-          rooms.map((r) => ({ plan: r.plan, baked: r.baked })),
+          rooms.map((r) => ({ plan: r.plan, baked: r.baked, reconstruction: r.reconstruction })),
           { initial, reducedMotion, lite: window.innerWidth < 768 },
         );
         engine.current = g;
@@ -107,6 +109,7 @@ export function IsoRoomGallery({ rooms, initial = 0, hrefFor = () => "/room", cl
     if (!ready) return;
     let wheelLock = 0;
     const onKey = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLElement && (e.target.closest("input, textarea, select, [role=dialog]") || e.target.isContentEditable)) return;
       if (e.key === "ArrowRight" || e.key === "ArrowDown") go(1);
       if (e.key === "ArrowLeft" || e.key === "ArrowUp") go(-1);
     };
@@ -140,10 +143,11 @@ export function IsoRoomGallery({ rooms, initial = 0, hrefFor = () => "/room", cl
   }, [ready, go]);
 
   const room = at(index);
+  if (!room) return <section className="iso-gallery"><p>No rooms yet. Open a scan to get started.</p></section>;
 
   return (
-    <section className={`iso-gallery ${className ?? ""}`.trim()} data-ready={ready || undefined} aria-roledescription="carousel" aria-label="Your rooms">
-      <canvas ref={canvas} className="iso-gallery__canvas" role="img" aria-label={`${room.label}, built from your scan`} />
+    <section className={`iso-gallery ${className ?? ""}`.trim()} data-ready={ready || failed || undefined} aria-roledescription="carousel" aria-label="Your rooms">
+      <canvas ref={canvas} className="iso-gallery__canvas" role="img" aria-label={`${room.label}, ${room.description ?? "room preview"}`} />
 
       {count > 1 ? (
         <>
@@ -173,13 +177,15 @@ export function IsoRoomGallery({ rooms, initial = 0, hrefFor = () => "/room", cl
         <h2 className="iso-gallery__title" aria-live="polite">
           <Swap text={room.label} dir={dir} axis="x" />
         </h2>
-        <a className="iso-gallery__enter" href={hrefFor(room)}>
+        <p className="iso-gallery__source">{room.description ?? "Demo room"}</p>
+        <Link className="iso-gallery__enter" href={hrefFor(room)} onClick={() => { try { sessionStorage.setItem("tadaima:last-room", room.id); } catch { /* optional */ } }}>
           <span className="iso-gallery__enter-text" data-text="Step inside">
             Step inside
           </span>
-        </a>
+        </Link>
       </div>
 
+      {!ready && !failed ? <p className="iso-gallery__loading" role="status">Preparing room previews…</p> : null}
       {failed ? <p className="iso-gallery__error">Your rooms could not load. Refresh to try again.</p> : null}
     </section>
   );

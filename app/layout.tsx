@@ -10,7 +10,7 @@ const mono = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "Michael",
+  title: "tadaima",
   description: "Scan your room, swap anything, buy what fits.",
 };
 

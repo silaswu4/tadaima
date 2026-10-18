@@ -47,6 +47,7 @@ export default function Home() {
   const [qr, setQr] = useState<string | null>(null);
   const [captureUrl, setCaptureUrl] = useState("/capture");
   const [address, setAddress] = useState("");
+  const [addressError, setAddressError] = useState("");
   const busy = useRef(false);
   const addressRef = useRef<HTMLInputElement>(null);
   const reduced = useSyncExternalStore(subscribeToMotion, readMotion, () => false);
@@ -133,7 +134,17 @@ export default function Home() {
     e.preventDefault();
     const v = address.trim();
     if (!v) return;
-    router.push(`/room?address=${encodeURIComponent(v)}`);
+    if (v.length > 512) {
+      setAddressError("Keep the address and unit under 512 characters.");
+      return;
+    }
+    try {
+      window.sessionStorage.setItem("tadaima:pending-address", v);
+      setAddressError("");
+      router.push("/rooms?onboarding=address");
+    } catch {
+      setAddressError("Your browser could not save this address privately. Enable session storage, or browse rooms below.");
+    }
   };
 
   const room = day ? DAY : NIGHT;
@@ -206,7 +217,7 @@ export default function Home() {
               tabIndex={day ? 0 : -1}
             >
               <span className="t">Use your phone to scan</span>
-              <span className="d">Scan your space using a mobile phone (Pro phone required)</span>
+              <span className="d">Capture room photos, or use a LiDAR iPhone scan.</span>
             </button>
             {open === "scan" && (
               <div className="hero-qr" id="hero-qr">
@@ -236,7 +247,7 @@ export default function Home() {
               tabIndex={day ? 0 : -1}
             >
               <span className="t">Type in an address</span>
-              <span className="d">We&apos;ll find the place and set the room up from there.</span>
+              <span className="d">Save your address for room setup. Automatic address research is not connected yet.</span>
             </button>
             {open === "type" && (
               <form className="hero-addr" id="hero-addr" onSubmit={submitAddress}>
@@ -250,14 +261,18 @@ export default function Home() {
                     name="address"
                     type="text"
                     autoComplete="street-address"
+                    maxLength={512}
+                    aria-describedby={addressError ? "hero-address-error" : undefined}
+                    aria-invalid={addressError ? true : undefined}
                     placeholder="580 Gayley Ave, Los Angeles"
                     value={address}
-                    onChange={(e) => setAddress(e.target.value)}
+                    onChange={(e) => { setAddress(e.target.value); setAddressError(""); }}
                   />
                   <button className="go" type="submit">
                     Go
                   </button>
                 </div>
+                {addressError ? <small id="hero-address-error" role="alert">{addressError}</small> : null}
               </form>
             )}
           </div>

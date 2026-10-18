@@ -68,7 +68,7 @@ export function openQuest({ argv = [], env = process.env,
   const reverse = adb(["-s", target, "reverse", "tcp:3017", "tcp:3017"]);
   if (reverse.error || reverse.status !== 0) return fail("Could not forward port 3017 to the Quest. Check the USB connection and debugging permission, then retry.");
   const started = adb(["-s", target, "shell", "am", "start", "-a", "android.intent.action.VIEW", "-d",
-    `http://localhost:3017/room#local-scan=${token}`]);
+    `http://localhost:3017/rooms#local-scan=${token}`]);
   if (started.error || started.status !== 0 || /(?:^|\n)\s*(?:Error:|Exception)/i.test(`${started.stdout ?? ""}\n${started.stderr ?? ""}`)) {
     return fail("Could not open the Quest browser. Put on the headset and retry; the private scan URL has not been printed.");
   }
