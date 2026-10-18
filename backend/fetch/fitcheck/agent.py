@@ -4,7 +4,7 @@ Fit Check: "will this furniture fit?" over ASI:One chat and the TadaimaFitCheck 
 Claude only reads the message into numbers (with units, converted here). The
 verdict always comes from fit.py, which is deterministic and tested. If key
 numbers are missing the person gets one form card; product links are measured
-by the Scout agent when it's configured (scout.py), otherwise we ask for the size.
+by the Scout agent when it's configured (scout_link.py), otherwise we ask for the size.
 
 Run: see README.md next to this file.
 """
@@ -42,7 +42,7 @@ from uagents_core.contrib.protocols.chat.cards import (  # noqa: E402
 )
 
 import fit  # noqa: E402
-import scout  # noqa: E402
+import scout_link as scout  # noqa: E402
 from protocols import FitRequest, FitVerdict, fit_protocol  # noqa: E402
 
 MODEL = "claude-opus-5-5"
@@ -314,13 +314,14 @@ def save_state(ctx: Context, sender: str, s: dict):
     ctx.storage.set(f"fit:{sender}", s)
 
 
-async def fill_from_link(ctx: Context, s: dict) -> tuple[dict, bool]:
+async def fill_from_link(ctx: Context, sender: str, s: dict) -> tuple[dict, bool]:
     """Measure product_url with Scout if we can. Returns (state, tried)."""
     if not s.get("product_url") or (s.get("piece_width") and s.get("piece_depth")) or s.get("measured_url") == s["product_url"]:
         return s, False
     if not scout.available():
         return s, False
-    product = await scout.measure(ctx, s["product_url"])
+    await ctx.send(sender, msg("Measuring that link, give me a minute or two."))
+    product = await scout.measure(ctx, s["product_url"], s.get("piece_label"))
     s = {**s, "measured_url": s["product_url"]}
     if product and product.dimensions_wdh_m and len(product.dimensions_wdh_m) == 3:
         w, h, d = product.dimensions_wdh_m
@@ -329,7 +330,7 @@ async def fill_from_link(ctx: Context, s: dict) -> tuple[dict, bool]:
 
 
 async def answer(ctx: Context, sender: str, s: dict):
-    s, tried = await fill_from_link(ctx, s)
+    s, tried = await fill_from_link(ctx, sender, s)
     gaps = missing(s)
     if gaps:
         lead = ""
@@ -421,6 +422,7 @@ async def on_fit(ctx: Context, sender: str, req: FitRequest):
 
 agent.include(chat, publish_manifest=True)
 agent.include(fit_protocol, publish_manifest=True)
+scout.attach(agent)
 
 if __name__ == "__main__":
     agent.run()

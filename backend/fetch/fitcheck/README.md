@@ -10,7 +10,7 @@ Will this furniture fit? Tell Fit Check the piece and the space and it tells you
 | | |
 | --- | --- |
 | Agent name | `tadaima-fitcheck` |
-| Agent address | `(fill in after first run)` |
+| Agent address | `agent1qw8a0tffhe420xzu7ultv2naf8k80dkwndq79pnn2ha84v0aam906uprl6v` |
 | Protocols | Agent Chat Protocol 0.3.0, TadaimaFitCheck 0.1.0 |
 | Part of | Tadaima (room planner) |
 
@@ -58,4 +58,8 @@ set -a && source .env && set +a
 python agent.py        # port 8003
 ```
 
-Then connect the mailbox from the Agent Inspector link it prints (or POST `/connect` on port 8003 with your Agentverse key). Set `SCOUT_ADDRESS` to let it measure product links through the Scout agent.
+Then connect the mailbox from the Agent Inspector link it prints (or POST `/connect` on port 8003 with your Agentverse key).
+
+Product links: set `SCOUT_ADDRESS` and, once `backend/fetch/scout_client.py` is on this branch, Fit Check hires the Scout agent to measure the page (Scout charges a small testnet FET fee from this agent's wallet, capped by `SCOUT_MAX_FET`). Without either it just asks for the size.
+
+Tests: `python test_fit.py` (geometry), `python harness.py` (chat and FitRequest handlers with a fake ctx, real Claude parsing), `FITCHECK_ADDRESS=agent1q... python probe.py` (a throwaway local agent sends real FitRequests to the running agent).

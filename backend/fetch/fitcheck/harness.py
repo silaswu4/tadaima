@@ -108,7 +108,7 @@ def verdict_of(ctx: Ctx) -> str | None:
         if isinstance(m, ChatMessage):
             t = m.text()
             for v, head in fc.HEADLINE.items():
-                if head[:8] in t:
+                if f"**{head}" in t or f"**{head[:-1]}" in t:
                     return v
     return None
 
@@ -159,6 +159,20 @@ async def main():
 
     await turn(ctx, "erin", text("what's the weather like"), "off topic")
     expect("off topic -> help", "Fit Check" in ctx.sent[-1].text())
+
+    # Scout path with a stand-in scout_client: the link gets measured, no form
+    from protocols import Product, ResearchResult
+
+    class FakeScout:
+        async def hire_scout(self, ctx, req, on_progress=None, timeout_s=None):
+            assert req.product_url and req.category == "sofa"
+            return ResearchResult(request_id=req.request_id, ok=True, products=[Product(
+                id="kivik", merchant="IKEA", label="KIVIK sofa", source_url=req.product_url, dimensions_wdh_m=[2.28, 0.83, 0.95])])
+
+    fc.scout.scout_client, fc.scout.SCOUT_ADDRESS = FakeScout(), "agent1qfakescout"
+    await turn(ctx, "finn", text("https://www.ikea.com/us/en/p/kivik-sofa-s29440588/ fits on a 2.2 m wall?"), "link, with scout")
+    expect("link with scout: measured, 2.28 on a 2.2 m wall, sideways depth unknown", verdict_of(ctx) == "unknown" and last_kind(ctx) == ["review"] and "2.28 m wide" in ctx.sent[-1].text())
+    fc.scout.scout_client, fc.scout.SCOUT_ADDRESS = None, None
 
     print("\n-> [FitRequest] agent to agent")
     ctx.sent.clear()
