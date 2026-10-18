@@ -21,7 +21,7 @@ struct ScanScreen: View {
         NavigationStack {
             VStack(alignment: .leading, spacing: 16) {
                 Text("A room scan. No tape measure.").font(.title2.weight(.semibold))
-                Text("Move slowly and follow the on-screen RoomPlan guidance. Scan one room, then review its model.")
+                Text("Move slowly and follow the on-screen RoomPlan guidance. Include existing furniture from several angles, then review the room.")
                     .font(.subheadline).foregroundStyle(.secondary)
                 if let view = model.captureView {
                     NativeRoomView(view: view).id(model.scanID)
@@ -38,7 +38,7 @@ struct ScanScreen: View {
                     TextField("Room name", text: $model.roomLabel)
                         .textFieldStyle(.roundedBorder).disabled(model.isBusy)
                         .accessibilityLabel("Room name")
-                    Text("\(model.surfaceCount) structural surfaces captured. Review the result; sensor estimates can miss details or need correction.")
+                    Text("\(model.surfaceCount) structural surfaces and \(model.objectCount) objects captured. Objects are detected size proxies, not textured copies. Review missing objects and sensor estimates.")
                         .font(.footnote).foregroundStyle(.secondary)
                 }
                 if let message = model.message {

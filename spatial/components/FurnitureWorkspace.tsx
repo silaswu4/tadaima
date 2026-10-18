@@ -137,7 +137,7 @@ export default function FurnitureWorkspace() {
             {imported ? "Back to demo" : "Photo reference finishes"}
           </button>
         </div>
-        <p className="furniture-fileHelp">Open a reconstruction.request.json or scene.json file (up to 2 MiB). It stays in this browser; imported room files contain no furniture.</p>
+        <p className="furniture-fileHelp">Open a reconstruction.request.json or scene.json file (up to 2 MiB). It stays in this browser. Captured furniture appears as selectable size proxies.</p>
         {importError ? <p className="furniture-importError" role="alert">{importError}</p> : null}
       </section>
 
@@ -160,7 +160,7 @@ export default function FurnitureWorkspace() {
 
           <div className="furniture-viewport" aria-busy={loading}>
             <canvas ref={canvas} className="furniture-canvas" role="img"
-              aria-label={imported ? "Interactive imported room geometry draft." : "Isometric demo room with nine furniture pieces. Select a piece in the item list for its details."}
+              aria-label={imported ? "Interactive imported room and captured furniture draft. Select an item in the list to inspect it." : "Isometric demo room with nine furniture pieces. Select a piece in the item list for its details."}
               aria-describedby="furniture-cameraHelp" />
             {loading ? <p className="furniture-loading" role="status">Loading room and furniture…</p> : null}
             {error ? <div className="furniture-error" role="alert"><strong>Room preview unavailable</strong><p>{error}</p></div> : null}
@@ -180,12 +180,17 @@ export default function FurnitureWorkspace() {
             <p id="furniture-selectedHeading" className="furniture-sectionLabel">selected piece</p>
             {selected ? <>
               <h2>{selected.label}</h2>
-              <p className="furniture-modelLabel">{selected.modelAvailable ? "Demo model" : "Demo proxy"}</p>
+              <p className="furniture-modelLabel">{selected.representation === "detected_size_proxy" ? "Detected size proxy" : selected.modelAvailable ? "Demo model" : "Demo proxy"}</p>
               <dl className="furniture-dimensions">
                 <div><dt>Width / X</dt><dd>{centimeters(selected.size[0])}</dd></div>
                 <div><dt>Height / Y</dt><dd>{centimeters(selected.size[1])}</dd></div>
                 <div><dt>Depth / Z</dt><dd>{centimeters(selected.size[2])}</dd></div>
               </dl>
+              {selected.representation === "detected_size_proxy" ? <>
+                <p className="furniture-selectionHelp">Sensor-estimated dimensions and placement. This box approximates the detected extent; the furniture’s shape, fabric and identity have not been recovered.</p>
+                <p className="furniture-selectionHelp">{selected.locked ? "Placement preserved for planning." : "Placement is not locked."} Explode only changes the preview.</p>
+                {selected.evidence.map((claim, index) => <p key={index} className="furniture-selectionHelp">{claim}</p>)}
+              </> : null}
             </> : <><h2>A closer look.</h2><p className="furniture-selectionHelp">Select furniture in the room or choose a piece below.</p></>}
           </section>
 
@@ -195,12 +200,12 @@ export default function FurnitureWorkspace() {
               <li key={item.id}><button type="button" className="furniture-item"
                 aria-pressed={selectedId === item.id} onClick={() => selectItem(item.id)}>
                 <span className="furniture-itemNumber" aria-hidden="true">{String(index + 1).padStart(2, "0")}</span>
-                <span className="furniture-itemText"><span>{item.label}</span>{!item.modelAvailable ? <small>Demo proxy</small> : null}</span>
+                <span className="furniture-itemText"><span>{item.label}</span>{!item.modelAvailable ? <small>{item.representation === "detected_size_proxy" ? "Detected size proxy" : "Demo proxy"}</small> : null}</span>
                 <span className="furniture-itemMark" aria-hidden="true">{selectedId === item.id ? "−" : "+"}</span>
               </button></li>
             ))}</ol> : <p className="furniture-emptyInventory">{error ? "The item list will be available when the room loads." : imported && ready ? "This reconstruction contains room geometry only. No furniture was imported." : "Preparing the collection…"}</p>}
           </section>
-          <p className="furniture-disclosure">{imported ? "Imported geometry is a reconstruction draft, not a verified survey. Photo estimates describe colors and material families; they do not reproduce measured surface reflectance." : "Model dimensions — demo, not verified retailer sizes. Sample geometry and furniture remain unchanged by the photo finish reference; this is not a reconstruction of your home."}</p>
+          <p className="furniture-disclosure">{imported ? "Imported geometry and furniture extents are sensor or reconstruction estimates, not a verified survey. Existing furniture is not added to a shopping basket. Photo estimates describe colors and material families; they do not reproduce measured surface reflectance." : "Model dimensions — demo, not verified retailer sizes. Sample geometry and furniture remain unchanged by the photo finish reference; this is not a reconstruction of your home."}</p>
         </aside>
       </div>
     </main>

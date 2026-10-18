@@ -9,6 +9,7 @@ import { block, rug, standingLamp, surface } from "./parts";
 import { createRoomLighting, setMetricSurfaceUVs } from "./lighting";
 import { RectAreaLightUniformsLib } from "three/addons/lights/RectAreaLightUniformsLib.js";
 import { insideFloor, planWindowDaylight } from "./window-daylight";
+import { createFurnitureProxy, placeFurnitureModel } from "./furniture-model";
 
 export type WorkspaceItem = {
   id: string;
@@ -16,6 +17,9 @@ export type WorkspaceItem = {
   /** Local model bounds, not retailer-verified dimensions. */
   size: [number, number, number];
   modelAvailable: boolean;
+  representation: "detected_size_proxy" | "demo_model" | "demo_proxy";
+  locked: boolean;
+  evidence: string[];
 };
 export type WorkspaceScene = {
   ready: Promise<void>;
@@ -295,25 +299,22 @@ export function createFurnitureWorkspace(
       else throw new Error("No furniture asset");
     } catch {
       available = false;
-      const [x, y, z] = item.dimensions ?? [1, 1, 1];
-      model = block(x, y, z, surface("#c4b39b"));
+      model = createFurnitureProxy(item.dimensions ?? [1, 1, 1]);
     }
     if (disposed) { release(model); return null; }
-    const box = new THREE.Box3().setFromObject(model, true);
-    const center = box.getCenter(new THREE.Vector3());
-    const size = box.getSize(new THREE.Vector3()).toArray() as [number, number, number];
-    model.position.sub(new THREE.Vector3(center.x, box.min.y, center.z));
-    const root = new THREE.Group();
-    root.userData.workspaceItemId = item.id;
-    root.add(model);
-    root.position.fromArray(item.position);
-    root.rotation.y = item.rotationY;
+    const { root, size } = placeFurnitureModel(item, model);
     root.traverse((node) => {
       if (node instanceof THREE.Mesh) { node.castShadow = true; node.receiveShadow = true; }
     });
     roots.set(item.id, root);
     scene.add(root);
-    return { id: item.id, label: item.label, size, modelAvailable: available };
+    return { id: item.id, label: item.label, size, modelAvailable: available,
+      representation: item.origin === "existing_owned" && plan.projectId !== "furniture-workspace-demo" && !available ? "detected_size_proxy" : available ? "demo_model" : "demo_proxy",
+      locked: item.locked,
+      evidence: (item.evidenceIds ?? []).flatMap((id) => {
+        const observation = plan.evidence.find((entry) => entry.id === id);
+        return observation ? [observation.claim] : [];
+      }) };
   }
 
   function frame(now: number) {

@@ -383,8 +383,8 @@ def validate_request(raw: object) -> dict:
     covered by wall segments, and every wall must lie on room boundaries.
     """
     fields = {"jobId", "projectId", "inputRevision", "geometry", "evidence"}
-    if isinstance(raw, dict) and "appearance" in raw:
-        fields.add("appearance")
+    if isinstance(raw, dict):
+        fields.update(set(raw) & {"appearance", "items"})
     request = _object(raw, "request", fields)
     revision = request["inputRevision"]
     if isinstance(revision, bool) or not isinstance(revision, int) or not 0 <= revision <= 9_007_199_254_740_991:
@@ -474,4 +474,7 @@ def validate_request(raw: object) -> dict:
     if "appearance" in request:
         from reconstruction.appearance_model import validate_appearance
         result["appearance"] = validate_appearance(request["appearance"], geometry, evidence)
+    if "items" in request:
+        from reconstruction.items import validate_items
+        result["items"] = validate_items(request["items"], geometry, evidence)
     return result

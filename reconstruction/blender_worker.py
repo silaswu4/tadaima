@@ -21,7 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from reconstruction import GENERATOR_VERSION
 from reconstruction.geometry import triangulate_polygon, validate_request, wall_cells
 from reconstruction.joins import wall_join_slopes
-from reconstruction.shading import RENDER_PROFILE, add_preview_setup, metric_uvs, room_materials
+from reconstruction.shading import RENDER_PROFILE, add_preview_setup, metric_uvs, pbr_material, room_materials
 
 FLOOR_THICKNESS = 0.08
 
@@ -156,6 +156,32 @@ def build_opening(opening, wall_obj, thickness, collection):
     return obj
 
 
+def build_existing_furniture(item, collection, mat):
+    """Editable sensor bounding box; deliberately not a recovered product mesh."""
+    width, height, depth = item["dimensions"]
+    vertices = [(x * width / 2, z * depth / 2, y * height)
+                for y in (0, 1) for z in (-1, 1) for x in (-1, 1)]
+    faces = [(0, 1, 3, 2), (4, 6, 7, 5), (0, 4, 5, 1),
+             (2, 3, 7, 6), (0, 2, 6, 4), (1, 5, 7, 3)]
+    obj = mesh_object("Existing_" + item["id"], vertices, faces, collection, mat)
+    x, y, z = item["position"]
+    obj.location = (x, -z, y)
+    # A right-handed +Y rotation maps +X to -Z. The canonical axis
+    # conversion maps this to Blender +Z, matching Three.js rotation.y.
+    obj.rotation_euler.z = item["rotationY"]
+    identify(obj, {**item, "evidenceIds": item.get("evidenceIds", [])}, "existing_furniture")
+    obj["label"] = item["label"]
+    obj["roomId"] = item["roomId"]
+    obj["origin"] = "existing_owned"
+    obj["locked"] = item["locked"]
+    obj["dimensionsJson"] = json.dumps(item["dimensions"], separators=(",", ":"))
+    obj["proxyGeometry"] = "sensor_bounding_box"
+    obj["finish"] = "paint"
+    obj["appearanceStatus"] = "sensor_proxy"
+    metric_uvs(obj, 1)
+    return obj
+
+
 def bounds_of(objects):
     points = [obj.matrix_world @ Vector(corner) for obj in objects if obj.type == "MESH" for corner in obj.bound_box]
     # Blender (x,y,z) -> canonical application (x,z,-y).
@@ -202,6 +228,17 @@ def generate(request, output: Path, preview: bool):
             obj["finish"] = material["finish"]
             obj["appearanceStatus"] = material["appearanceStatus"]
             metric_uvs(obj, tile, rotation)
+    if request.get("items"):
+        collection = bpy.data.collections.new("ExistingFurniture")
+        scene.collection.children.link(collection)
+        # Neutral proxy finish is independent from inferred room finishes.
+        material = pbr_material("ExistingFurniture_Proxy", (.31, .38, .40, 1),
+                                normal="plaster-normal.jpg", normal_strength=.035,
+                                roughness_value=.82)
+        material["finish"] = "paint"
+        material["appearanceStatus"] = "sensor_proxy"
+        objects.extend(build_existing_furniture(item, collection, material) for item in request["items"])
+        bpy.context.view_layer.update()
     bounds = bounds_of(objects)
     lighting_summary = add_preview_setup(scene, bounds, objects, geometry)
     bpy.context.view_layer.update()

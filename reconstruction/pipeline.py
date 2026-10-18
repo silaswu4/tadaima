@@ -117,8 +117,11 @@ def generate(request_path: Path, output_path: Path, *, blender: str | None = Non
         warnings = [
             "Geometry is supplied input, not a measured photo/scan reconstruction.",
             "Wall segments and floor boundaries are centerlines; usable clearance must account for wall thickness.",
-            "Openings are real apertures with metadata markers; door leaves, glass, frames, ceilings, and furniture are not generated.",
+            ("Openings are real apertures with metadata markers; door leaves, glass, frames, ceilings"
+             + (", and furniture" if not request.get("items") else "") + " are not generated."),
         ]
+        if request.get("items"):
+            warnings.append("Existing furniture is represented by separate sensor-size proxies, not exact textured meshes or merchant products.")
         if any(e["dimensionStatus"] == "inferred" for e in request["evidence"]):
             warnings.append("Some evidence is inferred; user confirmation does not turn it into a physical measurement.")
         manifest = {

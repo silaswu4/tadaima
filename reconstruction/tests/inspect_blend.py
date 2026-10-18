@@ -103,11 +103,12 @@ for obj in entities.values():
                 assert images and all(image and image.packed_file for image in images), "Material maps must be packed"
                 assert any(node.type == "NORMAL_MAP" and node.inputs["Color"].is_linked for node in material.node_tree.nodes), "Use a tangent-space normal map"
                 assert any(image.colorspace_settings.name == "Non-Color" for image in images), "Normal maps are linear data"
-                spec = source_surfaces.get(obj["entityId"])
+                existing = obj["role"] == "existing_furniture"
+                spec = None if existing else source_surfaces.get(obj["entityId"])
                 expected_finish = spec["finish"] if spec else ("wood" if obj["role"] == "room_floor" else "paint")
                 if window_profile:
                     assert obj["finish"] == material["finish"] == expected_finish
-                    assert obj["appearanceStatus"] == ("photo_estimate" if spec else "styling_default")
+                    assert obj["appearanceStatus"] == ("sensor_proxy" if existing else "photo_estimate" if spec else "styling_default")
                     if spec and expected_finish != "wood":
                         encoded = [int(spec["color"][index:index + 2], 16) / 255 for index in (1, 3, 5)]
                         expected_color = [value / 12.92 if value <= .04045 else ((value + .055) / 1.055) ** 2.4 for value in encoded]
@@ -118,6 +119,33 @@ for obj in entities.values():
                     assert shaders[0].inputs["Base Color"].is_linked, "Wood needs a base-color texture"
                     assert shaders[0].inputs["Roughness"].is_linked, "Wood needs a roughness texture"
                     assert any(image.colorspace_settings.name == "sRGB" for image in images), "Base color uses sRGB"
+for item in source.get("items", []):
+    obj = entities[item["id"]]
+    assert obj.type == "MESH" and obj["role"] == "existing_furniture"
+    assert obj.users_collection and any(collection.name == "ExistingFurniture" for collection in obj.users_collection)
+    assert not obj.hide_render and not obj.get("previewCutaway"), "Furniture must stay visible in previews"
+    assert obj["roomId"] == item["roomId"] and obj["label"] == item["label"]
+    assert obj["origin"] == "existing_owned" and obj["locked"] == item["locked"]
+    assert obj["proxyGeometry"] == "sensor_bounding_box"
+    assert json.loads(obj["dimensionsJson"]) == item["dimensions"]
+    assert json.loads(obj["evidenceIdsJson"]) == item.get("evidenceIds", [])
+    assert abs(obj.rotation_euler.z - item["rotationY"]) < 1e-6
+    width, height, depth = item["dimensions"]
+    assert max(abs(a - b) for a, b in zip(obj.dimensions, [width, depth, height])) < 1e-6
+    expected_origin = Vector((item["position"][0], -item["position"][2], item["position"][1]))
+    assert (obj.location - expected_origin).length < 1e-6, "Furniture origin is bottom center"
+    # Independent canonical corners protect handedness, elevation and width/depth.
+    cosine, sine = math.cos(item["rotationY"]), math.sin(item["rotationY"])
+    corners = [(item["position"][0] + cosine * x + sine * z,
+                item["position"][1] + y,
+                item["position"][2] - sine * x + cosine * z)
+               for x in (-width / 2, width / 2) for y in (0, height) for z in (-depth / 2, depth / 2)]
+    actual = [(p.x, p.z, -p.y) for p in (obj.matrix_world @ Vector(v) for v in obj.bound_box)]
+    assert all(min(math.dist(point, expected) for expected in corners) < 1e-5 for point in actual)
+    bm = bmesh.new()
+    bm.from_mesh(obj.data)
+    assert abs(bm.calc_volume() - width * height * depth) < 1e-5
+    bm.free()
 for wall in source["geometry"]["walls"]:
     obj = entities[wall["id"]]
     cuts = [o for o in source["geometry"]["openings"] if o["wallId"] == wall["id"]]

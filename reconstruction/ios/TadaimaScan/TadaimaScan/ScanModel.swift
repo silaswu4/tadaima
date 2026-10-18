@@ -28,6 +28,7 @@ final class ScanModel: ObservableObject {
     }
     var isBusy: Bool { [.requestingPermission, .processing, .exporting].contains(phase) }
     var surfaceCount: Int { room.map { $0.walls.count + $0.doors.count + $0.windows.count + $0.openings.count } ?? 0 }
+    var objectCount: Int { room?.objects.count ?? 0 }
 
     func start() async {
         guard supported, !isBusy, phase != .scanning else { return }
@@ -116,6 +117,10 @@ final class ScanModel: ObservableObject {
     private func didProcess(_ result: CapturedRoom, id: UUID) {
         guard scanID == id, phase == .processing else { return }
         guard !result.walls.isEmpty else { fail("RoomPlan did not identify any walls. Try a slower scan with better lighting.", id: id); return }
+        guard result.objects.count <= ScanWire.maximumObjects else {
+            fail("This scan exceeds the 256-object export limit. Scan a smaller room.", id: id)
+            return
+        }
         room = result
         capturedAt = ISO8601DateFormatter().string(from: Date())
         phase = .review

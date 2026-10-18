@@ -99,6 +99,8 @@ export interface PlacedItem {
   rotationY: number;
   dimensions: Vector3Meters | null;
   locked: boolean;
+  /** Source evidence for captured dimensions/placement; absent on legacy demos. */
+  evidenceIds?: string[];
 }
 
 export interface RoomPlan {

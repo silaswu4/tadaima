@@ -22,6 +22,7 @@ The [geometry-to-Blender/GLB worker](../reconstruction/README.md) is now impleme
 | [Team ownership](team-ownership.md) | Four working areas, named owners, initial tasks, and handoff boundaries |
 | [Agent prompts](agent-prompts.md) | Standalone prompts matching the latest ownership swaps |
 | [Reconstruction implementation](../reconstruction/README.md) | Working commands, geometry semantics, artifact manifest, backend/viewer handoffs, and test results |
+| [Existing furniture](existing-furniture.md) | Native object capture, separate editable size proxies, real scan recovery and verification |
 | [Photo appearance and window daylight](photo-appearance.md) | Photo-cited finishes, keyless/hosted analysis, window lighting, local room import and verification |
 | [Blender export research](../reconstruction/RESEARCH.md) | Primary-source modeling, coordinate, exporter, and verification decisions |
 | [Project context](project-context.md) | Confirmed requirements, recommendations, rejected directions, and handoff |

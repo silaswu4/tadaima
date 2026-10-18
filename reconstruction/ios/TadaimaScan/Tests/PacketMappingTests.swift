@@ -28,6 +28,36 @@ struct PacketMappingTests {
         precondition((surfaces[0]["transform"] as! [NSNumber]).map(\.floatValue) == matrix)
         let roundTrip = try JSONDecoder().decode(RoomPlanPacket.self, from: data)
         precondition(roundTrip.surfaces[0].dimensions == [4, 2.7, 0])
+        precondition(roundTrip.objects.isEmpty && object["objects"] == nil, "Legacy 1.0 remains structural-only")
+
+        let fixture = syntheticRoom()
+        let furnitureData = try ScanWire.encode(fixture)
+        let furniturePacket = try JSONDecoder().decode(RoomPlanPacket.self, from: furnitureData)
+        precondition(furniturePacket.schemaVersion == "roomplan-scan/1.1")
+        precondition(furniturePacket.objects.count == 2)
+        precondition(furniturePacket.objects[0].category == "sofa")
+        precondition(furniturePacket.objects[0].dimensions == [1.8, 0.9, 0.8])
+        precondition(furniturePacket.objects[0].transform[0] == 0 && furniturePacket.objects[0].transform[2] == 1,
+                     "Furniture rotation must remain in the native column-major pose")
+        precondition(furniturePacket.objects[1].transform[13] == 1.1,
+                     "An elevated object center must not be snapped to the floor")
+        var missingObjects = try JSONSerialization.jsonObject(with: furnitureData) as! [String: Any]
+        missingObjects.removeValue(forKey: "objects")
+        do {
+            _ = try JSONDecoder().decode(RoomPlanPacket.self, from: JSONSerialization.data(withJSONObject: missingObjects))
+            fatalError("Version 1.1 must require its objects array")
+        } catch DecodingError.keyNotFound { /* Expected: no silent loss of furniture. */ }
+        let emptyPacket = RoomPlanPacket(schemaVersion: "roomplan-scan/1.1", projectId: packet.projectId,
+            jobId: packet.jobId, inputRevision: 0, capturedAt: packet.capturedAt, roomId: packet.roomId,
+            roomLabel: packet.roomLabel, device: packet.device, surfaces: [surface])
+        let emptyObject = try JSONSerialization.jsonObject(with: ScanWire.encode(emptyPacket)) as! [String: Any]
+        precondition((emptyObject["objects"] as! [Any]).isEmpty, "Version 1.1 must explicitly encode zero detections")
+        let excessPacket = RoomPlanPacket(schemaVersion: "roomplan-scan/1.1", projectId: packet.projectId,
+            jobId: packet.jobId, inputRevision: 0, capturedAt: packet.capturedAt, roomId: packet.roomId,
+            roomLabel: packet.roomLabel, device: packet.device, surfaces: [surface],
+            objects: Array(repeating: fixture.objects[0], count: 257))
+        do { _ = try ScanWire.encode(excessPacket); fatalError("Object exports must be bounded") }
+        catch ScanWireError.tooManyObjects { /* Expected: no truncation. */ }
         let invalid = ScanSurface(id: "bad", category: "wall", dimensions: [.nan, 1, 0],
                                  transform: matrix, confidence: "unknown", parentId: nil,
                                  polygonCorners: [], isCurved: false)
@@ -36,7 +66,14 @@ struct PacketMappingTests {
             roomLabel: packet.roomLabel, device: packet.device, surfaces: [invalid])
         do { _ = try ScanWire.encode(invalidPacket); fatalError("Nonfinite dimensions must fail encoding") }
         catch EncodingError.invalidValue { /* Expected: no invalid JSON geometry. */ }
-        print("PASS: column-major transform, local polygon coordinates, explicit null parent, curved flag, JSON round-trip, nonfinite rejection")
+        let invalidObject = ScanObject(id: "bad-object", category: "table", dimensions: [1, .infinity, 1],
+                                      transform: matrix, confidence: "low")
+        let invalidFurniture = RoomPlanPacket(schemaVersion: "roomplan-scan/1.1", projectId: packet.projectId,
+            jobId: packet.jobId, inputRevision: 0, capturedAt: packet.capturedAt, roomId: packet.roomId,
+            roomLabel: packet.roomLabel, device: packet.device, surfaces: [surface], objects: [invalidObject])
+        do { _ = try ScanWire.encode(invalidFurniture); fatalError("Nonfinite object dimensions must fail encoding") }
+        catch EncodingError.invalidValue { /* Expected: no invalid object geometry. */ }
+        print("PASS: column-major pose, local polygon corners, null parent, curve flag, legacy round-trip, required 1.1 objects, rotated/elevated furniture, object limit, nonfinite rejection")
         if CommandLine.arguments.count == 3 && CommandLine.arguments[1] == "--emit-fixture" {
             let url = URL(fileURLWithPath: CommandLine.arguments[2])
             try ScanWire.encode(syntheticRoom()).write(to: url, options: .atomic)
@@ -70,9 +107,16 @@ struct PacketMappingTests {
             surface("synthetic-door", "door", 0.9, 2.1, x: 1.2, y: 1.05, z: 0, dx: 1, dz: 0, parent: "synthetic-wall-a"),
             surface("synthetic-window", "window", 1.2, 1.1, x: 4.2, y: 1.5, z: 1.75, dx: 0, dz: 1, parent: "synthetic-wall-b"),
         ]
-        return RoomPlanPacket(schemaVersion: "roomplan-scan/1.0", projectId: "synthetic-swift",
+        let objects = [
+            ScanObject(id: "synthetic-sofa", category: "sofa", dimensions: [1.8, 0.9, 0.8],
+                transform: matrix(x: 1.0, y: 0.45, z: 1.75, dx: 0, dz: 1), confidence: "high"),
+            ScanObject(id: "synthetic-table", category: "table", dimensions: [1.0, 0.7, 0.6],
+                transform: matrix(x: 2.5, y: 1.1, z: 1.75, dx: 1, dz: 0), confidence: "medium"),
+        ]
+        return RoomPlanPacket(schemaVersion: "roomplan-scan/1.1", projectId: "synthetic-swift",
             jobId: "synthetic-swift-scan", inputRevision: 0, capturedAt: "2026-10-18T01:00:00Z",
             roomId: "synthetic-swift-room", roomLabel: "Synthetic Swift 4.2 by 3.5 meter protocol fixture",
-            device: ScanDevice(model: "synthetic-test-no-device", systemVersion: "test"), surfaces: surfaces)
+            device: ScanDevice(model: "synthetic-test-no-device", systemVersion: "test"), surfaces: surfaces,
+            objects: objects)
     }
 }

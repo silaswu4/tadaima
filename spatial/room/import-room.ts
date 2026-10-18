@@ -1,4 +1,4 @@
-import type { Evidence, PointXZ, RoomAppearance, RoomGeometry, RoomPlan } from "../../backend/contracts";
+import type { Evidence, PlacedItem, PointXZ, RoomAppearance, RoomGeometry, RoomPlan } from "../../backend/contracts";
 
 export const MAX_ROOM_IMPORT_BYTES = 2 * 1024 * 1024;
 const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
@@ -102,6 +102,26 @@ function geometry(value: unknown, known: Set<string>): RoomGeometry {
   unique([...rooms, ...walls, ...openings].map((entry) => entry.id));
   return { units: "m", coordinateSystem: "right-handed-y-up", rooms, walls, openings };
 }
+function furniture(value: unknown, shape: RoomGeometry, known: Set<string>): PlacedItem[] {
+  const roomIds = new Set(shape.rooms.map((room) => room.id));
+  const entityIds = new Set([...shape.rooms, ...shape.walls, ...shape.openings].map((entry) => entry.id));
+  const result = list(value, 256).map((value): PlacedItem => {
+    const entry = object(value, ["id", "roomId", "label", "origin", "productId", "assetUrl", "position", "rotationY", "dimensions", "locked", "evidenceIds"]);
+    const itemId = id(entry.id), roomId = id(entry.roomId);
+    if (!roomIds.has(roomId) || entityIds.has(itemId)) fail("invalid furniture room or conflicting entity ID.");
+    if (entry.origin !== "existing_owned" || entry.productId !== null || entry.assetUrl !== null) fail("local furniture must be existing items without product or asset links.");
+    if (typeof entry.locked !== "boolean") fail("furniture lock must be a boolean.");
+    const position = list(entry.position, 3, 3).map((axis) => number(axis, -10000, 10000)) as [number, number, number];
+    const dimensions = list(entry.dimensions, 3, 3).map((axis) => number(axis, 1e-6, 100)) as [number, number, number];
+    const item: PlacedItem = { id: itemId, roomId, label: text(entry.label), origin: "existing_owned", productId: null, assetUrl: null,
+      position, rotationY: number(entry.rotationY, -2 * Math.PI, 2 * Math.PI), dimensions, locked: entry.locked };
+    item.evidenceIds = refs(entry.evidenceIds, known);
+    if (!item.evidenceIds.length) fail("furniture evidence cannot be empty.");
+    return item;
+  });
+  unique(result.map((entry) => entry.id));
+  return result;
+}
 function appearance(value: unknown, shape: RoomGeometry, known: Set<string>): RoomAppearance {
   const raw = object(value, ["schemaVersion", "reviewRequired", "scope", "sources", "surfaces", "notes"]);
   if (raw.schemaVersion !== "room-appearance/1.0" || raw.reviewRequired !== true || !["captured_room", "exact_unit", "building_reference", "unknown"].includes(raw.scope as string)) fail("invalid photo appearance profile.");
@@ -132,13 +152,13 @@ export function parseRoomImport(source: string): RoomPlan {
   if (new TextEncoder().encode(source).byteLength > MAX_ROOM_IMPORT_BYTES) fail("maximum file size is 2 MiB.");
   let parsed: unknown;
   try { parsed = JSON.parse(source); } catch { fail("choose a valid reconstruction JSON file."); }
-  const raw = object(parsed, ["jobId", "projectId", "inputRevision", "geometry", "evidence"], ["appearance"]);
+  const raw = object(parsed, ["jobId", "projectId", "inputRevision", "geometry", "evidence"], ["appearance", "items"]);
   id(raw.jobId); const projectId = id(raw.projectId), revision = number(raw.inputRevision, 0, Number.MAX_SAFE_INTEGER);
   if (!Number.isSafeInteger(revision)) fail("revision must be an integer.");
   const observations = evidence(raw.evidence), known = new Set(observations.map((entry) => entry.id));
   const shape = geometry(raw.geometry, known);
   const plan: RoomPlan = { schemaVersion: "0.1-scaffold", projectId, revision, geometry: shape, evidence: observations,
-    items: [], products: [], constraints: { budget: null, minimumSeats: null } };
+    items: raw.items === undefined ? [] : furniture(raw.items, shape, known), products: [], constraints: { budget: null, minimumSeats: null } };
   if (raw.appearance !== undefined) plan.appearance = appearance(raw.appearance, shape, known);
   return plan;
 }

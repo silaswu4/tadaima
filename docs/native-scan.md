@@ -28,11 +28,12 @@ No user-entered room measurements or AI provider keys are required for this path
 
 ## Export contract
 
-The companion writes `roomplan-scan/1.0`, a deliberately small normalized packet rather than relying on Apple's internal Codable representation:
+The companion now writes `roomplan-scan/1.1` (with legacy `1.0` import support), a deliberately small normalized packet rather than relying on Apple's internal Codable representation:
 
 - `projectId`, `jobId`, `inputRevision`: local demo identity; not authorization.
 - `capturedAt`, `roomId`, `roomLabel` and `device: {model, systemVersion}`.
 - `surfaces`: walls, doors, windows and generic openings. Each retains its native identifier, category, dimensions, transform, confidence, optional parent ID, local polygon corners and `isCurved` flag.
+- `objects`: native object identifiers, categories, confidence, dimensions and unchanged object-center transforms; exported separately from structural surfaces.
 - Dimensions are meters. `transform` is a **16-number column-major matrix**, preserving the ARKit right-handed Y-up frame. Translation occupies indices 12–14.
 - Surface local X represents horizontal width, local Y height, and local Z the plane normal under the supported importer convention. `polygonCorners` stay in local surface coordinates; they must not be transformed twice.
 
@@ -50,7 +51,7 @@ RoomPlan does **not** supply verified wall thickness or interior/exterior classi
 
 Source dimensions retain sensor-source provenance and RoomPlan confidence. Inferred thickness, joins, floor normalization and interpretation remain explicit. No scan automatically creates a user confirmation timestamp. A successful import is a reviewable draft.
 
-Existing detected furniture is not promoted to a catalog product or merged into the editable shell. The optional USDZ may contain reference representations; shopping objects and their provenance remain separate.
+Detected existing furniture is preserved as separate evidence-linked, locked size proxies in the viewer, Blender and GLB. It is not promoted to a catalog product or fused into structural meshes. Exact furniture shape and textures are not recovered. See [existing furniture](existing-furniture.md).
 
 ## Running and handing off
 
@@ -83,3 +84,7 @@ These are compile and protocol/geometry checks, not a live RoomPlan capture or a
 Compilation can run locally with Xcode; it does not establish successful physical scanning. Simulator or unsupported-device screens must not pretend to be LiDAR captures. Synthetic transform fixtures can verify coordinate conversion, aperture placement and Blender editability, but cannot establish real-room accuracy.
 
 Required device check: run on the iPhone 14 Pro, complete a real scan, export its JSON, import it, inspect the resulting model against the physical room, and exercise permission denial, cancellation, rescan and background interruption. The user may need to configure their Xcode signing team and trust the development build. A directly installed development build can be tested on an owned device through Xcode ([Apple setup](https://developer.apple.com/get-started/)); App Store release is not part of the first milestone.
+
+## Subsequent physical-device verification
+
+The user completed a real iPhone scan and shared its JSON and parametric USDZ. The structural JSON successfully generated the editable room and GLB. The paired USDZ allowed one-time recovery of 22 existing-object size proxies after all 12 structural wall UUIDs/transforms were matched to the JSON. This verifies the physical capture-to-reconstruction path and object recovery, not surveyed dimensional accuracy or exact textured furniture reconstruction. The new direct v1.1 object export has compile/protocol checks; a fresh v1.1 physical export remains a separate device test. Private exports and artifacts remain outside Git.

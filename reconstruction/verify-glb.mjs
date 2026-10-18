@@ -79,11 +79,12 @@ async function verify(directory, validatorModule) {
         for (const material of materials) {
           assert(material.normalMap?.image?.data?.length > 0, "Packed normal map must actually decode");
           assert.equal(material.metalness, 0, "Room surfaces must not become metallic");
-          const spec = sourceSurfaces.get(object.userData.entityId);
+          const existing = object.userData.role === "existing_furniture";
+          const spec = existing ? undefined : sourceSurfaces.get(object.userData.entityId);
           const finish = spec?.finish ?? (object.userData.role === "room_floor" ? "wood" : "paint");
           if (windowProfile) {
             assert.equal(object.userData.finish, finish, "Finish must match source surface binding");
-            assert.equal(object.userData.appearanceStatus, spec ? "photo_estimate" : "styling_default");
+            assert.equal(object.userData.appearanceStatus, existing ? "sensor_proxy" : spec ? "photo_estimate" : "styling_default");
             if (spec && finish !== "wood") {
               const encoded = [1, 3, 5].map((offset) => parseInt(spec.color.slice(offset, offset + 2), 16) / 255);
               const linear = encoded.map((value) => value <= .04045 ? value / 12.92 : ((value + .055) / 1.055) ** 2.4);
@@ -105,6 +106,35 @@ async function verify(directory, validatorModule) {
     assert(object, "Missing entity: " + expected.id);
     assert.equal(object.userData.role, expected.role);
     assert.deepEqual(JSON.parse(object.userData.evidenceIdsJson), expected.evidenceIds);
+  }
+  for (const item of source.items ?? []) {
+    const object = entities.get(item.id);
+    assert(object?.isMesh && object.userData.role === "existing_furniture", "Existing furniture must be a separate editable mesh");
+    assert.equal(object.userData.origin, "existing_owned");
+    assert.equal(object.userData.roomId, item.roomId);
+    assert.equal(object.userData.label, item.label);
+    assert.equal(object.userData.locked, item.locked);
+    assert.equal(object.userData.proxyGeometry, "sensor_bounding_box");
+    assert.equal(object.userData.appearanceStatus, "sensor_proxy");
+    assert.deepEqual(JSON.parse(object.userData.dimensionsJson), item.dimensions);
+    assert.deepEqual(JSON.parse(object.userData.evidenceIdsJson), item.evidenceIds ?? []);
+    assert(object.getWorldPosition(new Vector3()).distanceTo(new Vector3(...item.position)) < 1e-5, "Furniture bottom-center origin mismatch");
+    const [width, height, depth] = item.dimensions;
+    const cosine = Math.cos(item.rotationY), sine = Math.sin(item.rotationY);
+    const expected = [];
+    for (const x of [-width / 2, width / 2]) for (const y of [0, height]) for (const z of [-depth / 2, depth / 2]) {
+      expected.push(new Vector3(item.position[0] + cosine * x + sine * z, item.position[1] + y,
+        item.position[2] - sine * x + cosine * z));
+    }
+    const actualBounds = new Box3().setFromObject(object);
+    const expectedBounds = new Box3().setFromPoints(expected);
+    assert(actualBounds.min.distanceTo(expectedBounds.min) < 1e-5 && actualBounds.max.distanceTo(expectedBounds.max) < 1e-5,
+      "Furniture width/depth, yaw or elevation mismatch");
+    const vertices = object.geometry.getAttribute("position");
+    const actualVertices = Array.from({ length: vertices.count }, (_, index) =>
+      new Vector3().fromBufferAttribute(vertices, index).applyMatrix4(object.matrixWorld));
+    assert(expected.every((point) => actualVertices.some((candidate) => point.distanceTo(candidate) < 1e-5)),
+      "Furniture corner orientation mismatch");
   }
   const bounds = new Box3().setFromObject(gltf.scene);
   const actual = { min: bounds.min.toArray(), max: bounds.max.toArray() };
@@ -130,6 +160,7 @@ async function verify(directory, validatorModule) {
   }
   const report = { valid: true, loader: "Three.js GLTFLoader", entityCount: entities.size,
     meshCount: manifest.statistics.meshCount, bounds: actual, testedApertures: source.geometry.openings.length,
+    testedExistingFurniture: source.items?.length ?? 0,
     glbByteLength: bytes.length, embeddedPngImages: embedded.images,
     loaderDecodedImageCount: decodedImages.length - decodedBefore,
     renderingVerified: false };
