@@ -24,6 +24,13 @@ export function applyChanges(plan: RoomPlan, changes: PlanChange[]): RoomPlan {
       next.constraints = { ...next.constraints, ...c.constraints };
       continue;
     }
+    if (c.kind === "add_products") {
+      const ids = new Set(c.products.map((p) => p.id));
+      next.products = [...next.products.filter((p) => !ids.has(p.id)), ...structuredClone(c.products)];
+      const evIds = new Set(c.evidence.map((e) => e.id));
+      next.evidence = [...next.evidence.filter((e) => !evIds.has(e.id)), ...structuredClone(c.evidence)];
+      continue;
+    }
     if (c.kind === "add") {
       if (next.items.some((i) => i.id === c.item.id)) throw new PlanChangeError(`item ${c.item.id} already exists`);
       next.items.push(structuredClone(c.item));
@@ -241,3 +248,10 @@ export function validate(plan: RoomPlan, base?: RoomPlan): ValidationResult[] {
 }
 
 export const passes = (results: ValidationResult[]) => results.every((r) => r.status !== "fail");
+
+/** Validate `next` against `base`, treating items the changes explicitly unlock as no longer locked. */
+export function validateChanges(base: RoomPlan, changes: PlanChange[], next: RoomPlan): ValidationResult[] {
+  const unlocked = new Set(changes.flatMap((c) => (c.kind === "lock" && !c.locked ? [c.itemId] : [])));
+  const unlockedBase = { ...base, items: base.items.map((i) => (unlocked.has(i.id) ? { ...i, locked: false } : i)) };
+  return validate(next, unlockedBase);
+}

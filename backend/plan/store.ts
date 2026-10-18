@@ -1,7 +1,7 @@
 import "server-only";
 
 import { Redis } from "@upstash/redis";
-import type { PlanProposal, RoomPlan } from "@/backend/contracts";
+import type { Job, PlanProposal, RoomPlan } from "@/backend/contracts";
 import { demoPlan } from "@/backend/fixtures/demo-room";
 
 /**
@@ -84,13 +84,14 @@ function db(): Backend {
 const planKey = (projectId: string) => `plan:${projectId}`;
 const proposalKey = (projectId: string, id: string) => `proposal:${projectId}:${id}`;
 
+/** Fixture-backed projects seed themselves on first read. */
+const SEEDS: Record<string, RoomPlan> = { proj_demo: demoPlan, proj_dev: { ...demoPlan, projectId: "proj_dev" } };
 /**
- * Fixture-backed projects seed themselves on first read. `proj_demo_<suffix>`
- * gets its own copy of the demo room, so each ASI:One chat has a private plan.
+ * `proj_demo_<suffix>` (one per ASI:One chat) and `proj_test_<suffix>` (end-to-end
+ * tests) each get their own copy of the demo room on first read.
  */
-const SEEDS: Record<string, RoomPlan> = { proj_demo: demoPlan };
 const seedFor = (projectId: string): RoomPlan | null =>
-  SEEDS[projectId] ?? (/^proj_demo_[a-z0-9]{6,40}$/.test(projectId) ? { ...demoPlan, projectId } : null);
+  SEEDS[projectId] ?? (/^proj_(demo|test)_[a-z0-9]{6,40}$/.test(projectId) ? { ...demoPlan, projectId } : null);
 
 export async function getPlan(projectId: string): Promise<RoomPlan | null> {
   const plan = await db().get<RoomPlan>(planKey(projectId));
@@ -115,6 +116,23 @@ export async function savePlan(projectId: string, expectedRevision: number, next
 
 export async function saveProposal(p: PlanProposal) {
   await db().set(proposalKey(p.projectId, p.id), p, PROPOSAL_TTL_S);
+}
+
+/** Small per-project records (checkout state). Keys are namespaced by project. */
+export const projectKv = {
+  get: <T>(projectId: string, name: string) => db().get<T>(`kv:${projectId}:${name}`),
+  set: (projectId: string, name: string, value: unknown, ttlS?: number) => db().set(`kv:${projectId}:${name}`, value, ttlS),
+};
+
+const jobKey = (projectId: string, id: string) => `job:${projectId}:${id}`;
+const JOB_TTL_S = 24 * 60 * 60;
+
+export async function saveJob(job: Job) {
+  await db().set(jobKey(job.projectId, job.id), job, JOB_TTL_S);
+}
+
+export async function getJob<Output = unknown>(projectId: string, id: string) {
+  return db().get<Job<Output>>(jobKey(projectId, id));
 }
 
 export async function getProposal(projectId: string, id: string) {

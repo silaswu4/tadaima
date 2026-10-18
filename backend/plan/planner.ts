@@ -4,7 +4,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import type { PlanChange, RoomPlan, ValidationResult } from "@/backend/contracts";
-import { applyChanges, costOf, PlanChangeError, validate, passes } from "@/backend/plan/rules";
+import { applyChanges, costOf, PlanChangeError, passes, validateChanges } from "@/backend/plan/rules";
 
 /**
  * Turns "make it $300 cheaper, keep the sofa, seat 4" into PlanChange[].
@@ -122,7 +122,7 @@ Hard rules, checked by code after you answer:
 
 Geometry: x and z are meters on the floor, center is the footprint center, sizeWHD is [width, height, depth] before rotation, rotationY is radians about +Y (at pi/2 or -pi/2 width and depth swap on the floor).
 
-Make the smallest set of changes that satisfies the request. Prefer swaps over removals. When the shopper says "cheaper by $N", the new purchases total must drop by at least N. If the request can't be met, return no changes, feasible false, and say in the summary which rule blocks it and what would unblock it.`;
+Make the smallest set of changes that satisfies the request. Prefer swaps over removals. If only part of a request can be done (for example a budget change is possible but no pricier product exists), do the possible part and say plainly what you couldn't do and why. When the shopper says "cheaper by $N", the new purchases total must drop by at least N. If the request can't be met, return no changes, feasible false, and say in the summary which rule blocks it and what would unblock it.`;
 
 export interface PlannerResult {
   changes: PlanChange[];
@@ -169,7 +169,7 @@ export async function planChanges(plan: RoomPlan, intent: string, selectedItemId
       if (!(e instanceof PlanChangeError)) throw e;
       problem = e.message;
     }
-    const validations = validate(result, plan);
+    const validations = validateChanges(plan, changes, result);
     last = { changes, result, validations, summary: out.summary, feasible: out.feasible, attempts: attempt };
 
     const failures = validations.filter((v) => v.status === "fail");

@@ -40,6 +40,17 @@ Deployed at `https://tadaima-matthew-kims-projects-b1fc1628.vercel.app` behind V
 
 Voice: [`voice/clientTools.ts`](voice/clientTools.ts) gives the frontend the three client tools the ElevenLabs agent calls. Re-sync the agent after editing [`voice/agent-config.ts`](voice/agent-config.ts) with `npx tsx --env-file=.env.local backend/voice/setup-agent.ts`.
 
+## Testing
+
+| Command | What it checks | Cost |
+| --- | --- | --- |
+| `npm test` | Pure plan rules and room brief (13 tests) | free |
+| `npm run e2e` | Every API route against a running server (`npm run dev -- -p 3009`), plus the 16-case planner exam | ~$1 Claude |
+| `E2E_LIVE=1 npm run e2e` | Also a live Browser Use search on IKEA, fit-checked into the plan | +~$0.02 |
+| `npm run e2e:voice` | ElevenLabs agent behavior via its conversation simulator | ElevenLabs credits |
+
+Point the e2e suite at a deploy with `E2E_BASE=https://... E2E_BYPASS=<bypass secret>`. Each test makes its own `proj_test_<id>` copy of the demo room, so runs never touch `proj_demo`.
+
 ## First tasks
 
 1. Agree on `contracts.ts` with the other three owners. The scaffold is a starting contract, not runtime validation or a complete implementation of the proposed data model.

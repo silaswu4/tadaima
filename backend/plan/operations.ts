@@ -2,7 +2,7 @@ import "server-only";
 
 import type { ApplyResult, PlanChange, PlanProposal, RoomPlan } from "@/backend/contracts";
 import { planChanges } from "@/backend/plan/planner";
-import { applyChanges, costOf, passes, PlanChangeError, validate } from "@/backend/plan/rules";
+import { applyChanges, costOf, passes, PlanChangeError, validate, validateChanges } from "@/backend/plan/rules";
 import { getPlan, getProposal, resetPlan, savePlan, saveProposal } from "@/backend/plan/store";
 
 /**
@@ -73,10 +73,7 @@ export async function applyPlanChanges(projectId: string, expectedRevision: numb
     }
     throw e;
   }
-  // an explicit unlock is allowed to touch that item; everything else locked must survive
-  const unlocked = new Set(changes.flatMap((c) => (c.kind === "lock" && !c.locked ? [c.itemId] : [])));
-  const base = { ...plan, items: plan.items.map((i) => (unlocked.has(i.id) ? { ...i, locked: false } : i)) };
-  const validations = validate(next, base);
+  const validations = validateChanges(plan, changes, next);
   if (!passes(validations)) return { ok: false, reason: "validation_failed", validations };
 
   const saved = await savePlan(projectId, expectedRevision, next);

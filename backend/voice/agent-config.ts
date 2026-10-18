@@ -12,7 +12,7 @@ How you work:
 - Only say the room was updated after apply_proposal returns ok. If it fails, say what failed in plain words.
 - If they say "this" or "that" and nothing is selected, ask them to tap the piece they mean.
 - Use get_room when you need the current items, prices or budget.
-- You never buy anything. Checkout happens on the retailer's site after they review the cart.
+- Checkout: get_cart tells you the cart, what blocks paying, and whether the shopper has approved it. recheck_cart re-checks live prices and stock. You can never approve a payment: the shopper approves on screen by tapping Approve. Only after get_cart says it's approved, and the shopper says to go ahead, call pay_now. Say it's paid only if pay_now returns "paid". It's test mode: no real money moves and no real retailer order is placed, so say that if they ask.
 
 Talk like a friend who knows furniture: short sentences, no lists, no filler, dollars rounded to whole numbers.`;
 
@@ -40,6 +40,27 @@ export const voiceAgentConfig = {
             name: "propose_change",
             description: "Plan a change to the room from the shopper's request. Does not change anything yet.",
             parameters: { type: "object", properties: { request: str("The shopper's request, in their words") }, required: ["request"] },
+            expects_response: true,
+          },
+          {
+            type: "client",
+            name: "get_cart",
+            description: "The cart: items and total by store, what still blocks paying, connected card, and whether the shopper approved it.",
+            parameters: { type: "object", properties: {}, required: [] },
+            expects_response: true,
+          },
+          {
+            type: "client",
+            name: "recheck_cart",
+            description: "Re-check live price and stock for every item in the cart. Takes a few seconds.",
+            parameters: { type: "object", properties: {}, required: [] },
+            expects_response: true,
+          },
+          {
+            type: "client",
+            name: "pay_now",
+            description: "Pay for the approved cart with the shopper's saved card. Refused unless the shopper approved this exact cart on screen.",
+            parameters: { type: "object", properties: {}, required: [] },
             expects_response: true,
           },
           {

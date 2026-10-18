@@ -35,6 +35,8 @@ export interface ResearchInput {
   merchant: Merchant;
   /** How many products to collect. Default 5. */
   limit?: number;
+  /** Plain-text room context (free space, budget, what's already there) from shopping/roomBrief. */
+  roomBrief?: string;
 }
 
 export interface ResearchRunInfo {
@@ -136,6 +138,7 @@ function buildTask(input: ResearchInput): string {
   return [
     `Go to ${home} (US store) and search for "${input.query}".`,
     `Collect ${limit} different products that are really a ${input.query}, priced at or under $${input.maxPriceUsd}. Prefer a spread of prices.${width}`,
+    ...(input.roomBrief ? [`Room context, use it to pick pieces that physically fit and suit the room: ${input.roomBrief}`] : []),
     `For EACH product, open its product page and read the facts from that page only:`,
     `- the regular online price in USD anyone can pay (a public sale price counts; ignore member-only, loyalty, IKEA Family, coupon or in-store-only offers),`,
     `- the overall product dimensions from the specifications / measurements / "product details" section (expand it if collapsed). Report width, height and depth exactly as printed with their unit. For round items use the diameter for both width and depth. For lamps that list only height plus base/shade diameters, use the largest listed diameter (or width) for both width and depth. For rugs, width and length go in widthValue and depthValue, thickness in heightValue if listed.`,
