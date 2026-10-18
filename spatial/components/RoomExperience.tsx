@@ -16,6 +16,7 @@ import { WipeLink, useWipeHold } from "./PageWipe";
 import { RoomOnboarding, TourHelpButton } from "../onboarding/RoomOnboarding";
 import { RoomProductCard } from "./RoomProductCard";
 import { CategoryGlyph, Icon } from "./room-icons";
+import { RoomSolanaReceipt } from "./RoomSolanaReceipt";
 import "./RoomExperience.css";
 
 export type ExperienceRoom = { id: string; label: string; plan: RoomPlan; environment?: WalkEnvironment; reconstruction?: WalkOptions["reconstruction"]; sourceDescription?: string };
@@ -1230,6 +1231,7 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
             <span>Total</span>
             <span>{basketTotal}</span>
           </p>
+          {connectedProject && panel === "basket" && basket.length ? <RoomSolanaReceipt projectId={connectedProject} revision={shopping.session!.plan.revision} /> : null}
           {connectedProject && panel === "basket" && basket.length ? <RoomCheckout projectId={connectedProject} planRevision={shopping.session!.plan.revision} onPlanRefresh={async () => { await shopping.refresh(); }} testPaymentsAvailable={shopping.session!.capabilities.testPayments} /> : null}
         </div>
       </div>

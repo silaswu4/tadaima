@@ -16,6 +16,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.135.0",
     "@elevenlabs/react": "^1.18.0",
+    "@solana/web3.js": "^1.99.0",
     "@stripe/react-stripe-js": "^7.0.0",
     "@stripe/stripe-js": "^10.1.0",
     "@upstash/redis": "^1.39.0",
