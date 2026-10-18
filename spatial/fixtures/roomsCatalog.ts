@@ -245,9 +245,15 @@ export function getTadaimaRooms(): CarouselRoom[] {
  * any of it. (The fixtures came from planner tests where those pieces were
  * suggested purchases or locked.)
  */
+const HAND_CLEARANCE = 0.03;
 function asYours(plan: RoomPlan): RoomPlan {
   // and nothing starts locked: locks were for keeping the AI planner off pieces in tests
-  return { ...plan, items: plan.items.map((item) => ({ ...item, origin: "existing_owned" as const, locked: false })) };
+  // Pieces may sit right next to each other; 30 cm of walking room between everything was a planner heuristic.
+  return {
+    ...plan,
+    items: plan.items.map((item) => ({ ...item, origin: "existing_owned" as const, locked: false })),
+    constraints: { ...plan.constraints, clearance: Math.min(plan.constraints.clearance, HAND_CLEARANCE) },
+  };
 }
 
 // ---------- validation ----------
