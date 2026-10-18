@@ -190,6 +190,8 @@ export interface PlanProposal {
   /** The plan as it would look if applied. Not canonical until applied. */
   result: RoomPlan;
   validations: ValidationResult[];
+  /** Failures applying this would cause or worsen. Empty means it can be applied. */
+  blocking?: ValidationResult[];
   costBefore: CostSummary;
   costAfter: CostSummary;
   /** Short human explanation of what changed and why. */

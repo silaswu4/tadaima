@@ -42,6 +42,7 @@ export async function proposePlanChange(projectId: string, intent: string, selec
     changes: out.changes,
     result: out.result,
     validations: out.validations,
+    blocking: blocking(plan, out.changes, out.result, out.validations),
     costBefore: costOf(plan),
     costAfter: costOf(out.result),
     summary: out.summary,
