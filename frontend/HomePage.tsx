@@ -235,7 +235,8 @@ export default function Home() {
       gsap
         .timeline({ defaults: { ease: "power3.in" }, onComplete: () => gsap.set(away, { autoAlpha: 0 }) })
         // each option and the open field leave up out of their own line, like the intro in reverse
-        .to(".hero-row__label", { yPercent: -110, duration: 0.5, stagger: 0.05 }, 0)
+        // (the floorplan option's own label is already tucked away above its line, so it stays there)
+        .to(".hero-row:not(.hero-row--type) .hero-row__label", { yPercent: -110, duration: 0.5, stagger: 0.05 }, 0)
         .to(".hero-type", { y: -24, autoAlpha: 0, duration: 0.5 }, 0.05)
         .to(".hero-side", { y: -18, duration: 0.6 }, 0.05)
         .to(".hero-credit", { y: -16, autoAlpha: 0, duration: 0.5 }, 0.1)

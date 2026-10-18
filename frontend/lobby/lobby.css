@@ -372,10 +372,11 @@
 .browser-frame__body {
   --bf-scale: 0.4;
   position: relative;
-  aspect-ratio: 1266 / 694;
+  aspect-ratio: 16 / 10;
   overflow: hidden;
   background: #120b06;
 }
+.browser-frame[data-mode="live"] .browser-frame__body { background: #26272b; }
 .browser-frame__live {
   position: absolute;
   top: 0;
@@ -384,7 +385,7 @@
   transform: scale(var(--bf-scale));
   transform-origin: 0 0;
   pointer-events: none;
-  background: #fff;
+  background: transparent;
 }
 .browser-frame__replay { position: absolute; inset: 0; }
 .browser-frame__replay img { width: 100%; height: 100%; object-fit: cover; filter: saturate(0.85) brightness(0.92); }

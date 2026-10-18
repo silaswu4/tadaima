@@ -6,12 +6,11 @@ import type { BrowseMode } from "./useLobbyRun";
 import { LISTING_PHOTO } from "./stages";
 
 /**
- * The live view renders a desktop browser; it is drawn at this size and scaled to fit the card. Its picture
- * sits top left and stops a little short of the frame (about 1266 x 694 at this size), so the card crops to that.
+ * The live view renders a desktop browser; it is drawn at this size and scaled to fit the card. How much of
+ * the frame its picture fills varies run to run, so the card keeps the full frame on the viewer's own gray.
  */
 const VIEW_W = 1280;
 const VIEW_H = 800;
-const SHOWN_W = 1266;
 
 export default function BrowserFrame({ mode, liveUrl, site }: { mode: BrowseMode; liveUrl: string | null; site: string }) {
   const body = useRef<HTMLDivElement>(null);
@@ -19,7 +18,7 @@ export default function BrowserFrame({ mode, liveUrl, site }: { mode: BrowseMode
   useLayoutEffect(() => {
     const el = body.current;
     if (!el) return;
-    const fit = () => el.style.setProperty("--bf-scale", String(el.clientWidth / SHOWN_W));
+    const fit = () => el.style.setProperty("--bf-scale", String(el.clientWidth / VIEW_W));
     fit();
     const ro = new ResizeObserver(fit);
     ro.observe(el);
