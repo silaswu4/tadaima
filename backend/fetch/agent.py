@@ -21,6 +21,8 @@ import re
 from uuid import uuid4
 
 import aiohttp
+
+import brain
 from uagents import Agent, Context, Protocol
 from uagents_core.contrib.protocols.chat import (
     ChatAcknowledgement,
@@ -345,7 +347,7 @@ async def propose(ctx: Context, sender: str, project: str, intent: str, item_id:
     if not can_apply:
         lines += ["", "I can't apply this as is. Try loosening a constraint, or tell me which item can change."]
         await ctx.send(sender, msg("\n".join(lines)))
-        return
+        return p
 
     rows = [
         ReviewSummaryRow(label="Changes", value=str(len(p["changes"]))),
@@ -360,6 +362,7 @@ async def propose(ctx: Context, sender: str, project: str, intent: str, item_id:
         reject_cta=CtaAction(label="Try something else", selection={"action": "discard", "proposalId": p["id"]}),
     )
     await ctx.send(sender, msg("\n".join(lines), create_card_content(card, card_id=uuid4())))
+    return p
 
 
 async def apply(ctx: Context, sender: str, project: str, proposal_id: str | None, rev: int | None):
@@ -368,7 +371,7 @@ async def apply(ctx: Context, sender: str, project: str, proposal_id: str | None
     rev = rev if rev is not None else pending.get("rev")
     if not proposal_id or rev is None:
         await ctx.send(sender, msg("There's nothing waiting to apply. Tell me what you'd like to change."))
-        return
+        return {"ok": False, "reason": "nothing_pending"}
     r = await api("POST", f"/api/projects/{project}/proposals/{proposal_id}/apply", {"expectedRevision": int(rev)})
     ctx.storage.set(f"pending:{sender}", None)
     if r["ok"]:
@@ -388,6 +391,7 @@ async def apply(ctx: Context, sender: str, project: str, proposal_id: str | None
         await ctx.send(sender, msg(f"The room changed since I proposed that (now revision {r['currentRevision']}), so I didn't apply it. Ask again and I'll plan against the latest version."))
     else:
         await ctx.send(sender, msg("That no longer passes the room's rules, so nothing changed:\n" + "\n".join(f"- {i}" for i in problems(r["validations"]))))
+    return r
 
 
 async def cart(ctx: Context, sender: str, project: str):
@@ -412,6 +416,201 @@ async def cart(ctx: Context, sender: str, project: str):
     out.append(cost_line(cost, plan))
     out.append("\nI don't buy anything on my own. Prices and stock get rechecked before checkout, and you finish payment with the merchant.")
     await ctx.send(sender, msg("\n".join(out)))
+
+
+
+# ---------- tools the brain can call ----------
+
+
+def compact_room(data: dict) -> str:
+    plan, cost = data["plan"], data["cost"]
+    products = by_id(plan["products"])
+    g = plan["geometry"]
+    room = g["rooms"][0] if g["rooms"] else {}
+    items = []
+    for i in plan["items"]:
+        p = products.get(i.get("productId") or "")
+        items.append({
+            "id": i["id"], "label": i["label"], "category": i["category"],
+            "owned": i["origin"] == "existing_owned", "price": usd(p["price"]) if p else None,
+            "merchant": p["merchant"] if p else None, "size_wdh_m": i.get("dimensions"),
+            "position_xz": [round(i["position"][0], 2), round(i["position"][2], 2)],
+            "locked": i["locked"], "stored": bool(i.get("stored")), "seats": i.get("seats"),
+        })
+    return json.dumps({
+        "revision": plan["revision"],
+        "floor_polygon": room.get("floorPolygon"), "ceiling_m": room.get("height"),
+        "walls": [{"id": w["id"], "start": w["start"], "end": w["end"]} for w in g["walls"]],
+        "openings": [{"kind": o["kind"], "wall": o["wallId"], "offset_m": o["offset"], "width_m": o["width"]} for o in g.get("openings", [])],
+        "items": items,
+        "budget": usd(plan["constraints"].get("budget")), "minimum_seats": plan["constraints"].get("minimumSeats"),
+        "seats_now": seats(plan), "new_purchases": usd(cost["knownSubtotal"]),
+        "failing_rules": problems(data.get("validations", [])),
+    })
+
+
+async def spot_of(project: str, args: dict) -> dict:
+    if args.get("near_item_id"):
+        plan = (await api("GET", f"/api/projects/{project}"))["plan"]
+        item = by_id(plan["items"]).get(args["near_item_id"])
+        if not item:
+            raise Rejected(f"no item {args['near_item_id']}")
+        x, _, z = item["position"]
+        return {"position": [x, 0, z]}
+    if args.get("x") is None or args.get("z") is None:
+        raise Rejected("say where: an item to stand in for, or x and z")
+    return {"position": [float(args["x"]), 0, float(args["z"])]}
+
+
+def result_card(results: list[dict], job_id: str, spot: dict, replace_item_id: str | None, title: str) -> MetadataContent | None:
+    cards = []
+    for r in results:
+        if not r["fits"]:
+            continue
+        p = r["product"]
+        badges = [CarouselBadge(label=p["merchant"], variant="info")]
+        badges.append(CarouselBadge(label="found live" if r["source"] == "live" else "in catalog", variant="success" if r["source"] == "live" else "info"))
+        if r.get("withinBudget") is False:
+            badges.append(CarouselBadge(label=f"${r['overBudgetUsd']:,.0f} over budget" if r.get("overBudgetUsd") else "over budget", variant="warning"))
+        d = p.get("dimensions")
+        x, _, z = spot["position"]
+        cards.append(CarouselItem(
+            id=p["id"][:64], image=p.get("imageUrl") or None, title=p["label"][:80], subtitle=usd(p.get("price")),
+            secondary_text=f"{d[0]:.2f} x {d[2]:.2f} m, fits there" if d else "fits there",
+            badges=badges,
+            primary_cta=CtaAction(label="Swap it in" if replace_item_id else "Add to room", selection={
+                "action": "place", "productId": p["id"], "jobId": job_id, "x": x, "z": z, "replaceItemId": replace_item_id,
+            }),
+        ))
+    if not cards:
+        return None
+    return create_card_content(CarouselCardPayload(title=title, items=cards[:10]), card_id=uuid4())
+
+
+async def follow_live_search(ctx: Context, sender: str, project: str, job_id: str, seen: set[str], spot: dict, replace_item_id: str | None):
+    """Live store search takes minutes; post what it finds into the same chat when it's done."""
+    for _ in range(36):
+        await asyncio.sleep(10)
+        try:
+            job = await api("GET", f"/api/projects/{project}/shop/{job_id}")
+        except (BackendError, Rejected):
+            continue
+        out = job.get("output") or {}
+        if out.get("live") == "running":
+            continue
+        fresh = [r for r in out.get("results", []) if r["source"] == "live" and r["product"]["id"] not in seen]
+        if out.get("live") == "failed" or not fresh:
+            await ctx.send(sender, msg("The live store search finished without anything new that fits. The picks above are still good."))
+            return
+        await ctx.send(sender, msg(f"Live search came back: {sum(1 for r in fresh if r['fits'])} new pieces that fit.", result_card(fresh, job_id, spot, replace_item_id, "Just found in stores")))
+        return
+
+
+def tools_for(ctx: Context, sender: str, project: str) -> dict:
+    async def get_room(_a):
+        return compact_room(await api("GET", f"/api/projects/{project}"))
+
+    async def show(_a):
+        await show_room(ctx, sender, project)
+        return "shown to the shopper"
+
+    async def propose_change(a):
+        p = await propose(ctx, sender, project, a["intent"], a.get("item_id"))
+        return json.dumps({"summary": p["summary"], "changes": len(p["changes"]), "passes": not any(v["status"] == "fail" for v in p["validations"]),
+                           "cost_before": usd(p["costBefore"]["knownSubtotal"]), "cost_after": usd(p["costAfter"]["knownSubtotal"]), "shown_with_apply_button": True})
+
+    async def apply_proposal(_a):
+        r = await apply(ctx, sender, project, None, None)
+        return json.dumps({"ok": r.get("ok"), "reason": r.get("reason")})
+
+    async def search_products(a):
+        spot = await spot_of(project, a)
+        body = {"category": a["category"], "spot": spot, "maxPriceUsd": a.get("max_price_usd"), "request": a.get("style"), "live": a.get("live", True)}
+        job = await api("POST", f"/api/projects/{project}/shop", body, timeout=60)
+        out = job.get("output") or {}
+        results = out.get("results", [])
+        replace = a.get("near_item_id")
+        card = result_card(results, job["id"], spot, replace, f"{a['category'].title()}s that fit")
+        live = out.get("live") == "running"
+        note = f"{sum(1 for r in results if r['fits'])} fit from our catalog." + (" I'm also checking stores live and will post what I find in a few minutes." if live else "")
+        await ctx.send(sender, msg(note, card))
+        if live:
+            asyncio.create_task(follow_live_search(ctx, sender, project, job["id"], {r["product"]["id"] for r in results}, spot, replace))
+        return json.dumps({"job_id": job["id"], "live_search_running": live, "results": [
+            {"product_id": r["product"]["id"], "label": r["product"]["label"], "price": usd(r["product"].get("price")), "fits": r["fits"], "within_budget": r.get("withinBudget"), "problems": r["problems"][:2]}
+            for r in results[:8]]})
+
+    async def place_product(a):
+        spot = await spot_of(project, {**a, "near_item_id": a.get("replace_item_id") or a.get("near_item_id")})
+        return json.dumps(await place(ctx, sender, project, a["product_id"], a.get("job_id"), spot, a.get("replace_item_id")))
+
+    async def move_item(a):
+        spot = await spot_of(project, a)
+        r = await api("POST", f"/api/projects/{project}/items/{a['item_id']}/move-to", {"spot": spot, "unlock": bool(a.get("unlock"))})
+        await ctx.send(sender, msg(placed_text(r, "Moved it.")))
+        return json.dumps({"ok": r["ok"], "reason": r.get("reason"), "message": r.get("message")})
+
+    async def put_away(a):
+        r = await api("POST", f"/api/projects/{project}/items/{a['item_id']}/store", {"unlock": bool(a.get("unlock"))})
+        await ctx.send(sender, msg(placed_text(r, "Put away. It stays in your inventory, out of the room and the cart.")))
+        return json.dumps({"ok": r["ok"], "reason": r.get("reason")})
+
+    async def set_constraints(a):
+        cons = {}
+        if a.get("budget_usd") is not None:
+            cons["budget"] = {"amountMinor": round(a["budget_usd"] * 100), "currency": "USD"}
+        if a.get("minimum_seats") is not None:
+            cons["minimumSeats"] = int(a["minimum_seats"])
+        return json.dumps(await change(ctx, sender, project, [{"kind": "set_constraints", "constraints": cons}], "Updated."))
+
+    async def lock_item(a):
+        return json.dumps(await change(ctx, sender, project, [{"kind": "lock", "itemId": a["item_id"], "locked": bool(a["locked"])}], "Locked." if a["locked"] else "Unlocked."))
+
+    async def show_cart(_a):
+        await cart(ctx, sender, project)
+        return "shown to the shopper"
+
+    return {
+        "get_room": get_room, "show_room": show, "propose_change": propose_change, "apply_proposal": apply_proposal,
+        "search_products": search_products, "place_product": place_product, "move_item": move_item, "put_away": put_away,
+        "set_constraints": set_constraints, "lock_item": lock_item, "show_cart": show_cart,
+    }
+
+
+def placed_text(r: dict, ok_text: str) -> str:
+    if r.get("ok"):
+        return ok_text
+    if r.get("reason") == "stale_revision":
+        return "The room changed a moment ago, so nothing moved. Try again."
+    if r.get("reason") == "validation_failed":
+        return "That breaks the room's rules, so nothing changed:\n" + "\n".join(f"- {i}" for i in problems(r["validations"]))
+    return r.get("message") or "That didn't work, so nothing changed."
+
+
+async def place(ctx: Context, sender: str, project: str, product_id: str, job_id: str | None, spot: dict, replace_item_id: str | None) -> dict:
+    r = await api("POST", f"/api/projects/{project}/place", {"productId": product_id, "jobId": job_id, "spot": spot, "replaceItemId": replace_item_id})
+    if r["ok"]:
+        cost = (await api("GET", f"/api/projects/{project}"))["cost"]
+        item = by_id(r["plan"]["items"]).get(r["itemId"], {})
+        await ctx.send(sender, msg(f"Added **{item.get('label', 'it')}** to your room. " + cost_line(cost, r["plan"])))
+    else:
+        await ctx.send(sender, msg(placed_text(r, "")))
+    return {"ok": r["ok"], "reason": r.get("reason"), "message": r.get("message")}
+
+
+async def change(ctx: Context, sender: str, project: str, changes: list[dict], ok_text: str) -> dict:
+    rev = (await api("GET", f"/api/projects/{project}"))["plan"]["revision"]
+    r = await api("POST", f"/api/projects/{project}/changes", {"expectedRevision": rev, "changes": changes})
+    await ctx.send(sender, msg(placed_text(r, ok_text)))
+    return {"ok": r["ok"], "reason": r.get("reason")}
+
+
+async def think(ctx: Context, sender: str, project: str, text: str):
+    key = f"hist:{sender}:{project}"
+    reply, history = await brain.run_turn(ctx.storage.get(key) or [], text, tools_for(ctx, sender, project), ctx.logger.error)
+    ctx.storage.set(key, history)
+    if reply:
+        await ctx.send(sender, msg(reply))
 
 
 # ---------- onboarding ----------
@@ -637,6 +836,9 @@ async def handle_turn(ctx: Context, sender: str, m: ChatMessage):
             return await show_room(ctx, sender, project)
         if action == "intent":
             return await propose(ctx, sender, project, str(sel.get("intent", "")), sel.get("itemId"))
+        if action == "place":
+            spot = {"position": [float(sel["x"]), 0, float(sel["z"])]}
+            return await place(ctx, sender, project, str(sel["productId"]), sel.get("jobId"), spot, sel.get("replaceItemId"))
 
     if photos and not text:
         return await ctx.send(sender, msg("Got the photo(s). Tell me what you'd like to change in the room."))
@@ -646,16 +848,9 @@ async def handle_turn(ctx: Context, sender: str, m: ChatMessage):
         await api("POST", f"/api/projects/{project}/reset")
         ctx.storage.set(f"pending:{sender}", None)
         return await show_room(ctx, sender, project)
-    if APPROVE.match(text) and len(text) < 30:
+    if APPROVE.match(text) and len(text) < 30 and (ctx.storage.get(f"pending:{sender}") or {}).get("proposalId"):
         return await apply(ctx, sender, project, None, None)
-    if REJECT.match(text) and len(text) < 30:
-        ctx.storage.set(f"pending:{sender}", None)
-        return await ctx.send(sender, msg("No problem, nothing changed. What would you like instead?"))
-    if CART.search(text):
-        return await cart(ctx, sender, project)
-    if SHOW.search(text):
-        return await show_room(ctx, sender, project)
-    return await propose(ctx, sender, project, text)
+    return await think(ctx, sender, project, text)
 
 
 @chat.on_message(ChatMessage)
