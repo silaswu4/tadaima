@@ -907,6 +907,18 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
     return out;
   }
 
+  /** The plan as last committed: a piece in hand counts where it was picked up (or as still stored). */
+  function committedPlan(): RoomPlan {
+    const plan = currentPlan();
+    if (!moving) return plan;
+    const index = plan.items.findIndex((item) => item.id === moving!.id);
+    if (index < 0) return plan;
+    const lastOp = undoStack[undoStack.length - 1];
+    if (moving.fromStorage && lastOp?.kind === "takeOut" && lastOp.id === moving.id) plan.items[index] = structuredClone(lastOp.item);
+    else plan.items[index] = { ...plan.items[index], position: [...moving.startPosition] as Vector3Meters, rotationY: moving.startRotation };
+    return plan;
+  }
+
   async function setPlan(incoming: RoomPlan): Promise<void> {
     if (disposed) throw new Error("This room view is closed.");
     // Validate before changing any roots, selections, previews or revisions.
@@ -914,6 +926,15 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
     const application = ++planApplication;
     await ready;
     if (disposed || application !== planApplication) return;
+    if (moving && canPreserveWalkUndo(committedPlan(), accepted)) {
+      // The server echoing edits made before this carry (an unlock, a put-away): keep the piece in hand.
+      working.revision = accepted.revision;
+      working.projectId = accepted.projectId;
+      working.products = accepted.products;
+      working.evidence = accepted.evidence;
+      revisions = createWalkRevisionTracker(committedPlan());
+      return;
+    }
     const preserveUndo = canPreserveWalkUndo(currentPlan(), accepted);
     const previous = working;
     const previousEntries = new Map(entries);
