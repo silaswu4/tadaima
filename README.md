@@ -17,6 +17,21 @@ The [reconstruction worker](reconstruction/README.md) converts validated room ge
 
 The user also approved a thin SwiftUI/RoomPlan companion for an **iPhone 14 Pro**. See [native scanning and import status](docs/native-scan.md) before building or claiming device support. Native capture is an optional input, not a replacement shopping app; a physical iPhone scan has not yet been verified. [Modeling/export research](reconstruction/RESEARCH.md) remains applicable to all inputs.
 
+## Fetch.ai agents (ASI:One)
+
+![tag:innovationlab](https://img.shields.io/badge/innovationlab-3D8BD3)
+![tag:hackathon](https://img.shields.io/badge/hackathon-5F43F1)
+
+Three Agentverse agents, each usable on its own from [ASI:One](https://asi1.ai), that also hire each other through typed protocols. All of them speak the Agent Chat Protocol.
+
+| Agent | Address | Talk to it | Works with |
+| --- | --- | --- | --- |
+| [`tadaima`](backend/fetch/README.md) | `agent1qdsuu2yjgd0tnddnu79rp8jxdu7zd9lkjgskxasptxukqrdlrv08szru3em` | Set up an account and your room, plan it in plain words, find pieces that fit, check out with an approval step | Hires Scout for live finds (pays per run in testnet FET), asks Fit Check about doorways, Payment Protocol seller for the service fee |
+| [`tadaima-scout`](backend/fetch/scout/README.md) | `agent1qf2hhun7qzx43av6t2ed4yytm96wx9cgw3tn9lnh86hu3w0lh7clc5slsxl` | "green velvet sofa under $900, max 2.2 m wide" or paste a product link: live IKEA and Target research with real sizes, prices and links | Sells research to other agents over the TadaimaResearch protocol, paid through the Payment Protocol in testnet FET |
+| [`tadaima-fitcheck`](backend/fetch/fitcheck/README.md) | `agent1qw8a0tffhe420xzu7ultv2naf8k80dkwndq79pnn2ha84v0aam906uprl6v` | "will a 2.1 x 0.9 m sofa fit on my 2.4 m wall and through an 80 cm door?": deterministic yes, no or unknown with the numbers | Answers FitRequest from other agents; hires Scout to measure a pasted link |
+
+Run instructions for each agent are in its README. The agents call the same backend operations (`/api/projects`, `/api/agent`) as the web app and voice agent, so ASI:One changes are real revisions of the shopper's room.
+
 ## Application setup
 
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
