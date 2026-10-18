@@ -71,11 +71,11 @@ function Loader({ onLift, onDone, reduced }: { onLift: () => void; onDone: () =>
   );
 }
 
-type Row = { key: "scan" | "type" | "demo"; label: string; note: string };
+type Row = { key: "scan" | "type" | "demo"; label: string };
 const ROWS: Row[] = [
-  { key: "scan", label: "Scan room", note: "Photos or LiDAR" },
-  { key: "type", label: "Type address", note: "Saved for setup" },
-  { key: "demo", label: "Explore demo rooms", note: "Walk in" },
+  { key: "scan", label: "Scan room" },
+  { key: "type", label: "Type address" },
+  { key: "demo", label: "Explore demo rooms" },
 ];
 
 export default function Home() {
@@ -262,7 +262,6 @@ function RowText({ row }: { row: Row }) {
             →
           </span>
         </span>
-        <span className="hero-row__note">{row.note}</span>
       </span>
     </>
   );

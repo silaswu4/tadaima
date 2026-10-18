@@ -26,7 +26,7 @@
   flex-direction: column;
   gap: 28px;
   width: min(420px, calc(100% - 2 * var(--hero-left)));
-  /* keeps the small notes legible where the window light falls behind them */
+  /* keeps the options legible where the window light falls behind them */
   text-shadow: 0 1px 14px rgba(43, 26, 16, 0.55);
 }
 .tadaima-hero .hero-list {
@@ -69,11 +69,6 @@
   opacity: 0;
   transform: translateX(-6px);
   transition: opacity 0.3s ease, transform 0.45s var(--hero-ease);
-}
-.tadaima-hero .hero-row__note {
-  font-size: 13px;
-  line-height: 18px;
-  color: var(--hero-muted);
 }
 .tadaima-hero .hero-row__inner:hover .hero-row__label,
 .tadaima-hero .hero-row__inner:focus-visible .hero-row__label,
