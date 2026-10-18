@@ -25,7 +25,7 @@ The current homepage preserves the incoming dark ASCII design from commit `34e58
 The retained earlier room renderer includes:
 
 - A straight-on room composition with monochrome surfaces, contour lines, and a floor grid.
-- "Michael" on the back wall, placeholder introduction, a "Scan your room" link, and a placeholder sign-in link.
+- The product name on the back wall, placeholder introduction, a "Scan your room" link, and a placeholder sign-in link.
 - Pointer hover and non-mouse pointer selection of furniture.
 - A selected-object label displaying geometry bounding-box dimensions in centimeters and inches.
 - Responsive camera aspect handling, a wider field of view on narrow screens, and a lighter rendering configuration for coarse pointers or small screens.

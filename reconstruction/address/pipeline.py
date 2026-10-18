@@ -306,9 +306,57 @@ def ground_proposal(proposal, dossier):
     return request
 
 
+def _appearance_photos(request, dossier, output, selected_candidate_id):
+    """Bind independently downloaded photo bytes without upgrading unit scope."""
+    sources = {source["id"]: source for source in dossier["sources"]}
+    candidates = {candidate["id"]: candidate for candidate in dossier["candidates"]}
+    photos, seen, total = [], set(), 0
+    for asset in dossier["assets"]:
+        if (asset["status"] != "downloaded" or asset["kind"] != "photo"
+                or asset.get("mediaType") not in ("image/jpeg", "image/png")
+                or asset.get("conflictingCandidateIds")
+                or asset["candidateId"] not in (None, selected_candidate_id)
+                or asset["sha256"] in seen):
+            continue
+        if len(photos) >= 8 or total + asset["byteLength"] > MAX_TOTAL_ASSET_BYTES:
+            continue
+        with (output / asset["path"]).open("rb") as handle:
+            body = handle.read(8 * 1024 * 1024 + 1)
+        if len(body) != asset["byteLength"] or _sha(body) != asset["sha256"]:
+            raise ResearchError("Appearance photo bytes differ from downloaded evidence")
+        source = sources[asset["sourceId"]]
+        candidate = candidates.get(asset["candidateId"])
+        scope = ("exact_unit" if source["scope"] == "exact_unit" and candidate
+                 and candidate["scope"] == "exact_unit" else
+                 "building_reference" if source["scope"] in ("building_generic", "apartment_type")
+                 or (candidate and candidate["scope"] in ("building_generic", "apartment_type")) else "unknown")
+        # This ID is derived from a verified file, independent of model claims.
+        evidence_id = "appearance-" + hashlib.sha256(
+            f"{asset['id']}:{asset['sha256']}".encode()).hexdigest()[:40]
+        if any(entry["id"] == evidence_id for entry in request["evidence"]):
+            raise ResearchError("Appearance evidence ID collides with existing evidence")
+        request["evidence"].append({"id": evidence_id, "sourceUrl": asset["url"],
+            "privateAssetId": f"{request['projectId']}/{request['jobId']}/{asset['id']}",
+            "observedAt": dossier["observedAt"], "claim": (
+                f"Downloaded room photo supplied for appearance estimation ({scope}); "
+                "unit/room applicability and intrinsic finishes remain unconfirmed."),
+            "dimensionStatus": None, "confirmedByUserAt": None})
+        photos.append({"id": asset["id"], "evidenceId": evidence_id, "sha256": asset["sha256"],
+                       "mediaType": asset["mediaType"], "body": body, "scope": scope})
+        seen.add(asset["sha256"])
+        total += len(body)
+    return photos
+
+
 def run(raw_request, output_path, *, research_provider=None, geometry_provider=None,
         discovery=None, fetcher=None, collect_only=False, research_rounds=2,
-        render_draft=False, blender=None, preview=False):
+        render_draft=False, blender=None, preview=False, appearance_provider=None,
+        appearance_file=None):
+    if appearance_provider is not None and appearance_file is not None:
+        raise ResearchError("Choose either an appearance provider or an appearance file")
+    appearance_requested = appearance_provider is not None or appearance_file is not None
+    if collect_only and appearance_requested:
+        raise ResearchError("Appearance inference requires geometry; omit collect_only")
     request = validate_input(raw_request)
     for url in request["listingUrls"]:
         public_url(url)
@@ -334,6 +382,8 @@ def run(raw_request, output_path, *, research_provider=None, geometry_provider=N
                "discoveryGaps": [], "discoveryConflicts": [], "rounds": [], "warnings": [
                    "All geometry is a proposal. Source applicability and dimensions require review.",
                    "Research is bounded public evidence collection, not exhaustive property coverage."]}
+    if appearance_requested:
+        dossier["appearanceStatus"] = "needs_geometry"
     fetcher = fetcher or PublicFetcher()
     _write(output / "dossier.json", dossier)
     try:
@@ -380,6 +430,31 @@ def run(raw_request, output_path, *, research_provider=None, geometry_provider=N
                     inferred = any(b["method"] == "inferred" for b in proposal["bindings"])
                     selected = next(c for c in dossier["candidates"] if c["id"] == proposal["selectedCandidateId"])
                     dossier["status"] = "needs_review" if (inferred or selected["scope"] != "exact_unit" or proposal["missingMeasurements"] or proposal["conflicts"] or dossier["discoveryConflicts"]) else "draft_ready"
+                    if appearance_requested:
+                        from reconstruction.appearance import FileAppearanceProvider, infer_appearance, prepare_appearance
+                        photos = _appearance_photos(reconstruction, dossier, output, selected["id"])
+                        dossier["appearanceStatus"] = "needs_photos"
+                        if photos:
+                            # Keep the exact hash-bound inputs available if a
+                            # hosted call or supplied local handoff fails.
+                            _write(output / "reconstruction.request.json", reconstruction)
+                            _write(output / "appearance.inference.request.json", prepare_appearance(reconstruction, photos))
+                            dossier["reconstructionRequestPath"] = "reconstruction.request.json"
+                            dossier["appearanceInferenceRequestPath"] = "appearance.inference.request.json"
+                            provider = (FileAppearanceProvider(appearance_file, reconstruction, photos)
+                                        if appearance_file is not None else appearance_provider)
+                            reconstruction = infer_appearance(reconstruction, photos, provider)
+                            dossier["appearanceStatus"] = ("estimated_needs_review" if reconstruction["appearance"]["surfaces"]
+                                                           else "needs_photo_review")
+                            dossier["appearancePhotoIds"] = [photo["id"] for photo in photos]
+                            dossier["status"] = "needs_review"
+                            dossier["warnings"].append(
+                                "Photo-derived finishes require review; building references do not establish exact-unit appearance."
+                                if reconstruction["appearance"]["surfaces"] else
+                                "No visible finishes could be bound to room surfaces; styling defaults remain unverified.")
+                        else:
+                            dossier["status"] = "needs_review"
+                            dossier["warnings"].append("No usable room photos were available for appearance; styling defaults remain unverified.")
                     _write(output / "reconstruction.request.json", reconstruction)
                     dossier["reconstructionRequestPath"] = "reconstruction.request.json"
                     if render_draft:

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { FloorSpotSchema, handle } from "@/backend/http";
+import { FloorSpotSchema, handleProject } from "@/backend/http";
 import { moveItemTo } from "@/backend/shopping/shop";
 
 const Body = z.object({
@@ -12,5 +12,5 @@ const Body = z.object({
 /** Move a piece to a spot, re-placed so it fits. */
 export async function POST(req: Request, ctx: RouteContext<"/api/projects/[projectId]/items/[itemId]/move-to">) {
   const { projectId, itemId } = await ctx.params;
-  return handle(async () => moveItemTo(projectId, { itemId, ...Body.parse(await req.json()) }));
+  return handleProject(req, projectId, async () => moveItemTo(projectId, { itemId, ...Body.parse(await req.json()) }));
 }

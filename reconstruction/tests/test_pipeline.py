@@ -100,6 +100,7 @@ class BlenderIntegrationTests(unittest.TestCase):
         output = self.root / "room"
         manifest = generate(FIXTURE, output, blender=BLENDER)
         self.assertEqual(manifest["inputRevision"], 1)
+        self.assertEqual(manifest["sourceRequestSha256"], hashlib.sha256(FIXTURE.read_bytes()).hexdigest())
         self.assertEqual(manifest["statistics"]["meshCount"], 5)
         self.assertEqual(manifest["statistics"]["entityCount"], 7)
         for key, file in manifest["files"].items():

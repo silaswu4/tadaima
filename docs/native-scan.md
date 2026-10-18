@@ -1,5 +1,7 @@
 # Native Room Scanning Companion
 
+**Detailed surfaces:** the companion now captures an optional second ARKit LiDAR pass in the same coordinate frame. The observed textured reference and editable RoomPlan layout remain separate. See [capturing the original room](high-fidelity-scan.md) for capture, reconstruction, viewing and quality limits.
+
 Decision: October 18, 2026. The user approved a lightweight native scanning companion after confirming an **iPhone 14 Pro**. This supersedes the earlier web-only capture restriction for this optional input. Design, shopping, desktop/mobile viewing and Quest remain web experiences. Address research and photo-only web capture remain available; no tape measurement is required.
 
 ## First milestone
@@ -20,7 +22,7 @@ A Safari camera page cannot invoke this native framework as a browser API. The o
 2. Name the room and start scanning. Grant camera access when requested.
 3. Walk around the room using RoomPlan's built-in guidance; include corners, walls, doors and windows.
 4. Finish the scan and inspect the resulting room preview.
-5. Share the JSON export to Files/AirDrop and transfer it to the reconstruction worker machine. Optional USDZ is a reference export.
+5. With **Save appearance photos** enabled, pause facing walls, floors and furniture during capture. Review the saved-photo counter/thumbnails, then choose **Share scan + photos** to transfer one timestamped ZIP containing geometry, JPEGs and camera calibration. Geometry-only JSON and optional reference USDZ remain available.
 6. Import and validate the JSON, then generate the editable Blender scene and GLB.
 7. Review the modeled room before relying on furniture clearances. Production upload and viewer handoff are separate integration work.
 
@@ -28,11 +30,12 @@ No user-entered room measurements or AI provider keys are required for this path
 
 ## Export contract
 
-The companion writes `roomplan-scan/1.0`, a deliberately small normalized packet rather than relying on Apple's internal Codable representation:
+The companion now writes `roomplan-scan/1.1` (with legacy `1.0` import support), a deliberately small normalized packet rather than relying on Apple's internal Codable representation:
 
 - `projectId`, `jobId`, `inputRevision`: local demo identity; not authorization.
 - `capturedAt`, `roomId`, `roomLabel` and `device: {model, systemVersion}`.
 - `surfaces`: walls, doors, windows and generic openings. Each retains its native identifier, category, dimensions, transform, confidence, optional parent ID, local polygon corners and `isCurved` flag.
+- `objects`: native object identifiers, categories, confidence, dimensions and unchanged object-center transforms; exported separately from structural surfaces.
 - Dimensions are meters. `transform` is a **16-number column-major matrix**, preserving the ARKit right-handed Y-up frame. Translation occupies indices 12–14.
 - Surface local X represents horizontal width, local Y height, and local Z the plane normal under the supported importer convention. `polygonCorners` stay in local surface coordinates; they must not be transformed twice.
 
@@ -50,7 +53,7 @@ RoomPlan does **not** supply verified wall thickness or interior/exterior classi
 
 Source dimensions retain sensor-source provenance and RoomPlan confidence. Inferred thickness, joins, floor normalization and interpretation remain explicit. No scan automatically creates a user confirmation timestamp. A successful import is a reviewable draft.
 
-Existing detected furniture is not promoted to a catalog product or merged into the editable shell. The optional USDZ may contain reference representations; shopping objects and their provenance remain separate.
+Detected existing furniture is preserved as separate evidence-linked, locked size proxies in the viewer, Blender and GLB. It is not promoted to a catalog product or fused into structural meshes. Exact furniture shape and textures are not recovered. See [existing furniture](existing-furniture.md).
 
 ## Running and handing off
 
@@ -83,3 +86,15 @@ These are compile and protocol/geometry checks, not a live RoomPlan capture or a
 Compilation can run locally with Xcode; it does not establish successful physical scanning. Simulator or unsupported-device screens must not pretend to be LiDAR captures. Synthetic transform fixtures can verify coordinate conversion, aperture placement and Blender editability, but cannot establish real-room accuracy.
 
 Required device check: run on the iPhone 14 Pro, complete a real scan, export its JSON, import it, inspect the resulting model against the physical room, and exercise permission denial, cancellation, rescan and background interruption. The user may need to configure their Xcode signing team and trust the development build. A directly installed development build can be tested on an owned device through Xcode ([Apple setup](https://developer.apple.com/get-started/)); App Store release is not part of the first milestone.
+
+## Subsequent physical-device verification
+
+The user completed a real iPhone scan and shared its JSON and parametric USDZ. The structural JSON successfully generated the editable room and GLB. The paired USDZ allowed one-time recovery of 22 existing-object size proxies after all 12 structural wall UUIDs/transforms were matched to the JSON. This verifies the physical capture-to-reconstruction path and object recovery, not surveyed dimensional accuracy or exact textured furniture reconstruction. The new direct v1.1 object export has compile/protocol checks; a fresh v1.1 physical export remains a separate device test. Private exports and artifacts remain outside Git.
+
+## Scan naming
+
+The native review title, exported room label, and shared JSON/USDZ filenames now include the capture date/time. Filenames use the capture timezone’s numeric UTC offset and an eight-character scan-ID suffix, for example `living-room_2026-10-18_03-05-41-0700_ff42b20e.json`. The paired USDZ uses the same basename. Re-sharing a scan preserves its original capture time; `capturedAt` remains UTC in the packet. User-entered room names are sanitized only for filenames, and the underlying UUID job identity/private directory remains unchanged.
+
+## RGB appearance capture
+
+The optional photo path is now implemented in the companion and local importer. It saves bounded RGB keyframes from RoomPlan's ARSession, retains their native camera poses and scaled intrinsics, and exports a hash-bound `roomplan-photo-bundle/1.0` ZIP. The importer preserves all photo evidence and prepares up to eight images for the existing appearance pipeline. Rendering a photo-enabled ZIP now automatically projects observed photo pixels onto the Blender scene and furniture proxies. Unseen areas keep fallback colors; exact furniture meshes are not reconstructed. See [automatic photo texturing](photo-texturing.md). See [the complete photo capture contract and verification boundaries](native-photo-capture.md).

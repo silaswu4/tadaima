@@ -1,0 +1,19 @@
+/* Full-screen panel used between pages. Plain global CSS with a page-wipe prefix. */
+.page-wipe {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  background: #1f130b;
+  pointer-events: all;
+}
+
+.page-wipe__mark {
+  width: 34px;
+  height: 34px;
+  background: #f6ebd9;
+  -webkit-mask: center / contain no-repeat;
+  mask: center / contain no-repeat;
+  opacity: 0;
+}

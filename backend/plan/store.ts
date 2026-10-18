@@ -17,6 +17,8 @@ const PROPOSAL_TTL_S = 60 * 60;
 interface Backend {
   get<T>(key: string): Promise<T | null>;
   set(key: string, value: unknown, ttlS?: number): Promise<void>;
+  setIfAbsent(key: string, value: unknown, ttlS?: number): Promise<boolean>;
+  compareAndSet(key: string, expected: unknown, next: unknown): Promise<boolean>;
   /** Write `next` only if the stored plan's revision is still `expected`. Returns the stored revision. */
   casPlan(key: string, expected: number, next: RoomPlan): Promise<{ ok: boolean; revision: number }>;
 }
@@ -38,6 +40,13 @@ function redisBackend(redis: Redis): Backend {
       if (ttlS) await redis.set(key, value, { ex: ttlS });
       else await redis.set(key, value);
     },
+    async setIfAbsent(key, value, ttlS) {
+      return (ttlS ? await redis.set(key, value, { nx: true, ex: ttlS }) : await redis.set(key, value, { nx: true })) === "OK";
+    },
+    async compareAndSet(key, expected, next) {
+      const script = `local cur = redis.call("GET", KEYS[1]); if (not cur and ARGV[1] == "null") or cur == ARGV[1] then redis.call("SET", KEYS[1], ARGV[2]); return 1 end; return 0`;
+      return (await redis.eval(script, [key], [JSON.stringify(expected), JSON.stringify(next)])) === 1;
+    },
     async casPlan(key, expected, next) {
       const [ok, revision] = await redis.eval<[string, string], [number, number]>(CAS, [key], [String(expected), JSON.stringify(next)]);
       return { ok: ok === 1, revision };
@@ -46,14 +55,28 @@ function redisBackend(redis: Redis): Backend {
 }
 
 function memoryBackend(): Backend {
-  const g = globalThis as unknown as { __tadaimaStore?: Map<string, unknown> };
+  const g = globalThis as unknown as { __tadaimaStore?: Map<string, unknown>; __tadaimaStoreExpiry?: Map<string, number> };
   const mem = (g.__tadaimaStore ??= new Map());
+  const expiry = (g.__tadaimaStoreExpiry ??= new Map());
+  const expire = (key: string) => { if ((expiry.get(key) ?? Infinity) <= Date.now()) { mem.delete(key); expiry.delete(key); } };
+  const put = (key: string, value: unknown, ttlS?: number) => { mem.set(key, structuredClone(value)); if (ttlS) expiry.set(key, Date.now() + ttlS * 1000); else expiry.delete(key); };
   return {
     async get<T>(key: string) {
+      expire(key);
       return (structuredClone(mem.get(key)) as T) ?? null;
     },
-    async set(key, value) {
-      mem.set(key, structuredClone(value));
+    async set(key, value, ttlS) { put(key, value, ttlS); },
+    async setIfAbsent(key, value, ttlS) {
+      expire(key);
+      if (mem.has(key)) return false;
+      put(key, value, ttlS);
+      return true;
+    },
+    async compareAndSet(key, expected, next) {
+      expire(key);
+      if (JSON.stringify(mem.get(key) ?? null) !== JSON.stringify(expected)) return false;
+      put(key, next);
+      return true;
     },
     async casPlan(key, expected, next) {
       const cur = mem.get(key) as RoomPlan | undefined;
@@ -93,13 +116,20 @@ const SEEDS: Record<string, RoomPlan> = { proj_demo: demoPlan, proj_dev: { ...de
 const seedFor = (projectId: string): RoomPlan | null =>
   SEEDS[projectId] ?? (/^proj_(demo|test)_[a-z0-9]{6,40}$/.test(projectId) ? { ...demoPlan, projectId } : null);
 
+export const persistenceMode = () => process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN ? "redis" as const : "memory" as const;
+
+/** Registration never overwrites an existing canonical plan. */
+export async function createPlan(plan: RoomPlan): Promise<boolean> {
+  return db().setIfAbsent(planKey(plan.projectId), plan);
+}
+
 export async function getPlan(projectId: string): Promise<RoomPlan | null> {
   const plan = await db().get<RoomPlan>(planKey(projectId));
   if (plan) return plan;
   const seed = seedFor(projectId);
   if (!seed) return null;
-  await db().set(planKey(projectId), seed);
-  return structuredClone(seed);
+  await db().setIfAbsent(planKey(projectId), seed);
+  return db().get<RoomPlan>(planKey(projectId));
 }
 
 export async function resetPlan(projectId: string): Promise<RoomPlan | null> {
@@ -134,6 +164,9 @@ export const accountKv = {
 
 export const projectKv = {
   get: <T>(projectId: string, name: string) => db().get<T>(`kv:${projectId}:${name}`),
+  compareAndSet: <T>(projectId: string, name: string, expected: T | null, next: T) => db().compareAndSet(`kv:${projectId}:${name}`, expected, next),
+  claim: (projectId: string, name: string, value: unknown, ttlS?: number) => db().setIfAbsent(`kv:${projectId}:${name}`, value, ttlS),
+  setIfAbsent: (projectId: string, name: string, value: unknown) => db().setIfAbsent(`kv:${projectId}:${name}`, value),
   set: (projectId: string, name: string, value: unknown, ttlS?: number) => db().set(`kv:${projectId}:${name}`, value, ttlS),
 };
 

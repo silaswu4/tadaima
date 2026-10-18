@@ -1,0 +1,289 @@
+.rooms-page {
+  --ink: #2b1a10;
+  --muted: #8a6e4e;
+  --line: rgba(43, 26, 16, 0.14);
+  --paper: #f5f2eb;
+  --ease: cubic-bezier(0.76, 0, 0.24, 1);
+  position: relative;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  height: 100svh;
+  overflow: hidden;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body), system-ui, sans-serif;
+}
+
+.rooms-page__header {
+  position: relative;
+  z-index: 3;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  height: 72px;
+  padding: 0 32px;
+  border-bottom: 1px solid var(--line);
+  animation: rooms-page-drop 1s var(--ease) both 0.3s;
+}
+
+.rooms-page__wordmark {
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--ink);
+  font-family: var(--font-display), system-ui, sans-serif;
+  font-size: 22px;
+  letter-spacing: -0.01em;
+  text-decoration: none;
+  transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* the mark and the word lift together on hover, as one lockup */
+.rooms-page__mark {
+  width: 30px;
+  height: 30px;
+}
+
+.rooms-page__wordmark:hover,
+.rooms-page__wordmark:focus-visible {
+  transform: translateY(-2px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rooms-page__wordmark {
+    transition: none;
+  }
+
+  .rooms-page__wordmark:hover,
+  .rooms-page__wordmark:focus-visible {
+    transform: none;
+  }
+}
+
+.rooms-page__heading {
+  margin: 0;
+  font-family: var(--font-display), system-ui, sans-serif;
+  font-size: 22px;
+}
+
+.rooms-page__nav {
+  justify-self: end;
+  display: flex;
+  gap: 32px;
+}
+
+.rooms-page__link {
+  position: relative;
+  color: var(--ink);
+  font-size: 15px;
+  text-decoration: none;
+}
+
+/* Hairline underline that draws in from the left on hover. */
+.rooms-page__link::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -3px;
+  height: 1px;
+  background: currentColor;
+  transform: scaleX(0.999);
+  transform-origin: left;
+  transition: transform 0.5s var(--ease);
+}
+
+@media (hover: hover) {
+  .rooms-page__link:hover::after {
+    animation: rooms-page-underline 0.7s var(--ease);
+  }
+}
+
+.rooms-page__stage {
+  position: relative;
+  min-height: 0;
+}
+
+.rooms-page__gallery {
+  position: absolute;
+  inset: 0;
+  min-height: 0;
+}
+
+/* Soft window light drifting across the floor, kept off the pointer path. */
+.rooms-page__light {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  overflow: hidden;
+  mix-blend-mode: multiply;
+}
+
+.rooms-page__light span {
+  position: absolute;
+  width: 46vw;
+  height: 30vh;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(120, 92, 60, 0.16), transparent);
+  filter: blur(28px);
+  animation: rooms-page-drift 18s ease-in-out infinite alternate;
+}
+
+.rooms-page__light span:nth-child(1) {
+  right: -8vw;
+  bottom: -6vh;
+}
+
+.rooms-page__light span:nth-child(2) {
+  right: 20vw;
+  bottom: -12vh;
+  width: 34vw;
+  animation-duration: 23s;
+  animation-delay: -6s;
+}
+
+.rooms-page__light span:nth-child(3) {
+  left: 8vw;
+  bottom: -14vh;
+  width: 28vw;
+  opacity: 0.7;
+  animation-duration: 27s;
+  animation-delay: -11s;
+}
+
+.rooms-page__footer {
+  position: absolute;
+  left: 96px;
+  bottom: clamp(24px, 4.5vh, 48px);
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  animation: rooms-page-rise 1s var(--ease) both 0.9s;
+}
+
+.rooms-page__scan {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  color: var(--ink);
+  font-size: 16px;
+  text-decoration: none;
+}
+
+.rooms-page__scan-icon {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: #e8e1d5;
+  box-shadow: 0 8px 22px rgba(43, 26, 16, 0.12);
+  transition: transform 0.6s var(--ease);
+}
+
+.rooms-page__scan-icon svg {
+  width: 24px;
+  height: 24px;
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+@media (hover: hover) {
+  .rooms-page__scan:hover .rooms-page__scan-icon {
+    transform: scale(1.08);
+  }
+}
+
+.rooms-page__note {
+  margin: 0 0 0 66px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.rooms-page__link:focus-visible,
+.rooms-page__scan:focus-visible,
+.rooms-page__wordmark:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 4px;
+}
+
+@keyframes rooms-page-drop {
+  from {
+    opacity: 0;
+    transform: translateY(-14px);
+  }
+}
+
+@keyframes rooms-page-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+}
+
+@keyframes rooms-page-underline {
+  from {
+    transform: scaleX(0);
+  }
+}
+
+@keyframes rooms-page-drift {
+  from {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  to {
+    transform: translate3d(-4vw, -2vh, 0) scale(1.12);
+  }
+}
+
+@media (max-width: 767px) {
+  .rooms-page__header {
+    grid-template-columns: 1fr auto;
+    padding: 0 16px;
+    height: 60px;
+  }
+
+  .rooms-page__heading {
+    display: none;
+  }
+
+  .rooms-page__nav {
+    gap: 18px;
+  }
+
+  .rooms-page__footer {
+    left: 16px;
+    right: 16px;
+    top: 76px;
+    bottom: auto;
+  }
+
+  .rooms-page__note {
+    display: none;
+  }
+
+  .rooms-page__scan-icon {
+    width: 40px;
+    height: 40px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rooms-page *,
+  .rooms-page *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+button.rooms-page__link { background: none; border: 0; padding: 0; font: inherit; cursor: pointer; }
+.rooms-page__notice { position: absolute; top: 76px; left: 50%; transform: translateX(-50%); z-index: 4; margin: 0; width: min(640px, calc(100% - 32px)); padding: 12px 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--paper); font-size: 13px; }
+.rooms-page__import-overlay { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: 20px; overflow: auto; background: #2b1a1070; backdrop-filter: blur(8px); }
+.rooms-page__message { min-height: 100svh; background: #f5f2eb; color: #2b1a10; padding: 15vh max(24px, calc((100vw - 640px) / 2)); font-family: var(--font-body), sans-serif; }
+.iso-gallery__source { font-size: 12px; color: #8a6e4e; margin: 8px 0 16px; }

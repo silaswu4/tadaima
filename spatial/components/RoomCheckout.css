@@ -1,0 +1,41 @@
+.room-checkout { color: var(--ink, #2b1a10); font: inherit; font-size: 13px; line-height: 1.5; padding: 20px 0; }
+.room-checkout h3, .room-checkout h4, .room-checkout p { margin: 0; }
+.room-checkout h3 { font-size: 19px; font-weight: 500; }
+.room-checkout h4 { font-size: 13px; font-weight: 600; }
+.room-checkout ul { margin: 8px 0 0; padding: 0; list-style: none; }
+.room-checkout button { border: 1px solid var(--line-strong, #a89986); border-radius: 8px; background: var(--paper, #f5f2eb); color: inherit; padding: 9px 12px; font: inherit; cursor: pointer; }
+.room-checkout button:hover:not(:disabled) { background: var(--well, #ebe5d9); }
+.room-checkout button:disabled { opacity: .45; cursor: default; }
+.room-checkout button:focus-visible, .room-checkout input:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
+.room-checkout__heading { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.room-checkout__heading > span { padding: 2px 7px; border: 1px solid var(--line, #d5cdbf); border-radius: 4px; color: var(--muted, #8a6e4e); font-size: 11px; }
+.room-checkout__heading > button { margin-left: auto; }
+.room-checkout .room-checkout__disclosure { margin: 12px 0 20px; color: var(--muted, #8a6e4e); }
+.room-checkout__merchant { margin-top: 16px; }
+.room-checkout__merchant h4 { display: flex; justify-content: space-between; gap: 12px; }
+.room-checkout__merchant li { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; padding: 9px 0; border-bottom: 1px solid var(--line, #d5cdbf); }
+.room-checkout__merchant li > span { min-width: 0; overflow-wrap: anywhere; }
+.room-checkout small { display: block; font-size: 11px; color: var(--muted, #8a6e4e); }
+.room-checkout__merchant strong { white-space: nowrap; font-size: 13px; font-variant-numeric: tabular-nums; }
+.room-checkout__summary { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 5px 14px; margin: 16px 0; }
+.room-checkout__summary dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+.room-checkout__summary code { font-size: 10px; overflow-wrap: anywhere; }
+.room-checkout__step { padding: 16px 0; border-top: 1px solid var(--line, #d5cdbf); }
+.room-checkout__step > h4, .room-checkout__step > p { margin-bottom: 10px; }
+.room-checkout__step > p, .room-checkout__approval > p { color: var(--muted, #8a6e4e); font-size: 12px; }
+.room-checkout__rechecks li { margin: 8px 0; }
+.room-checkout__rechecks li[data-status="unavailable"], .room-checkout__rechecks li[data-status="unverified"] { color: #91472f; }
+.room-checkout__card { display: flex; align-items: center; gap: 8px; padding: 8px 0; }
+.room-checkout__card input { accent-color: var(--ink, #2b1a10); }
+.room-checkout__blockers { padding: 12px; border: 1px solid var(--line, #d5cdbf); border-radius: 8px; margin-bottom: 16px; background: var(--well, #ebe5d9); }
+.room-checkout__blockers li { margin-top: 4px; }
+.room-checkout .room-checkout__primary { width: 100%; background: var(--ink, #2b1a10); color: var(--paper, #f5f2eb); }
+.room-checkout .room-checkout__primary:hover:not(:disabled) { background: #46301f; }
+.room-checkout__approval { margin-top: 12px; }
+.room-checkout__approval button { margin-top: 8px; }
+.room-checkout .room-checkout__error { padding: 10px 12px; border: 1px solid #c99a83; border-radius: 8px; color: #843d2b; margin: 12px 0; overflow-wrap: anywhere; }
+.room-checkout__receipt { border: 1px solid var(--line-strong, #a89986); border-radius: 8px; padding: 14px; margin: 12px 0; }
+.room-checkout__receipt p, .room-checkout__receipt li { margin-top: 7px; }
+.room-checkout__receipt li, .room-checkout__reference { font-size: 11px; color: var(--muted, #8a6e4e); overflow-wrap: anywhere; }
+.room-checkout .room-checkout__reload { margin-top: 12px; }
+@media (max-width: 420px) { .room-checkout__summary { grid-template-columns: minmax(0, 1fr) minmax(0, auto); gap: 5px 8px; } .room-checkout__heading > button { margin-left: 0; } }

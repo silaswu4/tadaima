@@ -1,46 +1,129 @@
+/* Capture, on the landing's palette: warm dark room, cream type, one gold accent. */
+.capture-shell {
+  --cap-bg: #2b1a10;
+  --cap-fg: #f6ebd9;
+  --cap-muted: #b89c7c;
+  --cap-line: rgba(246, 235, 217, 0.14);
+  --cap-panel: rgba(246, 235, 217, 0.04);
+  --cap-sun: #f0b64c;
+  --cap-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  position: relative;
+  min-height: 100dvh;
+  overflow-x: clip;
+  color: var(--cap-fg);
+  /* a soft echo of the landing's window light, top right */
+  background:
+    radial-gradient(70% 55% at 88% 6%, rgba(240, 182, 76, 0.16), transparent 70%),
+    radial-gradient(40% 35% at 70% 0%, rgba(240, 182, 76, 0.1), transparent 70%),
+    var(--cap-bg);
+  font-family: var(--font-body), system-ui, sans-serif;
+  font-size: 15px;
+}
 .capture-page {
   overflow-wrap: anywhere;
   max-width: 1120px;
   margin: 0 auto;
-  padding: 28px 28px 80px;
+  padding: 26px 28px 96px;
 }
+
+/* ---------- header: the same lockup as the rooms screen ---------- */
 .capture-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 20px;
-  color: var(--ink-soft);
-  font-size: 12px;
 }
 .capture-brand {
-  color: var(--ink);
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--cap-fg);
+  font-family: var(--font-display), system-ui, sans-serif;
+  font-size: 22px;
+  letter-spacing: -0.01em;
+  text-decoration: none;
+  transition: transform 0.35s var(--cap-ease);
+}
+.capture-brand:hover,
+.capture-brand:focus-visible {
+  transform: translateY(-2px);
+}
+.capture-brand__mark {
+  width: 30px;
+  height: 30px;
+  background: currentColor;
+  -webkit-mask: center / contain no-repeat;
+  mask: center / contain no-repeat;
+}
+.capture-link {
+  position: relative;
+  color: var(--cap-fg);
+  font-size: 15px;
   text-decoration: none;
 }
+/* the underline draws in on hover, like the landing */
+.capture-link::after,
+.capture-help a::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -3px;
+  height: 1px;
+  background: currentColor;
+  transform: scaleX(0);
+  transform-origin: 100% 50%;
+  transition: transform 0.5s var(--cap-ease);
+}
+.capture-link:hover::after,
+.capture-link:focus-visible::after,
+.capture-help a:hover::after,
+.capture-help a:focus-visible::after {
+  transform: scaleX(1);
+  transform-origin: 0% 50%;
+}
+
+/* ---------- intro ---------- */
 .capture-intro {
-  margin: 64px 0 38px;
-  max-width: 680px;
+  margin: 76px 0 44px;
+  max-width: 720px;
 }
 .capture-eyebrow {
-  color: var(--accent);
-  font-size: 12px;
-  margin-bottom: 18px;
+  margin: 0 0 18px;
+  color: var(--cap-sun);
+  font-size: 13px;
+  letter-spacing: 0.01em;
 }
 .capture-intro h1 {
-  font-size: clamp(32px, 5vw, 57px);
-  line-height: 1.15;
+  margin: 0 0 22px;
+  font-family: var(--font-display), system-ui, sans-serif;
+  font-size: clamp(36px, 5.4vw, 64px);
+  font-weight: 500;
+  line-height: 1.04;
   letter-spacing: -0.045em;
-  font-weight: 450;
-  margin-bottom: 22px;
 }
-.capture-intro > p:last-child {
-  max-width: 540px;
-  color: var(--ink-soft);
-  line-height: 1.75;
+/* each headline line rises out of its own clip */
+.capture-line {
+  display: block;
+  overflow: hidden;
+  padding-bottom: 0.06em;
 }
+.capture-line > span {
+  display: inline-block;
+}
+.capture-lede {
+  max-width: 520px;
+  margin: 0;
+  color: var(--cap-muted);
+  font-size: 17px;
+  line-height: 1.6;
+}
+
+/* ---------- steps, with a sliding indicator ---------- */
 .capture-steps {
+  position: relative;
   display: flex;
-  gap: 0;
-  border-bottom: 1px solid var(--surface-deep);
+  border-bottom: 1px solid var(--cap-line);
 }
 .capture-steps button {
   flex: 1;
@@ -48,25 +131,38 @@
   border: 0;
   background: transparent;
   text-align: left;
-  color: var(--ink-soft);
-  font-size: 13px;
+  color: var(--cap-muted);
+  font: inherit;
+  font-size: 14px;
   cursor: pointer;
-  border-bottom: 2px solid transparent;
+  transition: color 0.3s ease;
 }
 .capture-steps button span {
   margin-right: 12px;
-  opacity: 0.6;
+  font-size: 12px;
+  opacity: 0.7;
+  font-variant-numeric: tabular-nums;
 }
 .capture-steps button[aria-current] {
-  color: var(--ink);
-  border-bottom-color: var(--accent);
+  color: var(--cap-fg);
+}
+.capture-steps__bar {
+  position: absolute;
+  left: 0;
+  bottom: -1px;
+  width: 0;
+  height: 2px;
+  background: var(--cap-sun);
+  box-shadow: 0 0 12px rgba(240, 182, 76, 0.45);
 }
 .capture-localNote {
-  color: var(--ink-soft);
-  font-size: 12px;
+  margin: 16px 0 40px;
+  color: var(--cap-muted);
+  font-size: 13px;
   line-height: 1.6;
-  margin: 16px 0 34px;
 }
+
+/* ---------- layout ---------- */
 .capture-captureGrid,
 .capture-reviewGrid {
   display: grid;
@@ -75,10 +171,11 @@
   align-items: start;
 }
 .capture-page h2 {
-  font-size: 20px;
-  font-weight: 450;
-  letter-spacing: -0.035em;
   margin: 0 0 16px;
+  font-family: var(--font-display), system-ui, sans-serif;
+  font-size: 24px;
+  font-weight: 500;
+  letter-spacing: -0.03em;
 }
 .capture-sectionTitle {
   display: flex;
@@ -87,20 +184,29 @@
   align-items: baseline;
 }
 .capture-sectionTitle span {
-  color: var(--ink-soft);
-  font-size: 12px;
+  color: var(--cap-muted);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
 }
 .capture-help {
-  font-size: 13px;
-  color: var(--ink-soft);
-  line-height: 1.75;
   margin: 0 0 20px;
+  color: var(--cap-muted);
+  font-size: 14px;
+  line-height: 1.7;
 }
+.capture-help a {
+  position: relative;
+  color: var(--cap-fg);
+  text-decoration: none;
+}
+
+/* ---------- camera ---------- */
 .capture-camera {
   position: relative;
   aspect-ratio: 4/3;
-  background: var(--surface-soft);
-  border: 1px solid var(--surface-deep);
+  border: 1px solid var(--cap-line);
+  border-radius: 18px;
+  background: var(--cap-panel);
   overflow: hidden;
 }
 .capture-liveVideo {
@@ -121,50 +227,96 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  color: var(--ink-soft);
+  gap: 6px;
+  color: var(--cap-muted);
   text-align: center;
 }
-.capture-cameraPlaceholder > span {
-  font-size: 64px;
-  font-weight: 400;
-  color: var(--surface-deep);
+.capture-wallLetter {
+  display: inline-block;
+  font-family: var(--font-display), system-ui, sans-serif;
+  font-size: 112px;
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: -0.04em;
+  color: rgba(246, 235, 217, 0.18);
 }
 .capture-cameraPlaceholder p {
-  font-size: 13px;
-  line-height: 1.8;
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.7;
 }
+/* viewfinder corners, so the empty frame still reads as a camera */
+.capture-camera::before,
+.capture-camera::after {
+  content: "";
+  position: absolute;
+  z-index: 1;
+  width: 22px;
+  height: 22px;
+  border: 0 solid rgba(246, 235, 217, 0.45);
+  pointer-events: none;
+}
+.capture-camera::before {
+  top: 16px;
+  left: 16px;
+  border-width: 1.5px 0 0 1.5px;
+}
+.capture-camera::after {
+  right: 16px;
+  bottom: 16px;
+  border-width: 0 1.5px 1.5px 0;
+}
+
+/* ---------- buttons ---------- */
 .capture-actions {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
-  margin-top: 20px;
-  margin-bottom: 18px;
+  margin: 20px 0 18px;
 }
 .capture-actions button {
-  border: 1px solid var(--surface-deep);
-  color: var(--ink);
-  background: var(--surface);
-  padding: 13px 18px;
-  font: inherit;
-  font-size: 13px;
-  cursor: pointer;
   min-height: 46px;
+  padding: 0 22px;
+  border: 1px solid rgba(246, 235, 217, 0.32);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--cap-fg);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+  transition:
+    transform 0.4s var(--cap-ease),
+    background-color 0.25s ease,
+    border-color 0.25s ease;
+}
+.capture-actions button:hover:not(:disabled) {
+  border-color: rgba(246, 235, 217, 0.7);
+  transform: translateY(-1px);
+}
+.capture-actions button:active:not(:disabled) {
+  transform: scale(0.98);
 }
 .capture-actions .capture-primary {
-  color: var(--surface);
-  background: var(--ink);
-  border-color: var(--ink);
+  border-color: var(--cap-fg);
+  background: var(--cap-fg);
+  color: var(--cap-bg);
+  font-weight: 500;
+}
+.capture-actions .capture-primary:hover:not(:disabled) {
+  background: #fff6e6;
 }
 .capture-page button:disabled {
-  opacity: 0.4;
+  opacity: 0.35;
   cursor: default;
 }
 .capture-page button:focus-visible,
 .capture-page input:focus-visible,
-.capture-roomName input:focus-visible {
-  outline: 2px solid var(--accent);
+.capture-shell a:focus-visible {
+  outline: 2px solid var(--cap-sun);
   outline-offset: 4px;
 }
+
+/* ---------- wall tiles ---------- */
 .capture-photoGrid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -176,23 +328,37 @@
   position: relative;
   min-width: 0;
   min-height: 160px;
-  border: 1px solid var(--surface-deep);
-  background: var(--surface-soft);
-  padding: 0 0 12px;
+  padding: 0 0 14px;
+  border: 1px solid var(--cap-line);
+  border-radius: 14px;
+  background: var(--cap-panel);
+  color: var(--cap-fg);
+  font: inherit;
   text-align: left;
   overflow: hidden;
   cursor: pointer;
-  font: inherit;
+  transition:
+    border-color 0.3s ease,
+    background-color 0.3s ease,
+    box-shadow 0.3s ease,
+    transform 0.4s var(--cap-ease);
+}
+.capture-photo:hover:not(:disabled) {
+  border-color: rgba(246, 235, 217, 0.32);
+  transform: translateY(-2px);
 }
 .capture-selectedPhoto {
-  border-color: var(--accent);
+  border-color: var(--cap-sun);
+  background: rgba(240, 182, 76, 0.06);
+  box-shadow: 0 0 0 1px rgba(240, 182, 76, 0.25), 0 10px 30px rgba(0, 0, 0, 0.25);
 }
 .capture-photo img,
 .capture-selectedPhoto img {
+  display: block;
   width: 100%;
   height: 100px;
   object-fit: cover;
-  margin-bottom: 10px;
+  margin-bottom: 12px;
 }
 .capture-photo > span,
 .capture-selectedPhoto > span {
@@ -200,46 +366,57 @@
   height: 90px;
   justify-content: center;
   align-items: center;
-  font-size: 28px;
-  color: var(--mute);
+  font-size: 26px;
+  font-weight: 300;
+  color: var(--cap-muted);
 }
 .capture-photo strong,
 .capture-selectedPhoto strong {
   display: block;
-  padding: 0 12px;
-  font-size: 13px;
+  padding: 0 14px;
+  font-family: var(--font-display), system-ui, sans-serif;
+  font-size: 15px;
   font-weight: 500;
 }
 .capture-photo small,
 .capture-selectedPhoto small {
   display: block;
-  padding: 6px 12px 0;
-  color: var(--ink-soft);
-  font-size: 11px;
+  padding: 4px 14px 0;
+  color: var(--cap-muted);
+  font-size: 12px;
 }
+
+/* ---------- review ---------- */
 .capture-roomName {
   display: flex;
   flex-direction: column;
   gap: 9px;
-  color: var(--ink-soft);
-  font-size: 12px;
   margin: 22px 0;
+  color: var(--cap-muted);
+  font-size: 13px;
 }
 .capture-roomName input {
   width: 100%;
   min-width: 0;
-  padding: 12px;
-  border: 1px solid var(--surface-deep);
-  background: var(--surface);
-  color: var(--ink);
-  font: inherit;
-  font-size: 16px;
+  min-height: 48px;
+  padding: 0 4px 6px;
+  border: 0;
+  border-bottom: 1px solid rgba(246, 235, 217, 0.4);
   border-radius: 0;
-  min-height: 46px;
+  background: transparent;
+  color: var(--cap-fg);
+  font-family: var(--font-display), system-ui, sans-serif;
+  font-size: 22px;
+  letter-spacing: -0.02em;
+  transition: border-color 0.3s ease;
+}
+.capture-roomName input:focus {
+  border-bottom-color: var(--cap-sun);
+  outline: none;
 }
 .capture-reviewPhotos img {
   height: 150px;
-  object-fit: contain;
+  object-fit: cover;
 }
 .capture-summary {
   margin: 0 0 24px;
@@ -249,58 +426,58 @@
   justify-content: space-between;
   gap: 20px;
   padding: 15px 0;
-  border-bottom: 1px solid var(--surface-deep);
-  font-size: 12px;
+  border-bottom: 1px solid var(--cap-line);
+  font-size: 14px;
 }
 .capture-summary dt {
-  color: var(--ink-soft);
+  color: var(--cap-muted);
 }
 .capture-summary dd {
+  margin: 0;
   text-align: right;
 }
-.capture-error {
-  color: var(--accent-deep);
-  font-size: 13px;
-  line-height: 1.7;
-  margin: 24px 0;
+.capture-error,
+.capture-notice {
   max-width: 640px;
+  margin: 24px 0;
+  font-size: 14px;
+  line-height: 1.7;
+}
+.capture-error {
+  color: var(--cap-sun);
 }
 .capture-notice {
-  color: var(--ink);
-  font-size: 13px;
-  line-height: 1.7;
-  margin: 24px 0;
-  max-width: 640px;
+  color: var(--cap-fg);
 }
+
+/* ---------- phone ---------- */
 @media (max-width: 740px) {
   .capture-page {
-    padding: 22px 20px 60px;
-  }
-  .capture-header > span {
-    display: none;
+    padding: 20px 20px 64px;
   }
   .capture-intro {
-    margin-top: 44px;
+    margin-top: 48px;
   }
   .capture-captureGrid,
   .capture-reviewGrid {
     grid-template-columns: 1fr;
-    gap: 36px;
+    gap: 40px;
   }
   .capture-steps button {
-    font-size: 12px;
+    font-size: 13px;
   }
   .capture-steps button span {
     display: block;
     margin-bottom: 6px;
   }
+  .capture-wallLetter {
+    font-size: 88px;
+  }
 }
-@media (prefers-reduced-motion: no-preference) {
-  .capture-actions button,
-  .capture-photo,
-  .capture-selectedPhoto {
-    transition:
-      border-color 0.15s ease,
-      background 0.15s ease;
+
+@media (prefers-reduced-motion: reduce) {
+  .capture-shell *,
+  .capture-shell *::after {
+    transition: none !important;
   }
 }

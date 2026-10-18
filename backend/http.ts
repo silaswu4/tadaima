@@ -1,6 +1,7 @@
 import "server-only";
 
 import { z } from "zod";
+import { authorizeRoomProject, InvalidRoomSync, RoomSessionError } from "@/backend/session/service";
 import { CheckoutRefused } from "@/backend/checkout/service";
 import { PaymentsUnavailable } from "@/backend/payments/stripe";
 import { NotFound, Unprocessable } from "@/backend/plan/operations";
@@ -8,8 +9,11 @@ import { NotFound, Unprocessable } from "@/backend/plan/operations";
 /** Shared error mapping so every route answers the same way. */
 export async function handle(fn: () => Promise<unknown>) {
   try {
-    return Response.json(await fn());
+    const result = await fn();
+    return result instanceof Response ? result : Response.json(result, { headers: { "Cache-Control": "no-store" } });
   } catch (e) {
+    if (e instanceof RoomSessionError) return Response.json({ error: e.message }, { status: e.status });
+    if (e instanceof InvalidRoomSync) return Response.json({ error: e.message }, { status: 422 });
     if (e instanceof NotFound) return Response.json({ error: e.message }, { status: 404 });
     if (e instanceof Unprocessable) return Response.json({ error: e.message }, { status: 422 });
     if (e instanceof CheckoutRefused) return Response.json({ error: e.message, refused: true }, { status: 409 });
@@ -42,3 +46,8 @@ export const PlanChangeSchema = z.discriminatedUnion("kind", [
     constraints: z.object({ budget: money.nullable(), minimumSeats: z.number().int().nullable(), clearance: z.number().min(0) }).partial(),
   }),
 ]);
+
+/** Every private project route checks the browser session before touching plan, jobs or checkout. */
+export async function handleProject(req: Request, projectId: string, fn: () => Promise<unknown>) {
+  return handle(async () => { await authorizeRoomProject(req, projectId); return fn(); });
+}

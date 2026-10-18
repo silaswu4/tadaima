@@ -56,9 +56,9 @@ The exporter supports custom properties through `export_extras=True`; the corres
 
 ## Keep material and export requirements small
 
-Use simple node-based Principled BSDF materials with explicit base color, roughness, and metallic values. The [Blender glTF material documentation](https://docs.blender.org/manual/en/4.5/addons/import_export/scene_gltf2.html#materials) explains the supported export model. Arbitrary Blender procedural shaders are not guaranteed to reproduce in a browser; textures or baking would be a separate asset pipeline.
+Use node-based Principled BSDF materials with explicit base color, roughness, metallic and tangent-space normal inputs. The [Blender glTF material documentation](https://docs.blender.org/manual/en/4.5/addons/import_export/scene_gltf2.html#materials) explains the supported export model. Arbitrary Blender procedural shaders are not guaranteed to reproduce in a browser. The current `pbr-daylight-v1` profile uses committed CC0 photographic texture maps and exports embedded PNGs; it does not rely on exporting arbitrary node graphs or baked room lighting.
 
-The initial shell needs no external textures, cameras, animation, or punctual lights. Viewer lighting stays under the spatial frontend's control. Relevant exporter options verified in the 4.5 source are:
+The shell embeds its material textures and excludes cameras, animation, and punctual lights. Viewer lighting stays under the spatial frontend's control. Relevant exporter options verified in the 4.5 source are:
 
 | Option | Intended value | Reason |
 | --- | --- | --- |
@@ -67,6 +67,8 @@ The initial shell needs no external textures, cameras, animation, or punctual li
 | `export_extras` | `True` | Preserve semantic custom properties |
 | `export_materials` | `"EXPORT"` | Retain basic materials |
 | `export_normals` | `True` | Predictable shaded surfaces |
+| `export_texcoords` | `True` | Preserve metric UVs for PBR textures |
+| `export_tangents` | `True` | Tangent frames for normal maps |
 | `export_cameras` | `False` | Viewer owns its camera |
 | `export_lights` | `False` | Viewer owns lighting |
 | `export_animations` | `False` | Static architectural shell |

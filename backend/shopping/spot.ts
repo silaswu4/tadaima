@@ -81,20 +81,35 @@ export function spotBrief(plan: RoomPlan, req: Pick<ShopRequest, "category" | "s
   return { text: parts.filter(Boolean).join(" "), maxWidthM, budgetLeftUsd: budgetLeft };
 }
 
+export const knownDimensions = (product: ProductCandidate) => product.dimensions !== null && product.dimensions.length === 3 && product.dimensions.every((axis) => Number.isFinite(axis) && axis > 0);
+
+/** A physical fit cannot stand in for established stock, price or exact product data. */
+export function purchaseProblems(plan: RoomPlan, product: ProductCandidate): string[] {
+  const problems: string[] = [];
+  if (product.fixture) problems.push("This is a demo-only product; choose an observed retailer product.");
+  if (product.availability === "unavailable") problems.push("Out of stock.");
+  else if (product.availability !== "available") problems.push("Stock has not been confirmed.");
+  if (!knownDimensions(product)) problems.push("No size listed, so it can't be fit-checked.");
+  if (!product.price) problems.push("No price listed.");
+  else if (!Number.isSafeInteger(product.price.amountMinor) || product.price.amountMinor < 0) problems.push("No valid price listed.");
+  else {
+    const currency = plan.constraints.budget?.currency ?? "USD";
+    if (product.price.currency !== currency) problems.push(`Price currency ${product.price.currency} does not match the room's ${currency} currency.`);
+  }
+  return problems;
+}
+
 /** Check one product at the spot against the room as it is now. */
 export function evaluate(plan: RoomPlan, product: ProductCandidate, req: ShopRequest, source: ShopResult["source"]): ShopResult {
-  const problems: string[] = [];
-  if (product.availability === "unavailable") problems.push("Out of stock.");
-  if (!product.dimensions) problems.push("No size listed, so it can't be fit-checked.");
-  if (!product.price) problems.push("No price listed.");
-
-  const fit = product.dimensions ? placeAt(plan, product, req.spot) : null;
+  const problems = purchaseProblems(plan, product);
+  const established = problems.length === 0;
+  const fit = knownDimensions(product) ? placeAt(plan, product, req.spot) : null;
   if (fit && !fit.ok) problems.push(fit.message);
 
   const budget = plan.constraints.budget;
   let withinBudget: boolean | null = null;
   let overBudgetUsd: number | null = null;
-  if (budget && product.price && product.price.currency === budget.currency) {
+  if (budget && product.price && Number.isSafeInteger(product.price.amountMinor) && product.price.amountMinor >= 0 && product.price.currency === budget.currency) {
     const after = costOf(plan).knownSubtotal.amountMinor + product.price.amountMinor;
     withinBudget = after <= budget.amountMinor;
     overBudgetUsd = withinBudget ? null : Math.round(after - budget.amountMinor) / 100;
@@ -103,7 +118,7 @@ export function evaluate(plan: RoomPlan, product: ProductCandidate, req: ShopReq
   return {
     product,
     source,
-    fits: !!fit?.ok && product.availability !== "unavailable",
+    fits: !!fit?.ok && established,
     placement: fit?.ok ? fit.placement : null,
     problems,
     withinBudget,
@@ -132,7 +147,7 @@ export const underCap = (p: ProductCandidate, req: Pick<ShopRequest, "maxPriceUs
 
 /** Catalog products worth checking for this request: the right kind, real, under the cap. */
 export const catalogCandidates = (plan: RoomPlan, req: ShopRequest) =>
-  plan.products.filter((p) => p.category === req.category && !p.fixture && underCap(p, req));
+  plan.products.filter((p) => p.category === req.category && !p.fixture && (!req.merchant || p.merchant.toLowerCase() === req.merchant.toLowerCase()) && underCap(p, req));
 
 export function evaluateAll(plan: RoomPlan, entries: Array<{ product: ProductCandidate; source: ShopResult["source"] }>, req: ShopRequest) {
   return rank(

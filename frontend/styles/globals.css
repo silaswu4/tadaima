@@ -28,7 +28,7 @@ html,
 body {
   background: var(--surface);
   color: var(--ink);
-  font-family: var(--font-mono), ui-monospace, monospace;
+  font-family: var(--font-body), system-ui, sans-serif;
   font-size: 15px;
 }
 

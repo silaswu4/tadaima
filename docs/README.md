@@ -2,7 +2,7 @@
 
 This is the shared project context for the LA Hacks AI Hackathon 2026 furniture-shopping experience. It consolidates the product discussion, research, constraints, sponsor requirements, and a proposed implementation path as of **October 17, 2026**.
 
-The repository is named `tadaima`; the existing UI, package, and older handoff still use **Michael**. This documentation uses Tadaima as the repository label, without treating a product rename as completed or approved. “Room Service” was an earlier research working name.
+The product is named **tadaima** across the repository, UI, and package. Michael and “Room Service” were earlier working names.
 
 ## Start here
 
@@ -22,6 +22,8 @@ The [geometry-to-Blender/GLB worker](../reconstruction/README.md) is now impleme
 | [Team ownership](team-ownership.md) | Four working areas, named owners, initial tasks, and handoff boundaries |
 | [Agent prompts](agent-prompts.md) | Standalone prompts matching the latest ownership swaps |
 | [Reconstruction implementation](../reconstruction/README.md) | Working commands, geometry semantics, artifact manifest, backend/viewer handoffs, and test results |
+| [Existing furniture](existing-furniture.md) | Native object capture, separate editable size proxies, real scan recovery and verification |
+| [Photo appearance and window daylight](photo-appearance.md) | Photo-cited finishes, keyless/hosted analysis, window lighting, local room import and verification |
 | [Blender export research](../reconstruction/RESEARCH.md) | Primary-source modeling, coordinate, exporter, and verification decisions |
 | [Project context](project-context.md) | Confirmed requirements, recommendations, rejected directions, and handoff |
 | [Product](product.md) | Thesis, concise user flow, scope, and Homebuddy differentiation |

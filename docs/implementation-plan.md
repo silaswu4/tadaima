@@ -7,8 +7,8 @@ Repository originally inspected October 17, 2026 at base commit `cbbe48fe69b1b12
 | Path | Observed responsibility |
 | --- | --- |
 | `app/page.tsx` | Thin Next.js entry point for `frontend/HomePage.tsx` |
-| `frontend/HomePage.tsx` | Latest dark ASCII hero composition, “Michael” headline, placeholder `#` sign-in and scan links |
-| `app/layout.tsx` | Local Paper Mono font and Michael page metadata |
+| `frontend/HomePage.tsx` | Latest hero composition, tadaima headline, placeholder `#` sign-in and scan links |
+| `app/layout.tsx` | Local Paper Mono font and tadaima page metadata |
 | `frontend/styles/globals.css` | Light surface/ink tokens, grain overlay, some unused-looking warm accent tokens; no cleanup requested |
 | `spatial/components/AsciiHero.tsx` | Current homepage renderer configuration and playback/visibility state |
 | `spatial/components/AsciiField.tsx` | Incoming WebGL2 live ASCII renderer |
@@ -26,7 +26,7 @@ Repository originally inspected October 17, 2026 at base commit `cbbe48fe69b1b12
 | `reconstruction/tests/`, `verify-glb.mjs` | Geometry/failure tests, actual Blender reopen, Three.js loading, and optional Khronos validation |
 | `public/models/` | Seven bundled GLB models, referenced by the hero |
 | `app/fonts/` | Paper Mono WOFF2 and SIL Open Font License text |
-| `HANDOFF.md` | Historical Michael design notes; opening notice records the later native-input exception |
+| `HANDOFF.md` | Historical design notes from the Michael working name; opening notice records the later native-input exception |
 | `AGENTS.md` | Next.js version-specific guidance plus the team's four working boundaries |
 | `README.md` | Mostly create-next-app starter text; the docs entry link points here |
 
@@ -50,7 +50,7 @@ Observed package versions:
 - React and React DOM `19.3.0`.
 - Three.js `^0.186.1`.
 - TypeScript `^5`, ESLint `^9`, Tailwind CSS `^4`.
-- A tracked `package-lock.json` is present. The package name remains `michael`.
+- A tracked `package-lock.json` is present. The package is named `tadaima`.
 
 From the repository root:
 
