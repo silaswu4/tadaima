@@ -15,7 +15,7 @@ const subscribeToMotion = (notify: () => void) => {
 };
 const readMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-// The loader, as one timeline: the word sets in wide, swaps to the display face,
+// The loader, as one timeline: the word sets in, the brackets open around it, it
 // counts to 100 with a small overshoot, then the panel lifts off the hero.
 function Loader({ onLift, onDone, reduced }: { onLift: () => void; onDone: () => void; reduced: boolean }) {
   const el = useRef<HTMLDivElement>(null);
@@ -29,7 +29,6 @@ function Loader({ onLift, onDone, reduced }: { onLift: () => void; onDone: () =>
     const frame = q(".hero-loader__frame");
     const ctx = gsap.context(() => {
       if (reduced) {
-        word.classList.add("is-display");
         pct.textContent = "100%";
         gsap.set(q(".hero-loader__meta"), { opacity: 1 });
         gsap.to(root, { autoAlpha: 0, duration: 0.3, delay: 0.25, onStart: onLift, onComplete: onDone });
@@ -41,7 +40,6 @@ function Loader({ onLift, onDone, reduced }: { onLift: () => void; onDone: () =>
         .fromTo(frame, { width: 180, height: 72 }, { width: 222, height: 92, duration: 0.55, ease: "power3.out" })
         .fromTo(word, { yPercent: 35, autoAlpha: 0 }, { yPercent: 0, autoAlpha: 1, duration: 0.5, ease: "power3.out" }, 0)
         .to(q(".hero-loader__meta"), { opacity: 1, duration: 0.2 }, 0.35)
-        .add(() => word.classList.add("is-display"), 0.55)
         .to(frame, { width: 236, height: 122, duration: 0.5, ease: "power3.out" }, 0.55)
         .to(count, { v: 100, duration: 0.7, ease: "back.out(1.7)", onUpdate: () => (pct.textContent = `${Math.max(0, Math.round(count.v))}%`) }, 0.6)
         .to(frame, { height: 152, duration: 0.4, ease: "power3.out" }, 1.3)

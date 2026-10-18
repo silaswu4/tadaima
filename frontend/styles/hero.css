@@ -183,18 +183,12 @@
 .tadaima-hero .hero-loader__corner.br { bottom: 0; right: 0; border-width: 0 1.5px 1.5px 0; }
 .tadaima-hero .hero-loader__word {
   margin: 0;
-  font-family: var(--font-body), system-ui, sans-serif;
-  font-weight: 400;
-  font-size: 48px;
-  line-height: 64px;
-  letter-spacing: -0.02em;
-  color: var(--hero-fg);
-}
-.tadaima-hero .hero-loader__word.is-display {
   font-family: var(--font-display), system-ui, sans-serif;
   font-weight: 600;
   font-size: 60px;
+  line-height: 64px;
   letter-spacing: -0.05em;
+  color: var(--hero-fg);
 }
 .tadaima-hero .hero-loader__meta {
   display: flex;
