@@ -1,6 +1,8 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
+import mark from "../assets/tadaima-mark.png";
 import { IsoRoomGallery, type GalleryRoom } from "./IsoRoomGallery";
 import "./RoomsPage.css";
 
@@ -12,6 +14,7 @@ export function RoomsPage({ rooms, scanHref = "/capture" }: { rooms: RoomsPageRo
     <main className="rooms-page">
       <header className="rooms-page__header">
         <Link href="/" className="rooms-page__wordmark" aria-label="tadaima home">
+          <Image src={mark} alt="" className="rooms-page__mark" priority />
           tadaima
         </Link>
         <p className="rooms-page__heading">Your rooms</p>

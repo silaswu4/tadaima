@@ -28,11 +28,37 @@
 
 .rooms-page__wordmark {
   justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
   color: var(--ink);
   font-family: var(--font-display), system-ui, sans-serif;
   font-size: 22px;
   letter-spacing: -0.01em;
   text-decoration: none;
+}
+
+/* the mark spins one full turn and lifts a touch on hover, so it lands back upright */
+.rooms-page__mark {
+  width: 30px;
+  height: 30px;
+  transition: transform 0.9s var(--ease);
+}
+
+.rooms-page__wordmark:hover .rooms-page__mark,
+.rooms-page__wordmark:focus-visible .rooms-page__mark {
+  transform: translateY(-2px) rotate(360deg) scale(1.08);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rooms-page__mark {
+    transition: none;
+  }
+
+  .rooms-page__wordmark:hover .rooms-page__mark,
+  .rooms-page__wordmark:focus-visible .rooms-page__mark {
+    transform: none;
+  }
 }
 
 .rooms-page__heading {
