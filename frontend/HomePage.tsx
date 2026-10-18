@@ -182,6 +182,10 @@ export default function Home() {
         {/* accounts are not built yet, so the button says so rather than going nowhere */}
         <div className="hero-account">
           <button type="button" className="hero-signin" onClick={() => setSignInNote((v) => !v)} aria-expanded={signInNote}>
+            <svg className="hero-signin__icon" viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="8.5" r="3.5" />
+              <path d="M5 20c.8-3.6 3.6-5.5 7-5.5s6.2 1.9 7 5.5" />
+            </svg>
             <span className="hero-signin__label">Sign in</span>
           </button>
           {signInNote ? (

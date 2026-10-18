@@ -20,19 +20,33 @@
 .tadaima-hero .hero-account {
   position: absolute;
   z-index: 4;
-  top: 28px;
+  top: 26px;
   left: var(--hero-left);
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 14px;
 }
 .tadaima-hero .hero-signin {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
   padding: 0;
   border: 0;
   background: none;
-  font: 500 15px/20px var(--font-body), system-ui, sans-serif;
+  font-family: var(--font-display), system-ui, sans-serif;
+  font-size: 20px;
+  line-height: 26px;
+  letter-spacing: -0.015em;
   color: var(--hero-fg);
   cursor: pointer;
+}
+.tadaima-hero .hero-signin__icon {
+  width: 26px;
+  height: 26px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
 }
 .tadaima-hero .hero-signin__label { position: relative; }
 .tadaima-hero .hero-signin__label::after {
