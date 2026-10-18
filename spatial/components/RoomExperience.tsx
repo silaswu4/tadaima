@@ -14,6 +14,8 @@ import type { WalkCallbacks, WalkCarryStatus, WalkEnvironment, WalkItem, WalkMod
 import mark from "../assets/tadaima-mark.png";
 import { WipeLink, useWipeHold } from "./PageWipe";
 import { RoomOnboarding, TourHelpButton } from "../onboarding/RoomOnboarding";
+import { RoomProductCard } from "./RoomProductCard";
+import { CategoryGlyph, Icon } from "./room-icons";
 import "./RoomExperience.css";
 
 export type ExperienceRoom = { id: string; label: string; plan: RoomPlan; environment?: WalkEnvironment; reconstruction?: WalkOptions["reconstruction"]; sourceDescription?: string };
@@ -44,27 +46,6 @@ const LOADING_STEPS = ["Laying the floor", "Raising the walls", "Placing your fu
 const HOTBAR_SLOTS = 9;
 /** Bump to give every browser a fresh server room (v3: empty basket, nothing locked, pieces can sit 3 cm apart). */
 const ROOM_SESSION_VERSION = 4;
-
-/** A small line drawing per kind of piece, for inventory slots. */
-function CategoryGlyph({ category }: { category: FurnitureCategory }) {
-  const paths: Record<string, string> = {
-    sofa: "M3 13v-3a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v3M2 13h20v4H2zM4 17v2M20 17v2M6 8V6h12v2",
-    chair: "M7 4h10v8H7zM5 12h14v3H5zM6 15v5M18 15v5",
-    table: "M3 9h18M5 9v10M19 9v10M3 7h18v2H3z",
-    desk: "M3 8h18v2H3zM5 10v9M19 10v9M14 10h5v5h-5z",
-    storage: "M5 3h14v18H5zM5 9h14M5 15h14",
-    bed: "M3 18V8M3 13h18v5M21 18v-5M6 13v-2a2 2 0 0 1 2-2h3a2 2 0 0 1 2 2v2",
-    rug: "M4 6h16v12H4zM7 9h10v6H7z",
-    lamp: "M9 3h6l2 6H7zM12 9v10M8 21h8",
-    decor: "M9 4h6v3a5 5 0 1 1-6 0z",
-    other: "M4 7l8-4 8 4v10l-8 4-8-4zM4 7l8 4 8-4M12 11v10",
-  };
-  return (
-    <svg viewBox="0 0 24 24" className="room-x__slot-glyph" aria-hidden="true">
-      <path d={paths[category] ?? paths.other} />
-    </svg>
-  );
-}
 
 const ENGINE_KEYS = new Set(["g", "r", "q", "e", "w", "a", "s", "d", "delete", "backspace", "z", "enter", "arrowup", "arrowdown", "arrowleft", "arrowright"]);
 const HINT_KEY = "tadaima.walkHintSeen";
@@ -127,64 +108,6 @@ function readHintSeen(): boolean {
 }
 
 /* ---------- icons ---------- */
-
-const Icon = {
-  back: (
-    <svg viewBox="0 0 16 16" aria-hidden="true">
-      <path d="M10 3 5 8l5 5" />
-    </svg>
-  ),
-  close: (
-    <svg viewBox="0 0 16 16" aria-hidden="true">
-      <path d="m4 4 8 8M12 4l-8 8" />
-    </svg>
-  ),
-  undo: (
-    <svg viewBox="0 0 16 16" aria-hidden="true">
-      <path d="M5.5 3 2.5 6l3 3" />
-      <path d="M2.5 6H10a3.5 3.5 0 0 1 0 7H7" />
-    </svg>
-  ),
-  lock: (
-    <svg viewBox="0 0 16 16" aria-hidden="true">
-      <rect x="3.5" y="7" width="9" height="6.5" rx="1.5" />
-      <path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" />
-    </svg>
-  ),
-  plus: (
-    <svg viewBox="0 0 16 16" aria-hidden="true">
-      <path d="M8 3v10M3 8h10" />
-    </svg>
-  ),
-  basket: (
-    <svg viewBox="0 0 16 16" aria-hidden="true">
-      <path d="M2.5 6h11l-1.2 7a1 1 0 0 1-1 .8H4.7a1 1 0 0 1-1-.8z" />
-      <path d="M5.5 6 8 2.5 10.5 6" />
-    </svg>
-  ),
-  move: (
-    <svg viewBox="0 0 16 16" aria-hidden="true">
-      <path d="M8 2v12M2 8h12M8 2 6 4M8 2l2 2M8 14l-2-2M8 14l2-2M2 8l2-2M2 8l2 2M14 8l-2-2M14 8l-2 2" />
-    </svg>
-  ),
-  rotate: (
-    <svg viewBox="0 0 16 16" aria-hidden="true">
-      <path d="M12.5 8A4.5 4.5 0 1 1 8 3.5h2.5" />
-      <path d="M9 1.5 11 3.5 9 5.5" />
-    </svg>
-  ),
-  unlock: (
-    <svg viewBox="0 0 16 16" aria-hidden="true">
-      <rect x="3.5" y="7" width="9" height="6.5" rx="1.5" />
-      <path d="M5.5 7V5a2.5 2.5 0 0 1 4.9-.7" />
-    </svg>
-  ),
-  arrow: (rot: number) => (
-    <svg viewBox="0 0 16 16" aria-hidden="true" style={{ transform: `rotate(${rot}deg)` }}>
-      <path d="M4 10 8 6l4 4" />
-    </svg>
-  ),
-};
 
 /* ---------- component ---------- */
 
@@ -820,7 +743,12 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
   const xrActions = useMemo(() => [
     ...roomXRActions({ connected: Boolean(shopping.session), busy: blocked, pending: Boolean(pending), moving, selected }),
     ...roomXRVoiceActions({ available: voiceAvailable, ...voiceState }),
-  ], [shopping.session, blocked, pending, moving, selected, voiceAvailable, voiceState]);
+    ...items.slice(0, 100).flatMap((item) => [
+      { id: `select-item:${item.id}`, label: "Select piece", disabled: blocked || moving || Boolean(pending) || item.stored },
+      ...(item.stored ? [{ id: `take-out:${item.id}`, label: "Bring into room", disabled: !shopping.session || blocked || moving || Boolean(pending) }] : []),
+      ...(item.origin === "proposed_purchase" && !item.stored ? [{ id: `remove-item:${item.id}`, label: "Remove from room", disabled: blocked || moving || Boolean(pending) }] : []),
+    ]),
+  ], [shopping.session, blocked, pending, moving, selected, voiceAvailable, voiceState, items]);
   useLayoutEffect(() => {
     xrActionRef.current = (id) => {
       // Microphone controls remain reachable while a shopping tool is working.
@@ -833,6 +761,12 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
       }
       if (xrActionPending.current || !xrActions.some((action) => action.id === id && !action.disabled)) return;
       if (id === "cancel-preview") { cancelProduct(); setNotice("Preview cancelled. Nothing was added."); return; }
+      if (id.startsWith("select-item:")) { api()?.select(id.slice("select-item:".length)); return; }
+      if (id.startsWith("remove-item:")) {
+        const item = items.find((entry) => entry.id === id.slice("remove-item:".length) && entry.origin === "proposed_purchase" && !entry.stored);
+        if (item) remove(item);
+        return;
+      }
       const request = roomXRSearch(id, merchant);
       xrActionPending.current = true;
       void (async () => {
@@ -840,6 +774,12 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
           setNotice(`Finding ${CATEGORY_LABEL[request.category].toLowerCase()} that fit your floor spot…`);
           await assistantSearch(request);
           setNotice(null);
+        } else if (id.startsWith("take-out:")) {
+          const item = items.find((entry) => entry.id === id.slice("take-out:".length) && entry.stored);
+          const spot = api()?.getShoppingSpot();
+          if (!item || !spot) throw new Error("Choose a clear floor spot before bringing this piece back.");
+          await shopping.moveAgentItem(item.id, spot, item.locked);
+          setNotice(`Brought ${item.label} back into your room.`);
         } else if (selected && !selected.locked && !selected.stored) {
           // Use the same server-owned queue as the room assistant. The service
           // rechecks locks, geometry and the current canonical room before saving.
@@ -905,14 +845,23 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
   useEffect(() => {
     if (status !== "ready") return;
     walkRef.current?.setXRShopping({
-      offers: roomXRProducts(results, pending).map(({ product: p, source }) => ({ id: p.id, label: p.label, detail: p.price ? `${formatMoney(p.price.amountMinor, p.price.currency)} · ${p.merchant} · ${source === "live" ? "live search" : source === "catalog" ? "catalog" : "preview"}` : p.merchant })),
+      offers: roomXRProducts(results, pending).map(({ product: p, source }) => {
+        const result = results.find((entry) => entry.product.id === p.id);
+        return { id: p.id, label: p.label, product: p, source, fits: result?.fits ?? p.id === pending?.id,
+          withinBudget: result?.withinBudget, problems: result?.problems,
+          detail: p.price ? `${formatMoney(p.price.amountMinor, p.price.currency)} · ${p.merchant} · ${source === "live" ? "live search" : source === "catalog" ? "catalog" : "preview"}` : p.merchant };
+      }),
+      inventory: items.slice(0, 100).map((item) => ({ ...item, selected: item.id === selected?.id,
+        imageUrl: shopping.session?.plan.products.find((product) => product.id === item.productId)?.imageUrl })),
+      basket: basket.map((item) => ({ ...item, imageUrl: shopping.session?.plan.products.find((product) => product.id === item.productId)?.imageUrl })),
+      basketTotal, roomLabel: room.label,
       selectedItemLabel: selected?.label, selectedItemLocked: selected?.locked, pendingOfferId: pending?.id, canConfirm: Boolean(pending) && !blocked,
       busy: blocked, basketLabel: `Basket ${basket.length} · ${basketTotal}`,
       actions: xrActions,
       agent: { available: voiceAvailable, ...voiceState },
       status: blocked ? "Updating your room…" : notice ?? shopping.job?.stage ?? "Tell Tadaima what you want to add or change.",
     });
-  }, [status, results, selected, pending, notice, blocked, shopping.job, shopping.session, moving, basket.length, basketTotal, xrActions, voiceAvailable, voiceState]);
+  }, [status, results, selected, pending, notice, blocked, shopping.job, shopping.session, moving, basket, basketTotal, xrActions, voiceAvailable, voiceState, items, room.label]);
 
   const ready = status === "ready";
   const showHint = ready && mode === "walk" && !hintSeen && !panel;
@@ -1220,34 +1169,11 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
 
         {shopping.job && !results.length ? <p className="room-x__empty">Nothing fits there under that price yet. Try a higher price or another spot.</p> : null}
         <ul className="room-x__products">
-          {results.map((result) => {
-            const p = result.product;
-            const known = p.dimensions != null;
-            return (
-              <li key={p.id} className="room-x__product" data-unknown={!known || undefined}>
-                <div className="room-x__product-img">
-                  {p.imageUrl ? (
-                    // Remote merchant images; next/image has no remote patterns configured here.
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={p.imageUrl} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" />
-                  ) : null}
-                </div>
-                <p className="room-x__product-name"><a href={/^https:\/\//i.test(p.sourceUrl) ? p.sourceUrl : undefined} target="_blank" rel="noreferrer">{p.label.split(",")[0]}</a></p>
-                <p className="room-x__product-meta">
-                  <span>{p.dimensions ? formatDimensions(p.dimensions).split(" · ")[0] : "Size not listed"}</span>
-                  {p.price ? <span className="room-x__product-price">{formatMoney(p.price.amountMinor, p.price.currency)}</span> : null}
-                </p>
-                <p className="room-x__product-fit" data-ok={result.fits || undefined}>
-                  {p.availability === "unavailable" ? "Out of stock" : !result.fits ? result.problems[0] ?? "Doesn't fit here" : result.withinBudget === false ? `Fits · $${Math.ceil(result.overBudgetUsd ?? 0)} over budget` : result.placement?.againstWallId ? "Fits against the wall" : "Fits here"}
-                </p>
-                {result.fits && known && p.price && p.availability !== "unavailable" ? (
-                  <button type="button" className="room-x__chip-btn room-x__chip-btn--ink room-x__product-add" onClick={() => addProduct(p)} disabled={blocked || !ready}>
-                    {budgetFor(result) ? `Add · budget to ${formatMoney(budgetFor(result)!, "USD")}` : "Add to room"}
-                  </button>
-                ) : null}
-              </li>
-            );
-          })}
+          {results.map((result) => <RoomProductCard key={result.product.id} product={result.product}
+            fits={result.fits} withinBudget={result.withinBudget} problems={result.problems} source={result.source}
+            fitLabel={result.product.availability === "unavailable" ? "Out of stock" : !result.fits ? result.problems[0] ?? "Doesn't fit here" : result.withinBudget === false ? `Fits · $${Math.ceil(result.overBudgetUsd ?? 0)} over budget` : result.placement?.againstWallId ? "Fits against the wall" : "Fits here"}
+            actionLabel={budgetFor(result) ? `Add · budget to ${formatMoney(budgetFor(result)!, "USD")}` : "Add to room"}
+            onPreview={() => addProduct(result.product)} disabled={blocked || !ready} />)}
         </ul>
         <button type="button" className="room-x__text-btn room-x__more" onClick={() => { cancelProduct(); openPanel("assistant"); }} disabled={!shopping.session}>Plan a change by text, or shop with Fetch</button>
       </div>

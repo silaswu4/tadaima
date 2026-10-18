@@ -1,0 +1,18 @@
+/* One catalog card is shared by the flat website and the DOM rendered into VR. */
+.room-product-card { display: flex; flex-direction: column; min-width: 0; list-style: none; color: var(--ink, #2b1a10); }
+.room-product-card__image { position: relative; display: flex; align-items: center; justify-content: center; aspect-ratio: 1; margin-bottom: 10px; overflow: hidden; border-radius: 12px; background: var(--well, #ebe5d9); }
+.room-product-card__image img { display: block; width: auto; height: auto; max-width: 100%; max-height: 100%; mix-blend-mode: multiply; }
+.room-product-card__no-image { display: flex; align-items: center; justify-content: center; height: 100%; min-height: 80px; color: var(--muted, #8a6e4e); font-size: 12px; }
+.room-product-card__body { display: flex; flex: 1; flex-direction: column; min-width: 0; }
+.room-product-card__source { margin: 0 0 4px; color: var(--muted, #8a6e4e); font-size: 11px; line-height: 1.4; }
+.room-product-card__name { margin: 0; color: var(--ink, #2b1a10); font-size: 13px; line-height: 1.4; overflow-wrap: anywhere; }
+.room-product-card__name a { color: inherit; text-decoration: none; }
+.room-product-card__name a:hover { text-decoration: underline; }
+.room-product-card__meta { display: flex; justify-content: space-between; gap: 8px; margin: 4px 0 0; color: var(--muted, #8a6e4e); font-size: 12px; line-height: 1.5; }
+.room-product-card__meta strong { color: var(--ink, #2b1a10); font-weight: 500; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.room-product-card__fit { margin: 2px 0 10px; color: #91472f; font-size: 12px; line-height: 1.45; }
+.room-product-card__fit[data-ok] { color: var(--muted, #8a6e4e); }
+.room-product-card__action { align-self: flex-start; min-height: 30px; margin-top: auto; padding: 6px 16px; border: 1px solid var(--ink, #2b1a10); border-radius: 999px; background: var(--ink, #2b1a10); color: var(--paper, #f5f2eb); font: inherit; font-size: 12px; cursor: pointer; }
+.room-product-card__action:disabled { opacity: .45; cursor: default; }
+.room-product-card__action:hover:not(:disabled), .room-product-card__action[data-xr-hover]:not(:disabled) { background: #493326; border-color: #493326; }
+.room-product-card[data-unknown] .room-product-card__image, .room-product-card[data-unknown] .room-product-card__name, .room-product-card[data-unknown] .room-product-card__meta { opacity: .45; }

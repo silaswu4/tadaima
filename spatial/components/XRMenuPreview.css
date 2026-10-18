@@ -8,5 +8,6 @@
 .xr-preview__tools { display: flex; flex-wrap: wrap; gap: 8px; }
 .xr-preview__tools button { border: 1px solid rgba(43, 26, 16, 0.14); border-radius: 99px; background: #f5f2eb; color: inherit; padding: 9px 16px; font: inherit; text-transform: capitalize; cursor: pointer; }
 .xr-preview__tools button[aria-pressed="true"] { background: #2b1a10; color: #f5f2eb; border-color: #2b1a10; }
-.xr-preview__canvas { max-width: 1000px; margin: 20px auto; filter: drop-shadow(0 18px 22px #2b1a1022); }
+/* The panel texture is transparent, as in the headset: show it over the scanned room. */
+.xr-preview__canvas { max-width: 1000px; margin: 20px auto; border-radius: 30px; background: #d9d2c6 url(/demo/scanned-living-room/vr-preview-backdrop.jpg) center / cover; }
 .xr-preview__canvas canvas { display: block; width: 100%; height: auto; border-radius: 30px; }

@@ -1,13 +1,13 @@
+import { createXRDOMFixture } from "./xr-menu-dom-fixture.mjs";
 import assert from "node:assert/strict";
-import test from "node:test";
+import test, { after } from "node:test";
 import * as THREE from "three";
 import { checkWorkspaceXRSupport, createWorkspaceXR, readXRThumbstick, snapTurnXR, teleportXR, walkXR } from "../room/workspace-xr.ts";
 import { XR_MENU_WIDTH, XR_MENU_HEIGHT } from "../room/workspace-xr-menu.ts";
 
-const drawnText = [];
-const canvasContext = new Proxy({ clearRect() {}, fillRect() {}, fillText(text) { drawnText.push(text); }, measureText(text) { return { width: text.length * 15 }; } }, { get: (target, key) => key in target ? target[key] : () => {} });
-globalThis.document = { body: {}, createElement: () => ({ width: 0, height: 0, getContext: () => canvasContext }) };
-globalThis.getComputedStyle = () => ({ fontFamily: "monospace" });
+
+const dom = createXRDOMFixture();
+after(() => dom.close());
 
 function environment({ failSetSession = false, realTracking = false } = {}) {
   const controllers = [new THREE.Group(), new THREE.Group()];
@@ -25,8 +25,8 @@ function environment({ failSetSession = false, realTracking = false } = {}) {
       return session;
     },
   };
-  Object.defineProperty(globalThis, "window", { configurable: true, value: { isSecureContext: true } });
-  Object.defineProperty(globalThis, "navigator", { configurable: true, value: { xr: system } });
+  window.isSecureContext = true;
+  Object.defineProperty(navigator, "xr", { configurable: true, writable: true, value: system });
   const xrManager = Object.assign(events, {
     enabled: false, setReferenceSpaceType(type) { assert.equal(type, "local-floor"); },
     setFramebufferScaleFactor() {}, getController: (i) => controllers[i], getCamera: () => head,
@@ -60,7 +60,7 @@ function environment({ failSetSession = false, realTracking = false } = {}) {
   scene.add(floor);
   const plan = { geometry: { rooms: [{ floorPolygon: [[-5, -5], [5, -5], [5, 5], [-5, 5]] }] } };
   const options = {
-    locomotion: "teleport",
+    locomotion: "teleport", menuRuntime: dom.runtime,
     renderer: { xr: xrManager }, scene, camera, getPlan: () => plan,
     getFloorMeshes: () => [floor], getItemRoots: () => [],
     getSpawnPoint: () => new THREE.Vector3(1, 0, 2), isFloorSpotValid: (p) => Math.abs(p.x) < 4 && Math.abs(p.z) < 4,
@@ -92,14 +92,16 @@ function pointMenuPixel(controller, xr, scene, x, y) {
   anchor.position.set((x / XR_MENU_WIDTH - .5) * 1.04, (.5 - y / XR_MENU_HEIGHT) * 1.04 * XR_MENU_HEIGHT / XR_MENU_WIDTH, 0);
   mesh.add(anchor); pointControllerAt(controller, anchor, scene); anchor.removeFromParent();
 }
-function pointMenu(controller, xr, scene, id) {
+async function pointMenu(controller, xr, scene, id) {
+  await xr.menuWhenIdle();
   const target = xr.menuTargets.find((item) => item.id === id);
   assert.ok(target, `missing visible menu target ${id}`);
   pointMenuPixel(controller, xr, scene, target.x + target.width / 2, target.y + target.height / 2);
+  await xr.menuWhenIdle();
 }
 
-function openShop(env, xr) {
-  pointMenu(env.controllers[1], xr, env.options.scene, "tab-shop");
+async function openShop(env, xr) {
+  await pointMenu(env.controllers[1], xr, env.options.scene, "tab-shop");
   assert.equal(xr.menuTab, "shop");
 }
 
@@ -192,14 +194,17 @@ test("in-headset shopping buttons call preview and explicit placement confirmati
   env.options.onPreviewOffer = (id) => previews.push(id);
   env.options.onConfirmOffer = () => confirmations.push(true);
   const xr = createWorkspaceXR(env.options);
-  xr.setShoppingState({ offers: [{ id: "sku-1", label: "Measured chair", detail: "$80 / 0.5m wide" }], pendingOfferId: "sku-1", canConfirm: true });
+  const offer = { id: "sku-1", label: "Measured chair", detail: "$80 / 0.5m wide" };
+  xr.setShoppingState({ offers: [offer] });
   await xr.enter(); xr.update();
   const controller = env.controllers[1];
-  openShop(env, xr);
-  pointMenu(controller, xr, env.options.scene, "preview:sku-1");
+  await openShop(env, xr);
+  await pointMenu(controller, xr, env.options.scene, "preview:sku-1");
   assert.deepEqual(previews, ["sku-1"]);
   assert.deepEqual(confirmations, []);
-  pointMenu(controller, xr, env.options.scene, "confirm");
+  assert.ok(!xr.menuTargets.some((target) => target.id === "confirm"));
+  xr.setShoppingState({ offers: [offer], pendingOfferId: offer.id, canConfirm: true });
+  await pointMenu(controller, xr, env.options.scene, "confirm");
   assert.deepEqual(confirmations, [true]);
   xr.dispose();
 });
@@ -404,17 +409,17 @@ test("HUD bounds large result sets and text, suppresses unbound confirmation, an
   const xr = createWorkspaceXR(env.options);
   const state = { offers: Array.from({ length: 10000 }, (_, i) => ({ id: `sku-${i}`, label: "chair".repeat(1000), detail: "merchant".repeat(1000) })),
     selectedItemLabel: "selected".repeat(1000), status: "status".repeat(1000), pendingOfferId: "missing-sku", canConfirm: true };
-  drawnText.length = 0; xr.setShoppingState(state);
+  xr.setShoppingState(state);
   const hud = env.options.scene.getObjectByName("workspace-xr-shopping");
   const panel = hud.getObjectByName("workspace-xr-menu"), texture = panel.material.map;
   assert.equal(hud.children.length, 3); // one menu texture + two pointer dots
-  await xr.enter(); xr.update(); openShop(env, xr);
-  assert.equal(xr.menuTargets.filter((target) => target.id.startsWith("preview:")).length, 3);
+  await xr.enter(); xr.update(); await openShop(env, xr);
+  assert.equal(xr.menuTargets.filter((target) => target.id.startsWith("preview:")).length, 24);
   assert.ok(!xr.menuTargets.some((target) => target.id === "confirm"));
-  assert.ok(drawnText.every((text) => text.length <= 300));
-  const version = texture.version; xr.setShoppingState(state);
+  assert.ok([...dom.document.querySelectorAll('[data-xr-id^="preview:"]')].every((button) => button.textContent.length < 700), "retailer text stays bounded in real DOM buttons");
+  const version = texture.version; xr.setShoppingState(state); await xr.menuWhenIdle();
   assert.equal(texture.version, version); // no redraws for identical state
-  pointMenu(env.controllers[1], xr, env.options.scene, "preview:sku-2");
+  await pointMenu(env.controllers[1], xr, env.options.scene, "preview:sku-2");
   assert.deepEqual(confirms, []);
   let disposedGeometry = 0; panel.geometry.addEventListener("dispose", () => disposedGeometry++);
   xr.setShoppingState({ offers: [], canConfirm: true });
@@ -422,16 +427,18 @@ test("HUD bounds large result sets and text, suppresses unbound confirmation, an
   xr.dispose(); assert.equal(disposedGeometry, 1);
 });
 
-test("a valid desktop-selected offer beyond the first three remains visible and confirmable in VR", async () => {
+test("a valid pending offer beyond the 24-offer cap remains visible and confirmable in VR", async () => {
   const env = environment(); const previews = [], confirms = [];
   env.options.onPreviewOffer = (id) => previews.push(id); env.options.onConfirmOffer = () => confirms.push(true);
   const xr = createWorkspaceXR(env.options);
-  xr.setShoppingState({ offers: Array.from({ length: 6 }, (_, i) => ({ id: `sku-${i}`, label: `Chair ${i}` })), pendingOfferId: "sku-5", canConfirm: true });
-  await xr.enter(); xr.update(); openShop(env, xr);
-  assert.ok(xr.menuTargets.some((target) => target.id === "preview:sku-5"));
-  pointMenu(env.controllers[1], xr, env.options.scene, "preview:sku-5");
-  assert.deepEqual(previews, ["sku-5"]); assert.deepEqual(confirms, []);
-  pointMenu(env.controllers[1], xr, env.options.scene, "confirm");
+  xr.setShoppingState({ offers: Array.from({ length: 50 }, (_, i) => ({ id: `sku-${i}`, label: `Chair ${i}` })), pendingOfferId: "sku-49", canConfirm: true });
+  await xr.enter(); xr.update(); await openShop(env, xr);
+  assert.ok(xr.menuTargets.some((target) => target.id === "preview:sku-49"));
+  await pointMenu(env.controllers[1], xr, env.options.scene, "preview:sku-49");
+  assert.deepEqual(previews, [], "an already-previewed pending offer cannot be previewed again");
+  assert.equal(xr.menuTargets.find((target) => target.id === "preview:sku-49").disabled, true);
+  assert.deepEqual(confirms, []);
+  await pointMenu(env.controllers[1], xr, env.options.scene, "confirm");
   assert.deepEqual(confirms, [true]); xr.dispose();
 });
 
@@ -532,17 +539,21 @@ test("headset actions are bounded, disabled buttons block click-through, and mov
   const env = environment(); const actions = []; env.options.onAction = (id) => actions.push(id);
   const xr = createWorkspaceXR(env.options);
   xr.setShoppingState({ offers: [], actions: [{ id: "search-chair", label: "Find chairs" }, { id: "search-rug", label: "Find rugs", disabled: true }, ...Array.from({ length: 1000 }, (_, i) => ({ id: `action-${i}`, label: "Unknown action" }))] });
-  await xr.enter(); xr.update(); openShop(env, xr);
-  assert.ok(xr.menuTargets.length <= 10);
-  pointMenu(env.controllers[1], xr, env.options.scene, "action:search-chair");
+  await xr.enter(); xr.update(); await openShop(env, xr);
+  assert.ok(xr.menuTargets.length <= 20, "only known category/action controls render from an unbounded action list");
+  await pointMenu(env.controllers[1], xr, env.options.scene, "action:search-chair");
   assert.deepEqual(actions, ["search-chair"]);
-  pointMenu(env.controllers[1], xr, env.options.scene, "action:search-rug");
-  pointMenuPixel(env.controllers[1], xr, env.options.scene, 700, 700);
+  await pointMenu(env.controllers[1], xr, env.options.scene, "action:search-rug");
+  // Whitespace inside the catalog drawer is painted UI: it never selects the floor behind it.
+  pointMenuPixel(env.controllers[1], xr, env.options.scene, 1200, 70);
   assert.deepEqual(actions, ["search-chair"]); assert.equal(env.floorSelections.length, 0);
-  pointMenu(env.controllers[1], xr, env.options.scene, "tab-controls");
-  pointMenu(env.controllers[1], xr, env.options.scene, "locomotion");
-  assert.ok(drawnText.some((text) => text === "Use teleport"));
-  pointMenu(env.controllers[1], xr, env.options.scene, "exit");
+  await pointMenu(env.controllers[1], xr, env.options.scene, "tab-controls");
+  const before = dom.document.querySelector('[data-xr-id="locomotion"]').textContent;
+  await pointMenu(env.controllers[1], xr, env.options.scene, "locomotion");
+  // The control names the other mode, so a working toggle must change its label.
+  assert.notEqual(dom.document.querySelector('[data-xr-id="locomotion"]').textContent, before);
+  assert.match(dom.document.querySelector('[data-xr-id="locomotion"]').textContent, /walk|teleport/i);
+  await pointMenu(env.controllers[1], xr, env.options.scene, "exit");
   await Promise.resolve(); assert.equal(xr.active, false); xr.dispose();
 });
 
@@ -633,12 +644,13 @@ test("pitched tracked controller beam, menu cursor and activated target share th
   env.options.onPreviewOffer = (id) => previews.push(id);
   const xr = createWorkspaceXR(env.options);
   xr.setShoppingState({ offers: [{ id: "sku:pitch-test", label: "Measured chair" }] });
-  await xr.enter(); xr.update(); openShop(env, xr);
+  await xr.enter(); xr.update(); await openShop(env, xr);
   const controller = env.controllers[1];
   controller.dispatchEvent({ type: "connected", data: { handedness: "right", gamepad: { axes: [0, 0, 0, 0] } } });
   const rig = env.options.scene.getObjectByName("workspace-xr-rig");
   snapTurnXR(rig, trackedWorldPosition(env.head), Math.PI / 5);
   for (let frame = 0; frame < 120; frame++) xr.update(1 / 72);
+  await xr.menuWhenIdle();
   const menu = env.options.scene.getObjectByName("workspace-xr-menu");
   const target = xr.menuTargets.find((item) => item.id === "preview:sku:pitch-test");
   assert.ok(target);
@@ -681,10 +693,59 @@ test("Agent remains the default VR interface and confirms an arriving placement 
   assert.equal(xr.menuTab, "agent");
   xr.setShoppingState({ offers: [{ id: "agent:chair", label: "Agent-selected chair" }],
     pendingOfferId: "agent:chair", canConfirm: true });
+  await xr.menuWhenIdle();
   assert.equal(xr.menuTab, "agent", "an agent placement preview never redirects the wearer to manual catalog browsing");
   const confirm = xr.menuTargets.find((target) => target.id === "confirm");
   assert.ok(confirm && !confirm.disabled, "the placement confirmation is available directly in Agent");
-  pointMenu(env.controllers[1], xr, env.options.scene, "confirm");
+  await pointMenu(env.controllers[1], xr, env.options.scene, "confirm");
   assert.deepEqual(confirmations, [true]);
   assert.equal(xr.menuTab, "agent"); xr.dispose();
+});
+
+function aimControllerAtMenu(env, index) {
+  const menu = env.options.scene.getObjectByName("workspace-xr-menu"), controller = env.controllers[index];
+  menu.updateWorldMatrix(true, false);
+  const target = menu.localToWorld(new THREE.Vector3(0, 0, 0));
+  const origin = menu.localToWorld(new THREE.Vector3(.12, -.1, .6));
+  const world = new THREE.Matrix4().lookAt(origin, target, new THREE.Vector3(0, 1, 0)); world.setPosition(origin);
+  controller.matrixAutoUpdate = false;
+  controller.matrix.copy(controller.parent.matrixWorld).invert().multiply(world); controller.matrixWorldNeedsUpdate = true;
+  return controller;
+}
+function scrollableDOMPanel() {
+  const scroller = dom.document.querySelector("[data-xr-scroll]"); assert.ok(scroller, "real mounted panel has a scroll container");
+  Object.defineProperty(scroller, "scrollHeight", { configurable: true, value: 1600 });
+  Object.defineProperty(scroller, "clientHeight", { configurable: true, value: 500 });
+  return scroller;
+}
+
+test("aiming at the real DOM panel scrolls with the right stick without snap-turning while left walking remains available", async () => {
+  const env = environment({ realTracking: true }); delete env.options.locomotion;
+  const xr = createWorkspaceXR(env.options); await xr.enter(); xr.update(); await xr.menuWhenIdle();
+  // Lists scroll inside a drawer, as on the website; the open room has nothing to scroll.
+  xr.setShoppingState({ offers: [{ id: "sku-1", label: "Chair" }] }); await openShop(env, xr);
+  const scroller = scrollableDOMPanel();
+  aimControllerAtMenu(env, 1);
+  env.controllers[1].dispatchEvent({ type: "connected", data: { handedness: "right", gamepad: { axes: [0, 0, 1, 1] } } });
+  env.controllers[0].dispatchEvent({ type: "connected", data: { handedness: "left", gamepad: { axes: [0, 0, 0, -1] } } });
+  const before = trackedWorldPosition(env.head); xr.update(.05);
+  assert.equal(scroller.scrollTop, 26, "right vertical stick scrolls in CSS pixels at the bounded frame delta");
+  assert.equal(env.options.scene.getObjectByName("workspace-xr-rig").rotation.y, 0, "horizontal right input cannot turn the room while pointing at menu");
+  assert.ok(trackedWorldPosition(env.head).distanceTo(before.clone().add(new THREE.Vector3(0, 0, -.065))) < 1e-8);
+  await xr.menuWhenIdle(); xr.dispose();
+});
+
+test("browser focus recovery requires a neutral right stick before panel scrolling resumes", async () => {
+  const env = environment({ realTracking: true });
+  const xr = createWorkspaceXR(env.options); await xr.enter(); xr.update(); await xr.menuWhenIdle();
+  // Lists scroll inside a drawer, as on the website; the open room has nothing to scroll.
+  xr.setShoppingState({ offers: [{ id: "sku-1", label: "Chair" }] }); await openShop(env, xr);
+  const scroller = scrollableDOMPanel(), source = { handedness: "right", gamepad: { axes: [0, 0, 0, 1] } };
+  aimControllerAtMenu(env, 1); env.controllers[1].dispatchEvent({ type: "connected", data: source });
+  env.getSession().visibilityState = "visible-blurred"; xr.update(.05);
+  env.getSession().visibilityState = "visible"; xr.update(.05);
+  assert.equal(scroller.scrollTop, 0, "held browser/system stick input cannot scroll on resume");
+  source.gamepad.axes[3] = 0; xr.update(.05);
+  source.gamepad.axes[3] = 1; xr.update(.05); assert.equal(scroller.scrollTop, 26);
+  await xr.menuWhenIdle(); xr.dispose();
 });
