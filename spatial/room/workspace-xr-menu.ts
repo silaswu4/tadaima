@@ -18,7 +18,7 @@ export type XRMenuRuntime = {
   capture?: (host: HTMLElement) => Promise<HTMLCanvasElement>;
   minCaptureIntervalMs?: number;
 };
-type TargetRecord = { target: XRMenuTarget; button: HTMLElement };
+type TargetRecord = { target: XRMenuTarget; button: HTMLElement; radius: number };
 type Rect = { x: number; y: number; width: number; height: number };
 // The website's room overlay at its own CSS sizes, upscaled 2.25x so 11–13px text stays legible in the headset.
 const HOST_SCALE = XR_MENU_WIDTH / 640, HOST_WIDTH = 640, HOST_HEIGHT = Math.round(XR_MENU_HEIGHT / HOST_SCALE);
@@ -84,7 +84,45 @@ export function createXRMenu(callbacks: XRMenuCallbacks, runtime: XRMenuRuntime 
   let timer: ReturnType<typeof setTimeout> | undefined;
   let records: TargetRecord[] = [], solids: Rect[] = [], panel: ReturnType<typeof mountXRPanel> | undefined;
   const waiters = new Set<() => void>();
-  const interval = Math.max(0, runtime.minCaptureIntervalMs ?? 100), capture = runtime.capture ?? captureDOM;
+  // One html2canvas pass blocks the Quest's main thread for ~60–120 ms (5–9 frames at 72 Hz), so content
+  // changes are coalesced to at most one capture per 400 ms and hover never captures at all.
+  const interval = Math.max(0, runtime.minCaptureIntervalMs ?? 400), capture = runtime.capture ?? captureDOM;
+
+  // Hover is a small rounded tint over the measured button, one per controller ray: no React render,
+  // no rasterization and only a few-kilobyte texture upload, so sweeping the ray costs nothing.
+  const MENU_W = 1.04, MENU_H = 1.04 * XR_MENU_HEIGHT / XR_MENU_WIDTH;
+  const highlights = [0, 1].map(() => {
+    const surface = doc.createElement("canvas"); surface.width = surface.height = 8;
+    const map = new THREE.CanvasTexture(surface); map.colorSpace = THREE.SRGBColorSpace;
+    const quad = new THREE.Mesh(new THREE.PlaneGeometry(1, 1),
+      new THREE.MeshBasicMaterial({ map, transparent: true, depthTest: false, depthWrite: false, toneMapped: false }));
+    quad.name = "workspace-xr-menu-hover"; quad.renderOrder = 21; quad.visible = false; quad.raycast = () => {};
+    mesh.add(quad);
+    return { quad, surface, map, key: "" };
+  });
+  function placeHighlights() {
+    const active = hoveredIds.map((id) => records.find((record) => record.target.id === id)).filter((record): record is TargetRecord => !!record && !record.target.disabled);
+    highlights.forEach((highlight, index) => {
+      const record = active[index];
+      highlight.quad.visible = !!record;
+      if (!record) return;
+      const { x, y, width, height } = record.target;
+      highlight.quad.scale.set(width / XR_MENU_WIDTH * MENU_W, height / XR_MENU_HEIGHT * MENU_H, 1);
+      highlight.quad.position.set(((x + width / 2) / XR_MENU_WIDTH - .5) * MENU_W, (.5 - (y + height / 2) / XR_MENU_HEIGHT) * MENU_H, .002);
+      const key = `${Math.round(width)}x${Math.round(height)}r${Math.round(record.radius)}`;
+      if (key === highlight.key) return;
+      highlight.key = key;
+      const surface = highlight.surface, w = Math.max(8, Math.round(width / 2)), h = Math.max(8, Math.round(height / 2));
+      surface.width = w; surface.height = h;
+      const ctx = surface.getContext("2d");
+      if (!ctx) return;
+      const r = Math.min(record.radius / 2, w / 2, h / 2);
+      ctx.clearRect(0, 0, w, h); ctx.beginPath(); ctx.roundRect?.(1.5, 1.5, w - 3, h - 3, Math.max(0, r - 1.5));
+      ctx.fillStyle = "rgba(43, 26, 16, 0.12)"; ctx.fill();
+      ctx.lineWidth = 2; ctx.strokeStyle = "rgba(43, 26, 16, 0.34)"; ctx.stroke();
+      highlight.map.dispose(); highlight.map.needsUpdate = true;
+    });
+  }
 
   function buttonDisabled(button: HTMLElement) {
     return (button as HTMLButtonElement).disabled === true || button.getAttribute("aria-disabled") === "true";
@@ -102,7 +140,8 @@ export function createXRMenu(callbacks: XRMenuCallbacks, runtime: XRMenuRuntime 
       const right = Math.min(bounds.right, rect.right, scroll?.right ?? Infinity), bottom = Math.min(bounds.bottom, rect.bottom, scroll?.bottom ?? Infinity);
       if (right <= left || bottom <= top) return [];
       seen.add(id);
-      return [{ button, target: { id, x: (left - bounds.left) / bounds.width * XR_MENU_WIDTH,
+      const radius = Math.min(parseFloat(style?.borderTopLeftRadius ?? "0") || 0, rect.height / 2) / bounds.width * XR_MENU_WIDTH;
+      return [{ button, radius, target: { id, x: (left - bounds.left) / bounds.width * XR_MENU_WIDTH,
         y: (top - bounds.top) / bounds.height * XR_MENU_HEIGHT, width: (right - left) / bounds.width * XR_MENU_WIDTH,
         height: (bottom - top) / bounds.height * XR_MENU_HEIGHT, disabled: buttonDisabled(button) } }];
     });
@@ -161,9 +200,9 @@ export function createXRMenu(callbacks: XRMenuCallbacks, runtime: XRMenuRuntime 
       context!.clearRect(0, 0, XR_MENU_WIDTH, XR_MENU_HEIGHT); context!.drawImage(result, 0, 0, XR_MENU_WIDTH, XR_MENU_HEIGHT);
       texture.needsUpdate = true; failed = false;
       if (request === paintRequest && expectedLayout === layoutEpoch) {
-        records = items; paintedState = expectedState; paintedLayout = expectedLayout;
+        records = items; paintedState = expectedState; paintedLayout = expectedLayout; placeHighlights();
       } else {
-        records = []; paintedState = paintedLayout = -1; dirty = true;
+        records = []; paintedState = paintedLayout = -1; dirty = true; placeHighlights();
       }
     } catch {
       if (!disposed && request === paintRequest && expectedState === stateEpoch) { failed = true; drawFailure(); }
@@ -174,12 +213,12 @@ export function createXRMenu(callbacks: XRMenuCallbacks, runtime: XRMenuRuntime 
   function navigate(next: XRMenuTab) {
     if (disposed || !TABS.includes(next)) return;
     if (tab === next) { if (failed) requestPaint(); return; }
-    tab = next; hoveredIds = []; stateEpoch++; render();
+    tab = next; hoveredIds = []; placeHighlights(); stateEpoch++; render();
   }
   function props(): XRPanelProps {
     const epoch = stateEpoch;
     return {
-      state, locomotion, tab, hoveredIds, onNavigate: navigate,
+      state, locomotion, tab, onNavigate: navigate,
       onAction(id) {
         const action = state.actions?.find((item) => item.id === id);
         if (!disposed && action && !action.disabled && (!state.busy || id.startsWith("voice-"))) callbacks.onAction(id);
@@ -238,7 +277,7 @@ export function createXRMenu(callbacks: XRMenuCallbacks, runtime: XRMenuRuntime 
       if (disposed || paintedState !== stateEpoch || paintedLayout !== layoutEpoch) return;
       const ids = [...new Set(uvs.map(hit).filter((item): item is TargetRecord => !!item && !item.target.disabled).map(({ target }) => target.id))].sort();
       if (JSON.stringify(ids) === JSON.stringify(hoveredIds)) return;
-      hoveredIds = ids; render();
+      hoveredIds = ids; placeHighlights();
     },
     activate(uv: THREE.Vector2) {
       if (disposed || paintedState !== stateEpoch || paintedLayout !== layoutEpoch) return;
@@ -267,6 +306,7 @@ export function createXRMenu(callbacks: XRMenuCallbacks, runtime: XRMenuRuntime 
       doc.fonts?.removeEventListener("loadingdone", layoutChanged);
       host.removeEventListener("load", layoutChanged, true); host.removeEventListener("error", layoutChanged, true); host.removeEventListener("scroll", layoutChanged, true);
       panel?.dispose(); panel = undefined; host.remove(); metricsStyle.remove(); records = []; solids = [];
+      highlights.forEach(({ quad, map }) => { quad.geometry.dispose(); quad.material.dispose(); map.dispose(); });
       mesh.removeFromParent(); mesh.geometry.dispose(); material.dispose(); texture.dispose(); settle();
     },
   };

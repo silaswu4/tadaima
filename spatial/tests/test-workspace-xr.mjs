@@ -2,7 +2,7 @@ import { createXRDOMFixture } from "./xr-menu-dom-fixture.mjs";
 import assert from "node:assert/strict";
 import test, { after } from "node:test";
 import * as THREE from "three";
-import { checkWorkspaceXRSupport, createWorkspaceXR, readXRThumbstick, snapTurnXR, teleportXR, walkXR } from "../room/workspace-xr.ts";
+import { checkWorkspaceXRSupport, createWorkspaceXR, readXRThumbstick, snapTurnXR, teleportXR, walkXR, XR_HUD_DISTANCE, XR_HUD_DROP } from "../room/workspace-xr.ts";
 import { XR_MENU_WIDTH, XR_MENU_HEIGHT } from "../room/workspace-xr-menu.ts";
 
 
@@ -144,8 +144,8 @@ test("session entry spawns at floor scale, and exit restores the exact desktop c
   assert.ok(Math.abs(env.head.position.z - 2) < 1e-10);
   assert.ok(Math.abs(env.head.position.y - 1.72) < 1e-10);
   const hud = env.options.scene.getObjectByName("workspace-xr-shopping");
-  assert.ok(Math.abs(Math.hypot(hud.position.x - env.head.position.x, hud.position.z - env.head.position.z) - 1.25) < 1e-10);
-  assert.ok(Math.abs(hud.position.y - (env.head.position.y - .12)) < 1e-10);
+  assert.ok(Math.abs(Math.hypot(hud.position.x - env.head.position.x, hud.position.z - env.head.position.z) - XR_HUD_DISTANCE) < 1e-10);
+  assert.ok(Math.abs(hud.position.y - (env.head.position.y - XR_HUD_DROP)) < 1e-10);
   await xr.exit();
   assert.equal(xr.active, false);
   assert.equal(env.options.camera.parent, env.original.parent);
@@ -565,10 +565,15 @@ function trackedWorldPosition(head) {
 function assertMenuFollowsHead(env) {
   const hud = env.options.scene.getObjectByName("workspace-xr-shopping");
   const head = trackedWorldPosition(env.head);
-  assert.ok(Math.abs(Math.hypot(hud.position.x - head.x, hud.position.z - head.z) - 1.25) < 1e-8,
-    "menu remains 1.25m from the rig-adjusted tracked head");
-  assert.ok(Math.abs(hud.position.y - head.y + .12) < 1e-8, "menu follows tracked eye height");
-  assert.ok(Math.abs(hud.rotation.x) < 1e-8 && Math.abs(hud.rotation.z) < 1e-8, "head pitch never tilts menu");
+  assert.ok(Math.abs(Math.hypot(hud.position.x - head.x, hud.position.z - head.z) - XR_HUD_DISTANCE) < 1e-8,
+    "menu keeps its distance from the rig-adjusted tracked head");
+  assert.ok(Math.abs(hud.position.y - head.y + XR_HUD_DROP) < 1e-8, "menu rests below tracked eye height");
+  // It faces the eyes: its normal points from the panel back up to the head.
+  const normal = new THREE.Vector3(0, 0, 1).applyQuaternion(hud.getWorldQuaternion(new THREE.Quaternion()));
+  assert.ok(normal.angleTo(head.clone().sub(hud.position).normalize()) < 1e-6, "menu is tilted to face the wearer");
+  // The tablet tilt is fixed by the rest position; looking up or down never changes it, and it never rolls.
+  const euler = new THREE.Euler().setFromQuaternion(hud.quaternion, "YXZ");
+  assert.ok(Math.abs(euler.x + Math.atan2(XR_HUD_DROP, XR_HUD_DISTANCE)) < 1e-8 && Math.abs(euler.z) < 1e-8, "head pitch never tilts menu");
   return hud;
 }
 
@@ -748,4 +753,26 @@ test("browser focus recovery requires a neutral right stick before panel scrolli
   source.gamepad.axes[3] = 0; xr.update(.05);
   source.gamepad.axes[3] = 1; xr.update(.05); assert.equal(scroller.scrollTop, 26);
   await xr.menuWhenIdle(); xr.dispose();
+});
+
+test("holding A or X talks to the agent and releasing sends, without aiming at the menu", async () => {
+  const env = environment(); const actions = []; env.options.onAction = (id) => actions.push(id);
+  const xr = createWorkspaceXR(env.options);
+  const voice = (listening, disabled = false) => xr.setShoppingState({ offers: [], actions: [{ id: "voice-toggle", label: "Talk", disabled }],
+    agent: { available: true, connected: listening, listening, status: listening ? "Listening" : "Ready" } });
+  voice(false); await xr.enter(); xr.update();
+  const buttons = Array.from({ length: 6 }, () => ({ pressed: false })), source = { handedness: "right", gamepad: { axes: [0, 0, 0, 0], buttons } };
+  env.controllers[1].dispatchEvent({ type: "connected", data: source });
+  buttons[4].pressed = true; xr.update(1 / 72); xr.update(1 / 72);
+  assert.deepEqual(actions, ["voice-toggle"], "press starts listening once, however long it is held");
+  voice(true); buttons[4].pressed = false; xr.update(1 / 72);
+  assert.deepEqual(actions, ["voice-toggle", "voice-toggle"], "release sends what was said");
+  // A quick tap released before the microphone connects still sends once listening begins.
+  voice(false); buttons[4].pressed = true; xr.update(1 / 72); buttons[4].pressed = false; xr.update(1 / 72);
+  assert.equal(actions.length, 3);
+  voice(true); xr.update(1 / 72); xr.update(1 / 72);
+  assert.equal(actions.length, 4, "the deferred send fires exactly once");
+  // Voice unavailable on this server: the button does nothing.
+  voice(false, true); buttons[4].pressed = true; xr.update(1 / 72);
+  assert.equal(actions.length, 4); xr.dispose();
 });

@@ -5,6 +5,12 @@ import { createXRMenu, XR_MENU_INK } from "./workspace-xr-menu";
 import type { XRMenuRuntime } from "./workspace-xr-menu";
 import { insideFloor } from "./window-daylight";
 
+/**
+ * The menu rests low and angled up toward the eyes, like a tablet held in front of the chest,
+ * so the room stays clear straight ahead. Glance down to use it; left grip brings it back.
+ */
+export const XR_HUD_DISTANCE = 1.0, XR_HUD_DROP = .42, XR_HUD_SCALE = .85;
+
 export type WorkspaceXRSupport = { supported: boolean; reason: string };
 /** Display-only offers supplied by the application's shopping state. */
 export type WorkspaceXROffer = { id: string; label: string; detail?: string; product?: ProductCandidate; fits?: boolean; withinBudget?: boolean | null; problems?: string[]; source?: "catalog" | "live" };
@@ -138,6 +144,7 @@ export function createWorkspaceXR(options: WorkspaceXROptions) {
   rig.name = "workspace-xr-rig";
   scene.add(rig);
   const hud = new THREE.Group();
+  hud.scale.setScalar(XR_HUD_SCALE);
   hud.name = "workspace-xr-shopping";
   hud.visible = false;
   scene.add(hud);
@@ -163,6 +170,8 @@ export function createWorkspaceXR(options: WorkspaceXROptions) {
   let shoppingKey = "";
   let locomotion: WorkspaceXRLocomotion = options.locomotion ?? "walk";
   let resumeNeutral = false;
+  // Push-to-talk on A/X: hold to speak, release to send, wherever the wearer is looking.
+  let talkButtonHeld = false, sendOnListen = false;
   const menu = createXRMenu({
     onPreviewOffer: (id) => options.onPreviewOffer?.(id), onConfirmOffer: () => options.onConfirmOffer?.(),
     onAction: (id) => options.onAction?.(id),
@@ -201,8 +210,10 @@ export function createWorkspaceXR(options: WorkspaceXROptions) {
   }
   function positionHud() {
     const head = headPosition();
-    hud.position.copy(head).add(new THREE.Vector3(-Math.sin(hudYaw) * 1.25, -.12, -Math.cos(hudYaw) * 1.25));
+    hud.position.copy(head).add(new THREE.Vector3(-Math.sin(hudYaw) * XR_HUD_DISTANCE, -XR_HUD_DROP, -Math.cos(hudYaw) * XR_HUD_DISTANCE));
+    // Face the eyes squarely: yaw toward the head, then tip the top back by the viewing angle.
     hud.lookAt(new THREE.Vector3(head.x, hud.position.y, head.z));
+    hud.rotateX(-Math.atan2(XR_HUD_DROP, XR_HUD_DISTANCE));
     hud.updateWorldMatrix(true, true);
   }
   function placeHud() {
@@ -248,6 +259,21 @@ export function createWorkspaceXR(options: WorkspaceXROptions) {
       }
     });
     menu.setHovered(hovered);
+  }
+
+  function pushToTalk(held: boolean) {
+    const toggle = shopping.actions?.find((action) => action.id === "voice-toggle");
+    const listening = Boolean(shopping.agent?.listening);
+    if (held && !talkButtonHeld) {
+      sendOnListen = false;
+      if (toggle && !toggle.disabled && !listening) options.onAction?.("voice-toggle");
+    } else if (!held && talkButtonHeld) {
+      // Releasing sends. If the first press is still connecting, send as soon as listening starts.
+      if (listening) options.onAction?.("voice-toggle"); else sendOnListen = true;
+    } else if (!held && sendOnListen && listening) {
+      sendOnListen = false; options.onAction?.("voice-toggle");
+    }
+    talkButtonHeld = held;
   }
 
   function validFloor(point: THREE.Vector3) {
@@ -376,6 +402,7 @@ export function createWorkspaceXR(options: WorkspaceXROptions) {
     menu.setHovered([]); menuPointers.forEach((pointer) => { pointer.visible = false; });
     rig.position.set(0, 0, 0); rig.rotation.set(0, 0, 0);
     initialHeadPlaced = teleportHeld = snapLatched = false;
+    talkButtonHeld = sendOnListen = false;
     resumeNeutral = false;
     teleportTarget = null;
     for (const controller of controllers) for (const child of controller.children) child.visible = false;
@@ -480,8 +507,11 @@ export function createWorkspaceXR(options: WorkspaceXROptions) {
       let panelScroll = 0;
       let menuStickHeld = false;
       let walk = { right: 0, forward: 0 };
+      let talkHeld = false;
       for (const controller of controllers) {
         const source = sourceByController.get(controller);
+        // xr-standard button 4 is A (right) / X (left) on Touch controllers.
+        if (controller.visible && source?.gamepad?.buttons?.[4]?.pressed) talkHeld = true;
         const axes = source?.gamepad?.axes;
         if (!controller.visible || !axes || axes.length < 2 || axes.some((axis) => !Number.isFinite(axis))) {
           if (source?.handedness === "left") { teleportHeld = false; teleportTarget = null; }
@@ -504,6 +534,7 @@ export function createWorkspaceXR(options: WorkspaceXROptions) {
           } else turn = x;
         }
       }
+      pushToTalk(talkHeld);
       if (resumeNeutral) {
         if (Math.hypot(walk.forward, walk.right) > 0 || Math.abs(turn) > .3 || menuStickHeld) { followHud(deltaSeconds); updateMenuPointers(); return; }
         resumeNeutral = false;

@@ -17,7 +17,6 @@ export type XRPanelProps = {
   state: WorkspaceXRShopping;
   locomotion: WorkspaceXRLocomotion;
   tab: XRPanelTab;
-  hoveredIds: readonly string[];
   onNavigate(tab: XRPanelTab): void;
   onAction(id: string): void;
   onPreviewOffer(id: string): void;
@@ -38,7 +37,7 @@ const shortName = (label: string) => label.split(",")[0];
  * same buttons, so the headset shows the website's UI floating over the room.
  */
 export function RoomXRPanel(props: XRPanelProps) {
-  const { state, tab, hoveredIds, locomotion } = props;
+  const { state, tab, locomotion } = props;
   const [category, setCategory] = useState<FurnitureCategory>("chair");
   const actions = new Map((state.actions ?? []).map((action) => [action.id, action]));
   const enabled = (id: string) => actions.has(id) && !actions.get(id)?.disabled;
@@ -53,9 +52,9 @@ export function RoomXRPanel(props: XRPanelProps) {
   const results = !drawer && !pending && state.offers.length > 0;
   useLayoutEffect(() => { props.onLayout(); });
 
-  /** Every ray target is a real button: same element, same click handler, hover mirrored from the controller. */
+  /** Every ray target is a real button: same element, same click handler. Hover is drawn by the XR adapter. */
   function hit(id: string, className: string, label: ReactNode, onClick: () => void, options: { disabled?: boolean; ariaLabel?: string; pressed?: boolean; live?: boolean; filled?: boolean } = {}) {
-    return <button type="button" className={className} data-xr-id={id} tabIndex={-1} data-xr-hover={hoveredIds.includes(id) || undefined}
+    return <button type="button" className={className} data-xr-id={id} tabIndex={-1}
       data-live={options.live || undefined} data-filled={options.filled || undefined} aria-pressed={options.pressed} aria-label={options.ariaLabel} disabled={options.disabled} onClick={onClick}>{label}</button>;
   }
   const action = (id: string, className: string, label: ReactNode, ariaLabel?: string, filled?: boolean) => {
@@ -84,7 +83,7 @@ export function RoomXRPanel(props: XRPanelProps) {
       source={offer.source} actionLabel={state.pendingOfferId === offer.id ? "In your room" : "Add to room"} onPreview={() => props.onPreviewOffer(offer.id)}
       disabled={state.busy || offer.withinBudget === false || state.pendingOfferId === offer.id}
       canPreview={placeable(offer)}
-      xrId={`preview:${offer.id}`} hovered={hoveredIds.includes(`preview:${offer.id}`)} linkToSource={false} rasterizable onLayout={props.onLayout} />;
+      xrId={`preview:${offer.id}`} linkToSource={false} rasterizable onLayout={props.onLayout} />;
   }
 
   const head = (title: string, sub?: string) => <div className="room-x__panel-head">
@@ -154,7 +153,7 @@ export function RoomXRPanel(props: XRPanelProps) {
         <div className="room-voice">
           {agent?.caption || agent?.activity || agent?.error ? <p className="room-voice__caption" data-error={agent.error ? true : undefined} role="status">{agent.error || agent.caption || agent.activity}</p> : null}
           {agent?.available ? <>
-            <span className="room-voice__beam">{action("voice-toggle", "room-x__pill room-voice__btn", <>{agent.listening ? "Send" : "Talk"}<span className="room-voice__key" aria-hidden="true">trigger</span></>)}</span>
+            <span className="room-voice__beam">{action("voice-toggle", "room-x__pill room-voice__btn", <>{agent.listening ? "Send" : "Talk"}<span className="room-voice__key" aria-hidden="true">hold A</span></>)}</span>
             {agent.connected || agent.listening ? action("voice-stop", "room-x__pill room-voice__mute", "End") : null}
           </> : <span className="room-x__pill room-voice__btn" aria-disabled="true">Voice unavailable</span>}
         </div>
@@ -208,6 +207,7 @@ export function RoomXRPanel(props: XRPanelProps) {
           ["Left stick", locomotion === "walk" ? "Walk where you’re facing" : "Aim at the floor, release to teleport"],
           ["Right stick", "Snap turn · scrolls a panel you point at"],
           ["Trigger", "Choose a piece or press a button"],
+          ["A or X", "Hold to talk to Tadaima, release to send"],
           ["Left grip", "Bring this menu in front of you"],
           ["Right grip", "Hide or show this menu"],
         ] as const).map(([control, use]) => <li key={control} className="room-x__line">

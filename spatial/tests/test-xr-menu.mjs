@@ -55,12 +55,15 @@ test("surface resources stay stable, identical state and repeated hover do not r
   const { dom, menu, state, uv } = await fixture(t);
   const resources = [menu.mesh.geometry, menu.mesh.material, menu.mesh.material.map], before = dom.captures();
   menu.setState({ ...state }, "walk"); await settleXRMenu(menu); assert.equal(dom.captures(), before);
+  // Hover must never rasterize: one capture blocks the Quest main thread for 60–120 ms.
+  const quads = () => menu.mesh.children.filter((child) => child.name === "workspace-xr-menu-hover" && child.visible);
   menu.setHovered([uv("preview:sku:chair")]); await settleXRMenu(menu);
-  assert.equal(dom.document.querySelector('[data-xr-id="preview:sku:chair"]').getAttribute("data-xr-hover"), "true");
-  const hoveredCaptures = dom.captures();
-  menu.setHovered([uv("preview:sku:chair")]); await settleXRMenu(menu); assert.equal(dom.captures(), hoveredCaptures);
-  menu.setHovered([]); await settleXRMenu(menu);
-  assert.equal(dom.document.querySelector('[data-xr-id="preview:sku:chair"]').hasAttribute("data-xr-hover"), false);
+  assert.equal(dom.captures(), before, "hovering a button draws a highlight without recapturing the DOM");
+  const target = menu.targets.find((item) => item.id === "preview:sku:chair"), [quad] = quads();
+  assert.equal(quads().length, 1);
+  assert.ok(Math.abs(quad.position.x - ((target.x + target.width / 2) / XR_MENU_WIDTH - .5) * 1.04) < 1e-9, "the highlight sits on the hovered button");
+  menu.setHovered([uv("preview:sku:chair")]); menu.setHovered([]); await settleXRMenu(menu);
+  assert.equal(quads().length, 0); assert.equal(dom.captures(), before);
   assert.deepEqual([menu.mesh.geometry, menu.mesh.material, menu.mesh.material.map], resources);
 });
 
