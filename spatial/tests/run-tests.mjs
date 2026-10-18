@@ -3,7 +3,7 @@
  * Backend aliases/JSON tests use the application's tsx loader separately. */
 import { spawnSync } from "node:child_process";
 const groups = [
-  ["--experimental-strip-types", "--test", ...["test-captured-model.mjs", "test-textured-model.mjs", "test-captured-furniture.mjs", "test-explode.mjs", "test-room-appearance.mjs", "test-navigation.mjs", "test-quest-open.mjs", "test-walk-source.mjs", "test-walk-input.mjs", "test-walk-revision.mjs", "test-walk-material.mjs", "test-walk-authority.mjs"].map((file) => `spatial/tests/${file}`)],
+  ["--experimental-strip-types", "--test", ...["test-captured-model.mjs", "test-textured-model.mjs", "test-captured-furniture.mjs", "test-explode.mjs", "test-room-appearance.mjs", "test-navigation.mjs", "test-quest-open.mjs", "test-walk-source.mjs", "test-walk-input.mjs", "test-walk-revision.mjs", "test-walk-material.mjs", "test-walk-authority.mjs", "test-indoor-lighting.mjs", "test-shadow-cache.mjs"].map((file) => `spatial/tests/${file}`)],
   ["--import", "tsx", "--test", "spatial/tests/test-workspace-xr.mjs", "spatial/tests/test-local-shopping.mjs", "reconstruction/local-preview.test.ts", "spatial/tests/test-walk-shopping.mjs", "spatial/tests/test-room-registry.mjs"],
 ];
 for (const args of groups) {

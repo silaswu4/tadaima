@@ -11,6 +11,8 @@ import { LIBRARY, assetFor, assetTransform, itemAsset, type LibraryModel } from 
 import type { AddRequest, WalkCallbacks, WalkItem, WalkMode, WalkOptions, WalkProductPreview, WalkProductPreviewOptions, WalkScene } from "./walk-api";
 import { block, rug, standingLamp, surface } from "./parts";
 import { createRoomLighting, setMetricSurfaceUVs } from "./lighting";
+import { createIndoorLighting, fitRoomShadow } from "./indoor-lighting";
+import { createShadowCache } from "./shadow-cache";
 import { createFurnitureProxy, placeFurnitureModel } from "./furniture-model";
 import { galleryPart } from "./gallery-parts";
 import { createPanel } from "./labels";
@@ -177,7 +179,10 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(BACKGROUND);
   const lighting = createRoomLighting(renderer, scene, lite);
-  scene.add(new THREE.HemisphereLight("#eef2ff", "#b6a48c", 0.55));
+  const hemisphere = new THREE.HemisphereLight("#eef2ff", "#b6a48c", 0.55);
+  scene.add(hemisphere);
+  const shadowCache = createShadowCache(renderer.shadowMap, scene);
+  let indoorLighting: ReturnType<typeof createIndoorLighting> | null = null;
   const sun = new THREE.DirectionalLight("#fff3e0", 2.4);
   sun.castShadow = true;
   sun.shadow.mapSize.setScalar(lite ? 1024 : 2048);
@@ -333,18 +338,7 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
     const span = roomBounds.getSize(new THREE.Vector3()).length();
     sun.target.position.copy(roomCenter);
     sun.position.copy(roomCenter).addScaledVector(direction, Math.max(12, span * 1.5));
-    sun.target.updateMatrixWorld();
-    sun.updateMatrixWorld();
-    sun.shadow.updateMatrices(sun);
-    const lightBounds = roomBounds.clone().expandByScalar(0.3).applyMatrix4(sun.shadow.camera.matrixWorldInverse);
-    const cam = sun.shadow.camera;
-    cam.left = lightBounds.min.x;
-    cam.right = lightBounds.max.x;
-    cam.bottom = lightBounds.min.y;
-    cam.top = lightBounds.max.y;
-    cam.near = Math.max(0.1, -lightBounds.max.z - 2);
-    cam.far = Math.max(cam.near + 1, -lightBounds.min.z + 2);
-    cam.updateProjectionMatrix();
+    fitRoomShadow(sun, roomBounds);
   }
 
   // ------------------------------------------------------------ overlays
@@ -462,13 +456,15 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
       while (owner && !owner.userData.role) owner = owner.parent;
       if (owner?.userData.role !== "room_floor") envMeshes.push(node);
     });
-    // This room was captured indoors at night. Avoid an invented directional sunlight beam.
+    // Match the Blender indoor rig's warm key/fill balance. A shadowed indoor
+    // proxy restores contact depth without inventing an exterior sun beam.
     if (bound.representation === "photo_informed_parametric") {
-      sun.intensity = .15; sun.castShadow = false;
-      const soft = new THREE.PointLight("#fff2d9", 45, 0, 2);
-      soft.position.set(roomCenter.x, Math.max(2, roomBounds.max.y - .25), roomCenter.z);
-      scene.add(soft);
+      indoorLighting = createIndoorLighting(scene, sun, hemisphere, roomBounds, lite);
+      indoorLighting.setImmersive(renderer.xr.isPresenting);
+      renderer.toneMappingExposure = 1;
     }
+    applyWallMode();
+    shadowCache.invalidate();
     pickDirty = true;
   })() : Promise.resolve();
 
@@ -1020,6 +1016,8 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
     const was = exploder.isExploded;
     exploder.dispose(); exploder = null;
     for (const entry of entries.values()) syncEntry(entry);
+    fitRoomShadow(sun, roomBounds);
+    shadowCache.invalidate();
     if (was && mode === "orbit" && !disposed) fitOrbit();
     if (was) callbacks.onExplodeChange?.(false);
   }
@@ -1032,6 +1030,8 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
     restoreCanonical();
     exploder = makeExplodeController([...entries].map(([id, entry]) => ({ id, object: entry.root })), roomBounds, { reducedMotion: reduced });
     exploder.setExploded(true, performance.now());
+    fitRoomShadow(sun, exploder.getDisplayBounds());
+    shadowCache.invalidate();
     fitOrbit();
     callbacks.onExplodeChange?.(true);
   }
@@ -1590,6 +1590,8 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
     onPreviewOffer: (id) => callbacks.onPreviewOffer?.(id),
     onConfirmOffer: () => callbacks.onConfirmOffer?.(),
     onSessionChange: (active) => {
+      indoorLighting?.setImmersive(active);
+      shadowCache.invalidate();
       setMoveInput({ forward: 0, right: 0 }); hoverId = null;
       controls.enabled = !active && mode === "orbit";
       if (active && document.pointerLockElement === canvas) document.exitPointerLock();
@@ -1599,6 +1601,10 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
     },
     onError: (message) => callbacks.onError(message),
   });
+  // The workspace factory establishes its defaults first. XR framebuffer size
+  // must be set before entering a session; desktop pixel ratio does not set it.
+  renderer.xr.setFramebufferScaleFactor(.85);
+  renderer.xr.setFoveation(.6);
   async function xrSupported() { return (await xr!.checkSupport()).supported; }
   async function enterXR() {
     if (moving) cancelMove();
@@ -1722,6 +1728,7 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
     if (!presenting) hoverId = mouseOnCanvas || pointerLocked || mode === "walk" ? pickAt(usesCenter() ? center : mouse) : null;
     updateOverlays();
     if (itemsDirty) emitItems();
+    shadowCache.update();
     renderer.render(scene, camera);
   }
 
@@ -1773,6 +1780,8 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
     canvas.style.touchAction = previousTouchAction;
     controls.dispose();
     lighting.dispose();
+    indoorLighting?.dispose();
+    shadowCache.dispose();
     const roots: THREE.Object3D[] = [scene, ...allRoots];
     for (const op of undoStack) {
       if (op.kind === "remove") roots.push(op.entry.root);

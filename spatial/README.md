@@ -200,3 +200,13 @@ See [Quest setup](../docs/quest-setup.md) for USB localhost forwarding and the p
 Run the complete spatial suite with `npm run test:spatial`. It runs existing Three.js ESM fixtures with native Node type stripping, and backend-alias/JSON/XR tests through `tsx` separately. Running every file through `tsx` creates different ESM/CJS Three.js constructor identities and invalidates `instanceof` fixture checks; do not misdiagnose that harness mismatch as a model failure. Run `npm test`, `npx tsc --noEmit`, `npm run lint` and `npm run build` as well. This repository enables Next.js cache components, so new route handlers must avoid incompatible `runtime`/`dynamic` segment exports; the private handler uses request headers and no-store responses.
 
 Automated XR tests cover synthetic controller rays, tracking loss, teleport cancellation, snap turns, HUD bounds, entry/exit/reentry/disposal races and camera restoration. They do not establish Quest frame rate, controller feel or comfort; those remain physical-device checks.
+
+### Indoor lighting in the main room flow
+
+The photo-informed scanned room at `/rooms/[roomId]` uses `indoor-lighting.ts`: a warm shadowed key, restrained HDR/hemisphere fill, an unshadowed bounce approximation and two broad desktop area fills. This recreates the Blender indoor rig's light balance in real time; it is not a Cycles render or baked lightmap. The original `.blend`, GLB materials and source binding remain unchanged. Raw photo-projected references keep their separate unlit rendering policy.
+
+Desktop uses one 2048px PCF shadow map. Mobile and immersive VR use one 1024px map and hide the area fills; VR explicitly applies this budget even with a large viewport or fine pointer. XR framebuffer scale is 0.85 with foveation 0.6, configured before session entry. There are no point-light shadow cubes, screen-space effects or stereo postprocessing passes.
+
+`shadow-cache.ts` updates the depth map only when visible caster transforms, geometry or visibility change, or when the light/frustum is invalidated. Walking and head motion reuse it; furniture movement, placement, async model loading, storage, undo, cutaway changes and explode refresh it. Explode expands the shadow frustum to include the inventory and restores it on return. The cache is intended for this static-mesh room pipeline, not animated skeletal or morph-target assets.
+
+The spatial suite includes lighting-budget, XR profile restore, shadow-frustum and cache invalidation regressions. Physical Quest frame rate still needs device verification. API references: [Three.js shadow caching](https://threejs.org/docs/pages/LightShadow.html), [WebXR resolution and foveation](https://threejs.org/docs/pages/WebXRManager.html).
