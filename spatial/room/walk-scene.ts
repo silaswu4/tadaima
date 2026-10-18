@@ -2443,6 +2443,13 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
   if (process.env.NODE_ENV !== "production") {
     (canvas as HTMLCanvasElement & { __walkDev?: unknown }).__walkDev = {
       api,
+      /** Orbit view only: aim the camera at a point from another point. */
+      look(target: [number, number, number], from: [number, number, number]) {
+        if (mode !== "orbit") return;
+        controls.target.set(...target);
+        camera.position.set(...from);
+        controls.update();
+      },
       project(x: number, y: number, z: number) {
         const p = new THREE.Vector3(x, y, z).project(camera);
         const rect = canvas.getBoundingClientRect();

@@ -80,3 +80,17 @@ describe("collisions from model-derived parts", () => {
     assert.equal(collides(seat(2.0), diningTable), false, "chair under a tall table (canShare)");
   });
 });
+
+describe("dragCheck carries the model-derived parts", () => {
+  type Box = [number, number, number, number, number, number];
+  // scanned pieces often have no useful category, so only their parts can let a chair tuck in
+  const table = { ...piece("table", "other", [1.4, 0.75, 0.8], 2.5, 2.0), collision: [[0, 0.73, 0, 1.4, 0.04, 0.8], [0, 0.355, 0, 0.12, 0.71, 0.12]] as Box[] };
+  const scanned = { ...piece("chair", "other", [0.5, 0.78, 0.5], 3.6, 2.0), collision: [[0, 0.21, 0, 0.5, 0.42, 0.5], [0, 0.6, -0.235, 0.5, 0.36, 0.03]] as Box[] };
+  const plan = { ...demoPlan, items: [table, scanned], constraints: { ...demoPlan.constraints, clearance: 0.03 } };
+  test("a scanned chair slides under a scanned table while held", () => {
+    // facing -Z from the table's +Z side: seat under the top, backrest still outside the 2.4 edge
+    const d = dragCheck(plan, "chair", [2.9, 0, 2.25], Math.PI);
+    assert.ok(d.fits, d.problems.join(" "));
+    assert.equal(dragCheck(plan, "chair", [2.9, 0, 2.1], Math.PI).fits, false, "backrest into the tabletop");
+  });
+});
