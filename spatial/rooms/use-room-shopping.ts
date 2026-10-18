@@ -1,10 +1,11 @@
 "use client";
 
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
-import type { FloorSpot, Job, RoomPlan, ShopJobOutput, ShopRequest } from "../../backend/contracts";
+import type { FloorSpot, Job, PlanProposal, RoomPlan, ShopJobOutput, ShopRequest } from "../../backend/contracts";
 import { roomClient } from "../../backend/client";
 import { localRoomSnapshot, mutationMessage, registerRoom, syncRoom, type RegisteredRoom } from "../../backend/room-session-client";
 import type { WalkScene } from "../room/walk-api";
+import { AgentRevisionConflict, applyRoomProposal, requestRoomProposal } from "./agent-operations";
 
 type Options = { roomId: string; sourceProjectId: string; persist?: (plan: RoomPlan) => Promise<void>; notice: (message: string) => void };
 
@@ -82,6 +83,7 @@ export function useRoomShopping(options: Options) {
   const refresh = useCallback(() => mutate(async (active) => {
     const latest = await roomClient(active.session.plan.projectId).get();
     await apply(latest.plan, active.epoch);
+    return latest.plan;
   }), [mutate, apply]);
 
   const sync = useCallback((snapshot: RoomPlan) => {
@@ -136,5 +138,34 @@ export function useRoomShopping(options: Options) {
     return result;
   }), [mutate, apply]);
 
-  return { session, busy, connecting, error, job, connect, disconnect, sync, refresh, search, stopSearch, showJob, place };
+  const propose = useCallback((request: string, selectedId: string | null) => mutate(async (active) => {
+    if (!active.session.capabilities.planning) throw new Error("Room planning is unavailable here. You can still search furniture.");
+    const client = roomClient(active.session.plan.projectId);
+    const latest = await client.get();
+    await apply(latest.plan, active.epoch);
+    return requestRoomProposal(client, latest.plan, request, selectedId);
+  }), [mutate, apply]);
+
+  const applyProposal = useCallback((proposal: PlanProposal) => mutate(async (active) => {
+    const client = roomClient(active.session.plan.projectId);
+    try { await apply(await applyRoomProposal(client, active.session.plan, proposal), active.epoch); }
+    catch (cause) {
+      if (cause instanceof AgentRevisionConflict) await apply((await client.get()).plan, active.epoch);
+      throw cause;
+    }
+  }), [mutate, apply]);
+
+  const moveAgentItem = useCallback((itemId: string, spot: FloorSpot) => mutate(async (active) => {
+    const result = await roomClient(active.session.plan.projectId).moveTo(itemId, spot);
+    if (!result.ok) throw new Error("message" in result ? result.message : mutationMessage(result));
+    await apply(result.plan, active.epoch);
+  }), [mutate, apply]);
+
+  const storeAgentItem = useCallback((itemId: string) => mutate(async (active) => {
+    const result = await roomClient(active.session.plan.projectId).store(itemId);
+    if (!result.ok) throw new Error("message" in result ? result.message : mutationMessage(result));
+    await apply(result.plan, active.epoch);
+  }), [mutate, apply]);
+
+  return { session, busy, connecting, error, job, connect, disconnect, sync, refresh, search, stopSearch, showJob, place, propose, applyProposal, moveAgentItem, storeAgentItem };
 }

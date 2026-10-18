@@ -4,6 +4,12 @@ import { ApiError } from "@/backend/client";
 import { localRoomSnapshot, mutationMessage, registerRoom, syncRoom } from "@/backend/room-session-client";
 import { makeWorkspaceDemo } from "@/spatial/room/workspace-fixture";
 
+test("mutation refusal reports the new blockers rather than unrelated existing scan warnings", () => {
+  const existing = { rule: "no_overlap" as const, status: "fail" as const, itemIds: ["owned"], message: "Existing scan overlap." };
+  const blocked = { rule: "budget" as const, status: "fail" as const, itemIds: ["new"], message: "This exceeds your budget." };
+  assert.equal(mutationMessage({ ok: false, reason: "validation_failed", validations: [existing, blocked], blocking: [blocked] }), blocked.message);
+});
+
 test("registration posts only the canonical room payload to the same-origin cookie session", async () => {
   const source = makeWorkspaceDemo(), before = structuredClone(source);
   const controller = new AbortController();

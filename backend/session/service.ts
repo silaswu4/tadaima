@@ -36,7 +36,7 @@ export async function authorizeRoomProject(req: Request, projectId: string) {
 export function sessionCapabilities() {
   const stripe = process.env.STRIPE_SECRET_KEY ?? "";
   const liveSearch = Boolean(process.env.BROWSER_USE_API_KEY);
-  return { liveSearch, testPayments: /^(sk|rk)_test_/.test(stripe), persistence: persistenceMode(), ...(!liveSearch ? { liveSearchReason: "live retailer search is not configured; saved catalog search is available" } : {}) };
+  return { liveSearch, planning: Boolean(process.env.ANTHROPIC_API_KEY), voice: Boolean(process.env.ELEVENLABS_API_KEY && process.env.ELEVENLABS_AGENT_ID), testPayments: /^(sk|rk)_test_/.test(stripe), persistence: persistenceMode(), ...(!liveSearch ? { liveSearchReason: "live retailer search is not configured; saved catalog search is available" } : {}) };
 }
 export async function registerRoomSession(req: Request, roomId: string, input: RoomPlan) {
   assertSameOrigin(req);

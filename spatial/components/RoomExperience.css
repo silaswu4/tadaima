@@ -521,6 +521,9 @@
   z-index: 2;
   display: flex;
   gap: 10px;
+  max-width: calc(100vw - 32px);
+  flex-wrap: wrap;
+  justify-content: center;
   transform: translateX(-50%);
   animation: room-x-rise 1s var(--ease) 0.5s both;
 }
