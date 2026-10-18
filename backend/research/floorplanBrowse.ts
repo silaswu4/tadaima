@@ -34,7 +34,7 @@ export async function startFloorplanBrowse(address: string): Promise<{ runId: st
   const task = [
     `Find the floor plans for the apartment building at ${address}.`,
     `Start at ${DEMO_LISTING} (Atrium Westwood).`,
-    "Open its floor plans or apartments page and find the studio or smallest unit's floor plan.",
+    "Open its floor plans or apartments page and find the smallest unit's floor plan (the 1A one-bedroom).",
     "Open that floor plan so it is visible on screen, then stop and report its name, size and square footage if shown.",
     "Close any cookie or chat popups. Don't fill in forms or contact anyone.",
   ].join(" ");
@@ -43,26 +43,31 @@ export async function startFloorplanBrowse(address: string): Promise<{ runId: st
 }
 
 /** One readable line from a run event, or null for noise. */
-function line(e: Event): string | null {
-  const d = e.data ?? {};
-  const pick = (...keys: string[]) => {
-    for (const k of keys) {
-      const v = d[k];
-      if (typeof v === "string" && v.trim()) return v.trim();
-    }
-    return null;
-  };
-  const text = pick("next_goal", "nextGoal", "goal", "thinking", "memory", "message", "description", "action", "title");
-  if (text) return text.length > 140 ? `${text.slice(0, 137)}...` : text;
+export function line(e: Event): string | null {
   if (e.type === "browser.ready") return "Browser open";
-  return null;
+  if (e.type !== "core.event") return null;
+  const kind = e.data?.type;
+  if (kind !== "reasoning" && kind !== "text") return null;
+  // `part` is usually an object with `text`; older runs sent a Python-style repr string
+  const part = e.data?.part;
+  let raw = "";
+  if (part && typeof part === "object" && typeof (part as { text?: unknown }).text === "string") raw = (part as { text: string }).text.trim();
+  else {
+    const m = /'text': (?:'((?:[^'\\]|\\.)*)'|"((?:[^"\\]|\\.)*)")/.exec(String(part ?? ""));
+    raw = (m?.[1] ?? m?.[2] ?? "").replace(/\\n/g, "\n").replace(/\\u2019/g, "\u2019").replace(/\\'/g, "'").trim();
+  }
+  if (!raw) return null;
+  // reasoning starts with a bold title ("**Finding floor plans link**"): that's the step
+  const title = /^\*\*(.+?)\*\*/.exec(raw)?.[1];
+  const text = (title ?? raw.split(/(?<=[.!?])\s|\n/)[0]).trim();
+  return text.length > 120 ? `${text.slice(0, 117)}...` : text;
 }
 
 export async function getFloorplanBrowse(runId: string): Promise<BrowseStatus> {
   if (!/^[A-Za-z0-9_-]{6,80}$/.test(runId)) throw new Error("bad run id");
   const [{ status }, ev] = await Promise.all([
     api<{ status: string }>(`/runs/${runId}/status`),
-    api<{ events: Event[] }>(`/runs/${runId}/events?after=0&include_output=false&limit=100`).catch(() => ({ events: [] as Event[] })),
+    api<{ events: Event[] }>(`/runs/${runId}/events?after=0&include_output=true&limit=200`).catch(() => ({ events: [] as Event[] })),
   ]);
   const ready = ev.events.find((e) => e.type === "browser.ready" || e.type === "browser.reattached");
   const url = ready?.data?.live_view_url;
