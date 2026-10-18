@@ -26,8 +26,9 @@
   }
 }
 
-/* the room's own first-visit hint would repeat step one */
-html[data-room-tour] .room-x__hint {
+/* the room's own look-around hints would repeat step one */
+html[data-room-tour] .room-x__hint,
+html[data-room-tour] .room-x__cursor-chip {
   opacity: 0 !important;
 }
 

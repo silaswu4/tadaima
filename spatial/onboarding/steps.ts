@@ -22,7 +22,7 @@ const WEB: TourStep[] = [
   { id: "talk", target: "talk", optional: true, gesture: "point", title: "Just say it", body: "Hold Space and ask, like “a couch under $300 that fits here.”", keys: ["Hold Space"] },
   { id: "add", target: "add", optional: true, gesture: "point", title: "Add a piece", body: "Browse furniture and drop it right in.", keys: ["F"] },
   { id: "edit", target: "undo", optional: false, gesture: "think", title: "Make it yours", body: "Click any piece. G picks it up, R turns it, Del puts it away. Undo has your back.", keys: ["G", "R", "Del", "Ctrl Z"] },
-  { id: "inventory", target: "inventory", optional: true, gesture: "point", title: "Put away, not gone", body: "Stashed pieces wait here. Drag one back into the room.", keys: ["I"] },
+  { id: "inventory", target: "inventory", optional: true, gesture: "point", title: "Put away, not gone", body: "Put-away pieces wait here. Click one, or press its number, to carry it back.", keys: ["1 to 9"] },
   { id: "basket", target: "basket", optional: true, gesture: "celebrate", title: "Your basket", body: "Everything you pick lands here. Test checkout is one tap, no real charge.", keys: ["B"] },
 ];
 
@@ -31,7 +31,7 @@ const TOUCH: TourStep[] = [
   { id: "talk", target: "talk", optional: true, gesture: "point", title: "Just say it", body: "Tap the mic and ask, like “a rug under $150.” Tap again to stop." },
   { id: "add", target: "add", optional: true, gesture: "point", title: "Add a piece", body: "Browse furniture and drop it right in." },
   { id: "edit", target: "undo", optional: false, gesture: "think", title: "Make it yours", body: "Tap a piece to move it, turn it, or put it away. Undo has your back." },
-  { id: "inventory", target: "inventory", optional: true, gesture: "point", title: "Put away, not gone", body: "Stashed pieces wait here. Drag one back into the room." },
+  { id: "inventory", target: "inventory", optional: true, gesture: "point", title: "Put away, not gone", body: "Put-away pieces wait here. Tap one to carry it back." },
   { id: "basket", target: "basket", optional: true, gesture: "celebrate", title: "Your basket", body: "Your picks land here. Test checkout is one tap, no real charge." },
 ];
 

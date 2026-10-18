@@ -280,8 +280,9 @@ function TourOverlay({ vr, touch, onDone }: { vr: boolean; touch?: boolean; onDo
   const keyRef = useRef<(e: KeyboardEvent) => void>(() => {});
   useLayoutEffect(() => {
     keyRef.current = (e: KeyboardEvent) => {
-      if (e.key === "Tab") return;
+      // nothing reaches the room while the tour is up; Tab still moves focus (its default), it just can't grab the cursor
       e.stopImmediatePropagation();
+      if (e.key === "Tab") return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       const onButton = e.target instanceof Element && e.target.closest(".room-tour__card button");
       if (e.key === "Escape") {
