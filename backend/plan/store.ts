@@ -85,7 +85,7 @@ const planKey = (projectId: string) => `plan:${projectId}`;
 const proposalKey = (projectId: string, id: string) => `proposal:${projectId}:${id}`;
 
 /** Fixture-backed projects seed themselves on first read. */
-const SEEDS: Record<string, RoomPlan> = { proj_demo: demoPlan };
+const SEEDS: Record<string, RoomPlan> = { proj_demo: demoPlan, proj_dev: { ...demoPlan, projectId: "proj_dev" } };
 
 export async function getPlan(projectId: string): Promise<RoomPlan | null> {
   const plan = await db().get<RoomPlan>(planKey(projectId));

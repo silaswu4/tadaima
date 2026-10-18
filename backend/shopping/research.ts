@@ -45,7 +45,7 @@ export async function startResearch(projectId: string, req: ResearchRequest): Pr
     projectId,
     type: "product_research",
     state: "queued",
-    stage: `Looking for a ${DEFAULT_QUERY[brief.category] ?? brief.category} at ${merchant}`,
+    stage: `Looking for ${DEFAULT_QUERY[brief.category] ?? brief.category}s at ${merchant}`,
     inputRevision: plan.revision,
     output: null,
     error: null,
