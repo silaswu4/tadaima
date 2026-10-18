@@ -3,8 +3,11 @@
  *   E2E_BASE      default http://localhost:3009
  *   E2E_BYPASS    Vercel protection bypass secret, for protected deploys
  */
-import type { ApplyResult, Job, PlanChange, PlanProposal, ResearchJobOutput, RoomPlan, ValidationResult } from "@/backend/contracts";
+import type { ApplyResult, Cart, Job, Mandate, Order, PaymentMethod, PlanChange, PlanProposal, Recheck, ResearchJobOutput, RoomPlan, ValidationResult } from "@/backend/contracts";
+
 import type { ShoppingBrief } from "@/backend/shopping/roomBrief";
+
+export type CheckoutView = { cart: Cart; recheck: Recheck | null; paymentMethods: PaymentMethod[]; mandate: Mandate | null; orders: Order[]; blockers: string[] };
 
 export const BASE = (process.env.E2E_BASE ?? "http://localhost:3009").replace(/\/$/, "");
 const headers: Record<string, string> = { "content-type": "application/json" };
@@ -37,6 +40,11 @@ export const api = (projectId: string) => {
     apply: (proposalId: string, expectedRevision: number) => call<ApplyResult>("POST", `${p}/proposals/${proposalId}/apply`, { expectedRevision }),
     research: (itemId: string, request?: string) => call<Job<ResearchJobOutput>>("POST", `${p}/research`, { itemId, request }),
     job: (jobId: string) => call<Job<ResearchJobOutput>>("GET", `${p}/jobs/${jobId}`),
+    checkout: () => call<CheckoutView>("GET", `${p}/checkout`),
+    recheck: () => call<CheckoutView>("POST", `${p}/checkout/recheck`),
+    testCard: () => call<PaymentMethod & { error?: string }>("POST", `${p}/checkout/card/test`),
+    approve: (cartDigest: string, paymentMethodId: string) => call<Mandate & { error?: string }>("POST", `${p}/checkout/approve`, { cartDigest, paymentMethodId }),
+    execute: () => call<Order & { error?: string; refused?: boolean }>("POST", `${p}/checkout/execute`),
   };
 };
 

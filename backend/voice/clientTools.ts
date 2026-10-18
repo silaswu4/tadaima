@@ -1,4 +1,6 @@
-import type { ApplyResult, PlanProposal, RoomPlan } from "@/backend/contracts";
+import type { ApplyResult, Cart, Mandate, Order, PaymentMethod, PlanProposal, Recheck, RoomPlan } from "@/backend/contracts";
+
+type CheckoutView = { cart: Cart; recheck: Recheck | null; paymentMethods: PaymentMethod[]; mandate: Mandate | null; orders: Order[]; blockers: string[] };
 
 /**
  * Browser-safe implementations of the voice agent's client tools. They call
@@ -27,6 +29,8 @@ export function voiceClientTools(opts: {
   onPlan?: (plan: RoomPlan) => void;
   /** Called with each proposal so the UI can show the diff while it's read aloud. */
   onProposal?: (proposal: PlanProposal) => void;
+  /** Called after recheck or payment so checkout UI can refresh. */
+  onCheckout?: () => void;
 }) {
   const base = `/api/projects/${opts.projectId}`;
   const proposals = new Map<string, PlanProposal>();
@@ -66,6 +70,37 @@ export function voiceClientTools(opts: {
       }
     },
 
+    get_cart: async () => {
+      const res = await fetch(`${base}/checkout`);
+      if (!res.ok) return "I couldn't load the cart.";
+      return describeCheckout((await res.json()) as CheckoutView);
+    },
+
+    recheck_cart: async () => {
+      try {
+        const v = await post<CheckoutView>(`${base}/checkout/recheck`, {});
+        opts.onCheckout?.();
+        const issues = (v.recheck?.lines ?? []).filter((l) => l.status !== "ok");
+        const changes = issues.map((l) =>
+          l.status === "price_changed" && l.catalogPrice && l.observedPrice
+            ? `${l.label} is now ${dollars(l.observedPrice.amountMinor)} (was ${dollars(l.catalogPrice.amountMinor)})`
+            : `${l.label}: ${l.status.replace("_", " ")}${l.note ? `, ${l.note}` : ""}`,
+        );
+        return `Rechecked. ${changes.length ? changes.join(". ") + "." : "Every price and stock status matches."} ${describeCheckout(v)}`;
+      } catch (e) {
+        return `Recheck failed: ${(e as Error).message}`;
+      }
+    },
+
+    pay_now: async () => {
+      const res = await fetch(`${base}/checkout/execute`, { method: "POST" });
+      const json = await res.json();
+      opts.onCheckout?.();
+      if (!res.ok) return `Not paid: ${json.error ?? `request failed (${res.status})`}`;
+      const o = json as Order;
+      return `paid: ${dollars(o.amount.amountMinor)} on ${o.payment.card}, order ${o.id}. Test mode, so no real money moved and the retailer orders are simulated.`;
+    },
+
     apply_proposal: async ({ proposal_id }: { proposal_id: string }) => {
       const p = proposals.get(proposal_id);
       if (!p) return "I don't have that proposal anymore. Ask me to plan it again.";
@@ -82,4 +117,18 @@ export function voiceClientTools(opts: {
       }
     },
   };
+}
+
+function describeCheckout(v: CheckoutView) {
+  const stores = v.cart.merchants.map((g) => `${g.merchant}: ${g.lines.map((l) => `${l.label} ${l.observedPrice ? dollars(l.observedPrice.amountMinor) : "price unknown"}`).join(", ")}`);
+  const card = v.paymentMethods[0];
+  return [
+    `Cart total ${dollars(v.cart.subtotal.amountMinor)} before shipping and tax. ${stores.join(". ")}.`,
+    card ? `Card on file: ${card.brand} ending ${card.last4}.` : "No card connected.",
+    v.mandate
+      ? `Approved by the shopper for up to ${dollars(v.mandate.maxAmount.amountMinor)} until ${new Date(v.mandate.expiresAt).toLocaleTimeString()}.`
+      : v.blockers.length
+        ? `Not ready to approve: ${v.blockers.join("; ")}.`
+        : "Ready for the shopper to approve on screen. Not approved yet.",
+  ].join(" ");
 }

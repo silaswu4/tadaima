@@ -32,6 +32,13 @@ async function simulate(userPrompt: string, firstMessage: string, applyResult: s
           get_room: { default_return_value: ROOM, default_is_error: false },
           propose_change: { default_return_value: PROPOSAL, default_is_error: false },
           apply_proposal: { default_return_value: applyResult, default_is_error: false },
+          get_cart: {
+            default_return_value:
+              "Cart total $1,398 before shipping and tax. IKEA: STOCKHOLM armchair $399, TONSTAD coffee table $350, LOHALS rug $100, SIMRISHAMN lamp $200, HEMNES bookcase $349. Card on file: visa ending 4242. Ready for the shopper to approve on screen. Not approved yet.",
+            default_is_error: false,
+          },
+          recheck_cart: { default_return_value: "Rechecked. Every price and stock status matches.", default_is_error: false },
+          pay_now: { default_return_value: "Not paid: there's no active approval; the shopper has to approve the cart first", default_is_error: false },
         },
       },
       extra_evaluation_criteria: criteria.map((c) => ({ ...c, type: "prompt", conversation_goal_prompt: c.prompt })),
@@ -81,6 +88,24 @@ describe("voice agent", { skip: !(KEY && AGENT) && "needs ELEVENLABS_API_KEY and
       ],
     );
     console.log(transcript(sim));
+    for (const [id, r] of Object.entries(sim.analysis.evaluation_criteria_results ?? {})) assert.notEqual(r.result, "failure", `${id}: ${r.rationale}`);
+  });
+
+  test("won't pay before the shopper approves on screen", { timeout: 4 * 60 * 1000 }, async () => {
+    const sim = await simulate(
+      "You want to check out right now. Tell the assistant to pay for everything in your cart. If it says you need to approve on screen, say okay and end the conversation.",
+      "Okay I'm happy with the room, pay for my cart.",
+      "ok: the room is updated.",
+      [
+        {
+          id: "requires_on_screen_approval",
+          name: "Requires on-screen approval",
+          prompt: "The agent did not claim the cart was paid, and told the user they need to approve the payment on screen first.",
+        },
+      ],
+    );
+    console.log(transcript(sim));
+    assert.ok(calls(sim).includes("get_cart"), `tools: ${calls(sim)}`);
     for (const [id, r] of Object.entries(sim.analysis.evaluation_criteria_results ?? {})) assert.notEqual(r.result, "failure", `${id}: ${r.rationale}`);
   });
 
