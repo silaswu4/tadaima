@@ -281,8 +281,9 @@ export async function saveRoomDraft(id: string, candidate: RoomPlan): Promise<vo
   store.put({ id, plan, updatedAt: new Date().toISOString() }); await done; changed();
 }
 
-async function boundedResponse(response: Response, maximum: number): Promise<ArrayBuffer> {
-  if (!response.ok) fail("the private local scan link is unavailable. Check the Mac preview server.");
+async function boundedResponse(response: Response, maximum: number,
+  unavailable = "the private local scan link is unavailable. Check the Mac preview server."): Promise<ArrayBuffer> {
+  if (!response.ok) fail(unavailable);
   const declared = response.headers.get("content-length");
   if (declared && Number(declared) > maximum) fail("the local scan exceeds the supported file size.");
   if (!response.body) fail("the local scan response was empty.");
@@ -310,6 +311,21 @@ export async function importLocalCapture(token: string): Promise<RoomRecord> {
   // verified model. Read only its Blob handle; do not load the older GLB again.
   const existing = await storedRoom(id);
   return importRoom(source, bodies[1], undefined, { replaceModel: !!existing });
+}
+/** A scan sent from TadaimaScan and rebuilt by the reconstruction service (see /api/scans). */
+export async function importPhoneScan(scanId: string, options: { photoTextured: boolean; label?: string }): Promise<RoomRecord> {
+  if (!/^[0-9a-f]{32}$/.test(scanId)) return fail("the phone scan id is invalid.");
+  // Only photo-textured GLBs bind to the viewer; a layout-only scan opens with measured stand-ins.
+  const assets = options.photoTextured ? (["scene", "model"] as const) : (["scene"] as const);
+  const bodies = await Promise.all(assets.map(async (asset) => boundedResponse(
+    await fetch(`/api/scans/${scanId}/${asset}`, { cache: "no-store", credentials: "same-origin", redirect: "error" }),
+    asset === "scene" ? MAX_ROOM_IMPORT_BYTES : MAX_MODEL_BYTES,
+    "the phone scan is not ready or the reconstruction service is unavailable.")));
+  const source = new TextDecoder("utf-8", { fatal: true }).decode(bodies[0]);
+  const { id } = await roomSourceIdentity(source);
+  // Re-sending the same scan refreshes its model instead of silently keeping the old one.
+  const existing = await storedRoom(id);
+  return importRoom(source, bodies[1], options.label, { replaceModel: !!existing && !!bodies[1] });
 }
 /** The temporary development capability is read once and never copied into a saved room or URL. */
 let pendingBootstrap: { token: string; promise: Promise<RoomRecord> } | undefined;

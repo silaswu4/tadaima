@@ -8,6 +8,7 @@ import { getTadaimaRooms } from "@/spatial/fixtures/roomsCatalog";
 import { bootstrapLocalCapture, getRoom, getRoomDraft, listRooms, subscribeRooms } from "@/spatial/rooms/registry";
 
 const RoomImporter = dynamic(() => import("@/spatial/components/RoomImporter"));
+const PhoneScanInbox = dynamic(() => import("@/spatial/components/PhoneScanInbox"));
 
 export default function Rooms() {
   const router = useRouter();
@@ -82,6 +83,10 @@ export default function Rooms() {
 
   return <>
     <RoomsPage rooms={rooms} initial={initial} generation={generation} onImport={() => setImporting(true)} notice={notice} onDismissNotice={() => { setNotice(""); try { sessionStorage.removeItem("tadaima:pending-address"); } catch { /* optional */ } }} />
+    <PhoneScanInbox onImported={(room) => {
+      try { sessionStorage.setItem("tadaima:last-room", room.id); } catch { /* optional */ }
+      router.push(`/rooms/${room.id}`);
+    }} />
     {importing ? <div className="rooms-page__import-overlay" role="dialog" aria-modal="true" aria-label="Import a room">
       <RoomImporter onCancel={() => setImporting(false)} onImported={(room) => {
         try { sessionStorage.setItem("tadaima:last-room", room.id); } catch { /* optional */ }
