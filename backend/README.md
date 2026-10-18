@@ -42,7 +42,8 @@ Deployed at `https://tadaima-matthew-kims-projects-b1fc1628.vercel.app` behind V
 | POST | `/api/projects/{id}/shop` | `ShopRequest` | `Job<ShopJobOutput>`, catalog results included |
 | GET | `/api/projects/{id}/shop/{jobId}` | | the job, re-checked against the room now |
 | POST | `/api/projects/{id}/place` | `{ productId, spot, expectedRevision? }` | `PlaceResult` |
-| POST | `/api/projects/{id}/items/{itemId}/move-to` | `{ spot, unlock? }` | `PlaceResult` |
+| POST | `/api/projects/{id}/items/{itemId}/move-to` | `{ spot, unlock? }` | `PlaceResult` (also brings a stored piece back) |
+| POST | `/api/projects/{id}/items/{itemId}/store` | `{ unlock? }` | `ApplyResult` (put away in inventory) |
 | GET | `/api/projects/{id}/brief?itemId=` | | what the shopping agent knows at an item |
 | POST | `/api/projects/{id}/research` | `{ itemId, request? }` | `Job<ResearchJobOutput>` (replace an item) |
 | GET | `/api/projects/{id}/jobs/{jobId}` | | research job |
@@ -62,9 +63,19 @@ Errors: 400 bad body, 404 unknown project/item/product/job, 409 refused checkout
 
 Plan items carry `assetUrl` and `dimensions`, so the same transform draws everything already in the room.
 
+## Hands-on rearranging (drag, inventory)
+
+Anything the shopper can pick up (mouse, touch, or a hand in the headset):
+
+1. On grab, remember the item. Every frame while held, call `dragCheck(plan, itemId, position, rotationY)` from [`shopping/drag.ts`](shopping/drag.ts). It's pure and runs locally (no network): `fits` (green), `snapped` (amber: `pose` was nudged within 25 cm to fit), `droppable` false (red, with `problems` in plain words). Draw the piece at `pose`. A rotate gesture is `turned(rotationY, 1)`.
+2. On release, if `droppable`: `room.drop(plan.revision, item, pose)`. The server runs the same rules; on `stale_revision`, refetch and drop again. If not droppable, animate back.
+3. Inventory: `room.store(itemId)` puts a piece away (off the floor, seats nobody, a purchase leaves the cart). `inventory(plan)` lists them for a tray. Dragging one out is the same `dragCheck` + `drop` (it becomes a `take_out`), or `room.moveTo(itemId, spot)` to let the server place it.
+
+Locked pieces (the shopper's own, marked keep) refuse to move or store unless the request says `unlock`; they stay locked where they land. A rule that's already failing (seats short because a chair is put away) doesn't freeze the room: changes are only refused for failures they add or make worse.
+
 ## Voice
 
-[`voice/clientTools.ts`](voice/clientTools.ts) gives the ElevenLabs agent its client tools: `get_room`, `propose_change`, `apply_proposal`, `shop_here`, `check_search`, `place_product`, `move_here`, `get_cart`, `recheck_cart`, `pay_now`. Pass `getSpot` (the viewer's current floor spot) and `onShopUpdate: (msg) => conversation.sendUserMessage(msg)`: `shop_here` answers at once, and when the live search finishes the app sends an `[app update]` the agent relays to the shopper. Re-sync the agent after editing [`voice/agent-config.ts`](voice/agent-config.ts): `npx tsx --env-file=.env.local backend/voice/setup-agent.ts`.
+[`voice/clientTools.ts`](voice/clientTools.ts) gives the ElevenLabs agent its client tools: `get_room`, `propose_change`, `apply_proposal`, `shop_here`, `check_search`, `place_product`, `move_here`, `put_away`, `get_cart`, `recheck_cart`, `pay_now`. Pass `getSpot` (the viewer's current floor spot) and `onShopUpdate: (msg) => conversation.sendUserMessage(msg)`: `shop_here` answers at once, and when the live search finishes the app sends an `[app update]` the agent relays to the shopper. Re-sync the agent after editing [`voice/agent-config.ts`](voice/agent-config.ts): `npx tsx --env-file=.env.local backend/voice/setup-agent.ts`.
 
 ## Testing
 
