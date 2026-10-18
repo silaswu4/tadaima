@@ -12,7 +12,8 @@ export async function handle(fn: () => Promise<unknown>) {
     const result = await fn();
     return result instanceof Response ? result : Response.json(result, { headers: { "Cache-Control": "no-store" } });
   } catch (e) {
-    if (e instanceof RoomSessionError) return Response.json({ error: e.message }, { status: e.status });
+    // a refused upload may be left unread on the socket; close it so the next request doesn't reuse it
+    if (e instanceof RoomSessionError) return Response.json({ error: e.message }, { status: e.status, headers: e.status === 413 ? { Connection: "close" } : undefined });
     if (e instanceof InvalidRoomSync) return Response.json({ error: e.message }, { status: 422 });
     if (e instanceof NotFound) return Response.json({ error: e.message }, { status: 404 });
     if (e instanceof Unprocessable) return Response.json({ error: e.message }, { status: 422 });
