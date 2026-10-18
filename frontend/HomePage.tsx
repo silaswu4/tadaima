@@ -181,7 +181,6 @@ export default function Home() {
               </button>
             </div>
           </div>
-          <div className="hero-foot">Move the pointer for a breeze · click the light for a gust</div>
         </div>
 
         <div className="hero-choices" aria-hidden={!day}>

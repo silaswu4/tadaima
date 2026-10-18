@@ -119,16 +119,6 @@
 .tadaima-hero .hero-enter:hover { background: #f6c86a; }
 .tadaima-hero .hero-enter:focus-visible { outline: 2px solid var(--hero-fg); outline-offset: 3px; }
 
-/* bottom-right hint */
-.tadaima-hero .hero-foot {
-  position: absolute;
-  bottom: 40px;
-  right: max(16px, env(safe-area-inset-right, 0px));
-  font-size: 14px;
-  line-height: 20px;
-  color: var(--hero-muted);
-}
-
 /* hanging pull cord, decorative. starts above the top edge so a pull never shows a gap. */
 .tadaima-hero .hero-cord {
   position: absolute;
@@ -296,7 +286,6 @@
   .tadaima-hero .hero-inner { padding-left: max(120px, env(safe-area-inset-left, 0px)); padding-right: max(64px, env(safe-area-inset-right, 0px)); }
   .tadaima-hero .hero-choices { padding-left: max(120px, env(safe-area-inset-left, 0px)); }
   .tadaima-hero .hero-cord { left: 42px; }
-  .tadaima-hero .hero-foot { right: max(64px, env(safe-area-inset-right, 0px)); }
 }
 @media (max-width: 719px) {
   .tadaima-hero .hero-choices { gap: 16px; }
