@@ -166,8 +166,8 @@ export default function PlanSketch({ phase, reduced }: { phase: PlanPhase; reduc
           </g>
           {/* the window: glass lines across the gap */}
           <g className="plan-window">
-            <path className="plan-ink" d={`M${win.x0} ${-T}H${win.x1}M${win.x0} 0H${win.x1}`} />
-            <path className="plan-ink plan-ink--soft" d={`M${win.x0} ${-T / 2}H${win.x1}`} />
+            <path className="plan-ink" d={`M${win.x0} ${-T}V0M${win.x1} ${-T}V0`} />
+            <path className="plan-glass" d={`M${win.x0} ${-T / 2 - 2.5}H${win.x1}M${win.x0} ${-T / 2 + 2.5}H${win.x1}`} />
           </g>
 
           {/* furniture, as seen in the listing photo */}

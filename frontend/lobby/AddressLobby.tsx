@@ -125,8 +125,8 @@ export default function AddressLobby({ address, reduced, onExit }: { address: st
       // nothing to do while the newest node already sits in full view
       const box = last.getBoundingClientRect();
       const viewTop = phone ? pinned.getBoundingClientRect().bottom : 0;
-      if (box.top >= viewTop + 8 && box.bottom <= window.innerHeight - 72) return;
-      const offset = phone ? pinned.offsetHeight + 24 : sc.clientHeight * 0.3;
+      if (box.top >= viewTop + 8 && box.bottom <= window.innerHeight - 24) return;
+      const offset = phone ? pinned.offsetHeight + 56 : sc.clientHeight * 0.3;
       const target = Math.max(0, last.getBoundingClientRect().top - sc.getBoundingClientRect().top + sc.scrollTop - offset);
       const dist = Math.abs(target - sc.scrollTop);
       if (dist < 4) return;
