@@ -1,59 +1,128 @@
-# Tadaima
+# tadaima
 
-Project context, product decisions, architecture, capture research, sponsor requirements, Solana options, and the implementation plan live in **[docs/README.md](docs/README.md)**. Start there before building. The product, UI and package are named tadaima (Michael was the working name). The homepage uses the latest WebGL ASCII hero; the earlier Three.js room hero is retained in `spatial/`.
+**Scan your room with an iPhone, walk through it in the browser or a Meta Quest, and shop for furniture that actually fits.**
 
-## Team working folders
+Live: **[tadaima.devshardat.work](https://tadaima.devshardat.work)** · LA Hacks 2026
 
-| Folder | Owner | Work |
-| --- | --- | --- |
-| [`backend/`](backend/README.md) | Matthew | Shared contracts, agents, shopping, services, integration |
-| [`reconstruction/`](reconstruction/README.md) | You / project lead | Address/capture processing, room geometry, Blender exports |
-| [`frontend/`](frontend/README.md) | Angelina | Screens, onboarding, responsive UI, products and basket |
-| [`spatial/`](spatial/README.md) | Silas | 3D viewer, selection, placement, Quest/browser interaction |
+tadaima (ただいま, "I'm home") turns a real room into a measured 3D space you can furnish. Every piece you try is checked against the room's actual walls, doors and existing furniture before it can go in your basket.
 
-See [team ownership and first tasks](docs/team-ownership.md) and [copy-paste agent prompts](docs/agent-prompts.md). These are four working areas inside one web application; run the commands below from the repository root. `app/` holds thin Next.js entry points and `public/` holds shared static assets. The approved optional iPhone RoomPlan companion lives under reconstruction; shopping, design, and Quest remain on the web.
+## What it does
 
-The [reconstruction worker](reconstruction/README.md) converts validated room geometry to an editable `.blend`, a GLB, and a revision-bound manifest. Local [address research](reconstruction/address/README.md) and [browser photo capture/inference](reconstruction/capture/README.md) feed the same worker. Photo-only input does not require tape measurements; its visual estimates remain uncalibrated and require review. Hosted upload authorization, persistence, and job integration are still pending.
+- **Scan.** The TadaimaScan iPhone app (SwiftUI + RoomPlan) captures walls, openings and furniture, plus calibrated photos, and uploads them in one tap.
+- **Rebuild.** A FastAPI service runs our reconstruction pipeline and Blender 4.5 headless. It turns the scan into a validated room plan and a photo-textured GLB.
+- **Walk and furnish.** The room opens in the browser in walk or dollhouse view. Browse a saved IKEA/Target catalog or search live with Browser Use. Every result is fit-checked against the room's geometry before you can place it.
+- **Talk to it.** An ElevenLabs voice agent, backed by Claude for planning, finds, previews, moves and swaps furniture through the same validated room operations as the UI.
+- **Step inside.** On Meta Quest, Enter VR puts you in the room at real scale. The website's own UI floats beside you, and you hold A/X to talk.
+- **Check out.** The basket goes through Stripe (test mode). An ASI:One agent on Fetch.ai's Agentverse can edit the same room from chat.
 
-The user also approved a thin SwiftUI/RoomPlan companion for an **iPhone 14 Pro**. See [native scanning and import status](docs/native-scan.md) before building or claiming device support. Native capture is an optional input, not a replacement shopping app; a physical iPhone scan has not yet been verified. [Modeling/export research](reconstruction/RESEARCH.md) remains applicable to all inputs.
+## Architecture
 
-## Application setup
+```mermaid
+flowchart LR
+  subgraph Capture
+    iPhone["iPhone 14 Pro<br/>TadaimaScan · RoomPlan"]
+  end
 
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+  subgraph Railway["Railway · reconstruction service"]
+    API["FastAPI jobs<br/>SQLite + volume"]
+    Blender["Blender 4.5 headless<br/>scene.glb + scene.json"]
+    API --> Blender
+  end
 
-## Getting Started
+  subgraph Vercel["Vercel · Next.js 16 app"]
+    Scans["/api/scans<br/>phone inbox"]
+    Sessions["/api/room-sessions<br/>canonical room plan"]
+    Shop["shopping + fit checks"]
+    Voice["/api/voice/token"]
+  end
 
-First, run the development server:
+  subgraph Clients
+    Web["Browser<br/>Three.js walk view"]
+    Quest["Meta Quest 3S<br/>WebXR"]
+    ASI["ASI:One chat"]
+  end
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+  iPhone -- "scan + photos ZIP<br/>(scoped upload key)" --> API
+  Scans -- "list / download<br/>(bearer token)" --> API
+  Web --> Scans
+  Web --> Sessions
+  Quest --> Sessions
+  Sessions --> Shop
+  Sessions <--> Redis[("Upstash Redis")]
+  Shop --> BU["Browser Use<br/>live IKEA / Target"]
+  Voice --> EL["ElevenLabs agent"]
+  EL -.->|client tools| Web
+  Sessions --> Claude["Claude<br/>room planning"]
+  Sessions --> Stripe["Stripe test checkout"]
+  ASI --> Agent["Fetch.ai Agentverse agent"] --> Sessions
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### Phone scan to room
 
-Edit the screen in `frontend/HomePage.tsx` and the current hero in `spatial/components/AsciiHero.tsx`. The earlier 3D viewer is in `spatial/components/RoomHero.tsx`. The root `app/page.tsx` mounts the screen. The page auto-updates as you edit the files.
+```mermaid
+sequenceDiagram
+  participant P as iPhone (TadaimaScan)
+  participant R as Reconstruction (Railway)
+  participant W as Web app (Vercel)
+  participant B as Browser / Quest
 
-The current ASCII hero references `/art/japan.mp4`, a test clip intentionally excluded by `.gitignore`. A fresh clone will not include that background footage; supply an appropriately licensed asset before shipping it. The scaffold preserves the incoming hero without adding third-party test media.
+  P->>R: POST /v1/jobs/roomplan (scan + photos)
+  R->>R: import scan, validate walls, photo-texture
+  R->>R: Blender: scene.glb + scene.json
+  P->>R: poll job until ready
+  B->>W: open /rooms (enter scan key once)
+  W->>R: GET /v1/jobs (bearer token stays on the server)
+  B->>W: Enter room
+  W->>R: download scene.json + scene.glb
+  W-->>B: room saved locally, walk + shop
+```
 
-This project uses `next/font/local` to load the bundled Paper Mono typeface. Its license is in [app/fonts/PaperMono-OFL.txt](app/fonts/PaperMono-OFL.txt).
+The phone uploads straight to the reconstruction service because scan bundles are larger than Vercel's 4.5 MB request limit. Its upload key can only submit scans and check their status. The web server holds the full service token, and browsers never see it.
 
-## Learn More
+## Repository
 
-To learn more about Next.js, take a look at the following resources:
+| Folder | Owner | What lives there |
+| --- | --- | --- |
+| [`backend/`](backend/README.md) | Matthew | Contracts, room plan store, shopping, checkout, voice, Fetch.ai agent |
+| [`reconstruction/`](reconstruction/README.md) | Stephen (lead) | Scan import, room geometry, Blender exports, [reconstruction service](reconstruction/service/README.md), iPhone app |
+| [`frontend/`](frontend/README.md) | Angelina | Screens, onboarding, responsive UI, products and basket |
+| [`spatial/`](spatial/README.md) | Silas | Three.js room, placement, Quest/WebXR, VR menu |
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+`app/` holds thin Next.js routes and `public/` holds shared assets. Design notes, research and sponsor alignment are in [docs/](docs/README.md).
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Run it locally
 
-## Deploy on Vercel
+```bash
+npm install
+npm run dev                     # http://localhost:3000
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Put keys in `.env.local` (never commit it). Without keys the app still runs: room sessions fall back to memory, and the saved catalog works offline.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+| Variable | Enables |
+| --- | --- |
+| `KV_REST_API_URL`, `KV_REST_API_TOKEN` | Upstash Redis room sessions (required in production) |
+| `ELEVENLABS_API_KEY`, `ELEVENLABS_AGENT_ID` | Voice agent |
+| `ANTHROPIC_API_KEY` | Room planning |
+| `BROWSER_USE_API_KEY` | Live store search |
+| `STRIPE_SECRET_KEY`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | Test checkout |
+| `TADAIMA_SERVICE_URL`, `TADAIMA_SERVICE_TOKEN`, `TADAIMA_SCAN_UPLOAD_KEY` | Phone scans via the reconstruction service |
+
+**Phone scan → room on one Mac:** `reconstruction/service/demo.sh` starts the reconstruction service and the web app together and prints the phone settings. See the [service README](reconstruction/service/README.md).
+
+**Meta Quest:** open the live site in Quest Browser and choose a room, then **Enter VR**. For local dev, run `adb reverse tcp:3000 tcp:3000` and open `localhost:3000`. See [Quest setup](docs/quest-setup.md).
+
+## Tests
+
+```bash
+npm run test:spatial            # room, placement, WebXR and VR menu
+npm test                        # backend contracts, sessions, checkout
+python3 -m unittest discover -s reconstruction/tests   # reconstruction + service
+```
+
+## Notes
+
+- Scan geometry is a draft. Check sizes before buying.
+- Checkout runs in Stripe test mode, and no real orders are placed.
+- The homepage hero references `/art/japan.mp4`, which is excluded from git. Supply a licensed clip before shipping it.
+- Paper Mono is bundled under the [OFL](app/fonts/PaperMono-OFL.txt).
