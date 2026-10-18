@@ -47,6 +47,7 @@ from uagents_core.contrib.protocols.chat.cards import (
 Api = Callable[..., Awaitable[dict]]
 CHECKOUT_ACTIONS = {"approve_mandate", "checkout", "checkout_decline", "checkout_pay", "checkout_revoke"}
 RECHECK_TIMEOUT = 120
+SETUP_BLOCKERS = {"test payments are not configured", "no card connected", "a payment for this exact cart is already processing or awaiting reconciliation"}
 
 # backend blocker strings, said the way a person would
 BLOCKER_TEXT = {
@@ -206,11 +207,15 @@ async def start_checkout(ctx: Context, sender: str, project_id: str, api: Api):
 async def finish_review(ctx: Context, sender: str, project_id: str, view: dict, lead: str = ""):
     """The approval card if nothing blocks it, else the blockers in plain words."""
     lead = lead + "\n\n" if lead else ""
-    if view["blockers"]:
-        return await ctx.send(sender, msg(
-            lead + "I can't ask you to approve this yet:\n" + blockers_text(view["blockers"]) +
-            "\n\nNothing was charged. Change the room (for example, swap the flagged items), then say **checkout** again."
-        ))
+    blockers = view["blockers"]
+    if not view.get("testPaymentsAvailable"):
+        # no card can be attached without Stripe, so that one is noise
+        blockers = [b for b in blockers if b != "no card connected"]
+    if blockers:
+        setup_only = all(b in SETUP_BLOCKERS for b in blockers)
+        tail = ("That's a setup issue on my side, not your room. Your plan is saved." if setup_only
+                else "Change the room (for example, swap the flagged items), then say **checkout** again.")
+        return await ctx.send(sender, msg(lead + "I can't ask you to approve this yet:\n" + blockers_text(blockers) + f"\n\nNothing was charged. {tail}"))
     if view.get("mandate"):
         m = view["mandate"]
         pay = ReviewCardPayload(
