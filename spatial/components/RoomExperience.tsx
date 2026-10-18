@@ -1,9 +1,12 @@
 "use client";
 
+import Image from "next/image";
+import Link from "next/link";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { FurnitureCategory, ProductCandidate, RoomPlan, Vector3Meters } from "../../backend/contracts";
 import catalogJson from "../../backend/fixtures/real-catalog.json";
 import type { WalkCallbacks, WalkCore, WalkEnvironment, WalkItem, WalkMode, WalkScene } from "../room/walk-api";
+import mark from "../assets/tadaima-mark.png";
 import "./RoomExperience.css";
 
 type Props = { room: { id: string; label: string; plan: RoomPlan; environment?: WalkEnvironment }; backHref?: string };
@@ -213,9 +216,10 @@ export function RoomExperience({ room, backHref = "/rooms" }: Props) {
   }, []);
 
   useEffect(() => {
-    if (panel === "catalog") catalogCloseRef.current?.focus();
-    if (panel === "basket") basketCloseRef.current?.focus();
-    if (panel === "inventory") inventoryCloseRef.current?.focus();
+    // the panel is still sliding in from off screen; scrolling to it would shove the whole room sideways
+    if (panel === "catalog") catalogCloseRef.current?.focus({ preventScroll: true });
+    if (panel === "basket") basketCloseRef.current?.focus({ preventScroll: true });
+    if (panel === "inventory") inventoryCloseRef.current?.focus({ preventScroll: true });
   }, [panel]);
 
   // Esc closes the open panel before the engine sees it; engine keys are held back too.
@@ -459,10 +463,15 @@ export function RoomExperience({ room, backHref = "/rooms" }: Props) {
 
       {/* ---------- top bar ---------- */}
       <header className="room-x__bar">
-        <a className="room-x__pill room-x__back" href={backHref} aria-label="Back to rooms">
-          {Icon.back}
-          <span className="room-x__back-text">Rooms</span>
-        </a>
+        <div className="room-x__start">
+          <Link className="room-x__pill room-x__home" href="/" aria-label="tadaima home">
+            <Image src={mark} alt="" className="room-x__mark" priority />
+          </Link>
+          <a className="room-x__pill room-x__back" href={backHref} aria-label="Back to rooms">
+            {Icon.back}
+            <span className="room-x__back-text">Rooms</span>
+          </a>
+        </div>
 
         <h1 className="room-x__title">{room.label}</h1>
 

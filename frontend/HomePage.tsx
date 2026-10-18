@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Inter, Inter_Tight, Klee_One, Reenie_Beanie } from "next/font/google";
 import { toDataURL } from "qrcode";
+import Image from "next/image";
+import mark from "@/spatial/assets/tadaima-mark.png";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type FormEvent } from "react";
 import { DappledLight } from "./DappledLight";
 import "./styles/hero.css";
@@ -99,6 +101,13 @@ export default function Home() {
     }, 190);
   }, []);
 
+  // the mark on the choices screen turns the light back off, back to the hero
+  const backToHero = useCallback(() => {
+    setOpen(null);
+    setDay(false);
+    busy.current = false;
+  }, []);
+
   const showScan = useCallback(() => {
     setOpen("scan");
     const url = `${window.location.origin}/capture`;
@@ -184,6 +193,9 @@ export default function Home() {
         </div>
 
         <div className="hero-choices" aria-hidden={!day}>
+          <button type="button" className="hero-mark" onClick={backToHero} aria-label="Back to the start" tabIndex={day ? 0 : -1}>
+            <Image src={mark} alt="" priority />
+          </button>
           <div className="hero-choice">
             <button
               type="button"

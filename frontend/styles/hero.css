@@ -191,6 +191,26 @@
   color: #2b1a10;
 }
 .tadaima-hero.is-day .hero-choices { opacity: 1; pointer-events: auto; }
+
+/* logo, top left beside the cord. one full turn on hover, landing upright */
+.tadaima-hero .hero-mark {
+  position: absolute;
+  top: 28px;
+  left: max(72px, env(safe-area-inset-left, 0px));
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+.tadaima-hero .hero-mark img {
+  display: block;
+  width: 34px;
+  height: 34px;
+  transition: transform 0.9s cubic-bezier(0.76, 0, 0.24, 1);
+}
+.tadaima-hero .hero-mark:hover img,
+.tadaima-hero .hero-mark:focus-visible img { transform: translateY(-2px) rotate(360deg) scale(1.08); }
+.tadaima-hero .hero-mark:focus-visible { outline: 2px solid var(--hero-fg); outline-offset: 4px; border-radius: 8px; }
 .tadaima-hero .hero-choice { display: flex; flex-direction: column; gap: 18px; width: min(340px, 100%); }
 .tadaima-hero .hero-tile {
   display: flex;
@@ -286,12 +306,16 @@
   .tadaima-hero .hero-inner { padding-left: max(120px, env(safe-area-inset-left, 0px)); padding-right: max(64px, env(safe-area-inset-right, 0px)); }
   .tadaima-hero .hero-choices { padding-left: max(120px, env(safe-area-inset-left, 0px)); }
   .tadaima-hero .hero-cord { left: 42px; }
+  .tadaima-hero .hero-mark { left: max(120px, env(safe-area-inset-left, 0px)); }
 }
 @media (max-width: 719px) {
   .tadaima-hero .hero-choices { gap: 16px; }
   .tadaima-hero .hero-or { font-size: 34px; line-height: 34px; }
 }
 @media (prefers-reduced-motion: reduce) {
+  .tadaima-hero .hero-mark img { transition: none; }
+  .tadaima-hero .hero-mark:hover img,
+  .tadaima-hero .hero-mark:focus-visible img { transform: none; }
   .tadaima-hero .hero-caret,
   .tadaima-hero .hero-cord { animation: none; }
 }

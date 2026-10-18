@@ -256,10 +256,43 @@
   pointer-events: auto;
 }
 
-.room-x__back {
+.room-x__start {
   grid-area: back;
   justify-self: start;
+  display: flex;
+  gap: 8px;
+}
+
+.room-x__back {
   padding: 0 16px 0 12px;
+}
+
+.room-x__home {
+  width: 38px;
+  padding: 0;
+}
+
+/* same turn as the rooms header: one full spin, landing upright */
+.room-x__mark {
+  width: 22px;
+  height: 22px;
+  transition: transform 0.9s var(--ease);
+}
+
+.room-x__home:hover .room-x__mark,
+.room-x__home:focus-visible .room-x__mark {
+  transform: rotate(360deg) scale(1.08);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .room-x__mark {
+    transition: none;
+  }
+
+  .room-x__home:hover .room-x__mark,
+  .room-x__home:focus-visible .room-x__mark {
+    transform: none;
+  }
 }
 
 .room-x__title {
