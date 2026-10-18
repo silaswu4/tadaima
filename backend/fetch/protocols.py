@@ -45,6 +45,8 @@ class ResearchRequest(Model):
     max_depth_m: float | None = None
     merchants: list[str] = ["IKEA", "Target"]
     limit: int = 5
+    # measure this one product page instead of searching (query and category then describe it)
+    product_url: str | None = None
 
 
 class ResearchProgress(Model):
