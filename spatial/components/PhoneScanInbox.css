@@ -11,3 +11,6 @@
 .phone-inbox__enter:disabled { opacity: .5; cursor: default; }
 .phone-inbox__enter:focus-visible { outline: 2px solid #967a47; outline-offset: 3px; }
 .phone-inbox__fresh { border-color: #302c27; }
+.phone-inbox__connect { display: flex; gap: 8px; }
+.phone-inbox__connect input { flex: 1; min-width: 0; min-height: 40px; padding: 8px 10px; border: 1px solid #d6d1c5; border-radius: 2px; background: #fffdf7; color: inherit; font: inherit; font-size: 12px; }
+.phone-inbox__connect input:focus-visible { outline: 2px solid #967a47; outline-offset: 1px; }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { importPhoneScan, type RoomRecord } from "../rooms/registry";
 import "./PhoneScanInbox.css";
 
@@ -20,9 +20,12 @@ function describe(scan: PhoneScan): string {
   return `Ready · ${parts.filter(Boolean).join(" · ")}. Geometry is a scan draft; check sizes before buying.`;
 }
 
-/** Lists scans sent from TadaimaScan to this machine's reconstruction service. Hidden when the service is not configured. */
+/** Lists scans sent from TadaimaScan to the reconstruction service. Hidden when the service is not configured. */
 export function PhoneScanInbox({ onImported }: { onImported: (room: RoomRecord) => void }) {
   const [scans, setScans] = useState<PhoneScan[] | null>(null);
+  const [locked, setLocked] = useState(false);
+  const [key, setKey] = useState("");
+  const [attempt, setAttempt] = useState(0);
   const [opening, setOpening] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [openedAt] = useState(() => Date.now());
@@ -33,7 +36,8 @@ export function PhoneScanInbox({ onImported }: { onImported: (room: RoomRecord) 
       try {
         const response = await fetch("/api/scans", { cache: "no-store" });
         if (!live) return;
-        // 401/503: not on the scanning Mac or the service is off. Stay out of the way.
+        // 401: a deployed site that needs the scan key. 503: the service is off; stay out of the way.
+        setLocked(response.status === 401);
         if (!response.ok) { setScans(null); return; }
         const { scans: all } = await response.json() as { scans: PhoneScan[] };
         if (live) setScans(all.filter((scan) => Date.now() - Date.parse(scan.createdAt) < RECENT_MS));
@@ -44,7 +48,23 @@ export function PhoneScanInbox({ onImported }: { onImported: (room: RoomRecord) 
     poll();
     document.addEventListener("visibilitychange", resume);
     return () => { live = false; window.clearTimeout(timer); document.removeEventListener("visibilitychange", resume); };
-  }, []);
+  }, [attempt]);
+
+  async function connect(event: FormEvent) {
+    event.preventDefault(); setError("");
+    const response = await fetch("/api/scans/session", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ key }) });
+    if (!response.ok) { setError("That scan key is not right."); return; }
+    setKey(""); setAttempt((count) => count + 1);
+  }
+
+  if (locked) return <aside className="phone-inbox" aria-label="Scans from your iPhone">
+    <p className="phone-inbox__eyebrow">FROM YOUR IPHONE</p>
+    <form className="phone-inbox__connect" onSubmit={connect}>
+      <input type="password" autoComplete="off" placeholder="Scan key" aria-label="Scan key" value={key} onChange={(event) => setKey(event.target.value)} />
+      <button className="phone-inbox__enter" type="submit" disabled={!key.trim()}>Show scans</button>
+    </form>
+    {error ? <p className="phone-inbox__error" role="alert">{error}</p> : null}
+  </aside>;
 
   if (!scans || scans.length === 0) return null;
 
