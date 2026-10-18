@@ -24,13 +24,14 @@ logger = logging.getLogger("tadaima.service")
 SAFE_ERRORS = (GeometryError, RoomPlanError, BundleError, CaptureError, ResearchError, ProviderError)
 
 # Downloadable files per job kind, relative to <job>/out. Anything else stays private.
-_DRAFT = ("draft/manifest.json", "draft/scene.glb", "draft/scene.blend", "draft/preview.png")
+_DRAFT = ("draft/manifest.json", "draft/scene.json", "draft/scene.glb", "draft/scene.blend", "draft/preview.png")
 ARTIFACTS = {
     "geometry": ("manifest.json", "scene.glb", "scene.blend", "preview.png", "scene.json"),
-    "roomplan": ("roomplan.dossier.json", "reconstruction.request.json", *_DRAFT),
+    "roomplan": ("roomplan.dossier.json", "reconstruction.request.json", *_DRAFT,
+                 "draft/photo-texturing.json", "draft/surface-reconstruction.json"),
     "capture": ("capture.dossier.json", "inference.request.json", "vision.proposal.json",
                 "reconstruction.request.json", *_DRAFT),
-    "address": ("dossier.json", "reconstruction.request.json", *_DRAFT),
+    "address": ("reconstruction.request.json", *_DRAFT),
 }
 
 
@@ -67,14 +68,16 @@ def geometry(settings: Settings, *, preview: bool) -> Callable[[Path], dict]:
     return work
 
 
-def roomplan(settings: Settings, *, render: bool, preview: bool) -> Callable[[Path], dict]:
+def roomplan(settings: Settings, *, render: bool, preview: bool, photos: bool) -> Callable[[Path], dict]:
     from reconstruction.roomplan import run
 
     @_guard
     def work(job_dir: Path) -> dict:
-        dossier = run(job_dir / "input.json", job_dir / "out", render=render, preview=preview,
-                      blender=settings.blender)
-        return _pick(dossier, "status", "reviewRequired", "projectId", "jobId", "inputRevision", "warnings", "corrections")
+        # The importer switches to photo texturing when the input is a .zip bundle.
+        source = job_dir / ("input.zip" if photos else "input.json")
+        dossier = run(source, job_dir / "out", render=render, preview=preview, blender=settings.blender)
+        return _pick(dossier, "status", "reviewRequired", "projectId", "jobId", "inputRevision", "warnings", "corrections",
+                     "photoCount", "importedItemCount", "photoTexturingPath")
     return work
 
 

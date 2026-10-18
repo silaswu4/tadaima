@@ -57,8 +57,18 @@ class JobStore:
     def get(self, job_id: str) -> dict | None:
         with self._connect() as connection:
             row = connection.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
-        if row is None:
-            return None
+        return None if row is None else self._record(row)
+
+    def recent(self, kind: str | None, limit: int) -> list[dict]:
+        query, args = "SELECT * FROM jobs", ()
+        if kind is not None:
+            query, args = query + " WHERE kind = ?", (kind,)
+        with self._connect() as connection:
+            rows = connection.execute(query + " ORDER BY created_at DESC LIMIT ?", (*args, limit)).fetchall()
+        return [self._record(row) for row in rows]
+
+    @staticmethod
+    def _record(row: sqlite3.Row) -> dict:
         return {"id": row["id"], "kind": row["kind"], "status": row["status"],
                 "createdAt": row["created_at"], "startedAt": row["started_at"], "finishedAt": row["finished_at"],
                 "params": json.loads(row["params"]),

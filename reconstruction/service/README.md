@@ -43,9 +43,10 @@ Interactive schema: `GET /docs`. Every `/v1` route needs `Authorization: Bearer 
 | `GET /healthz` | | Unauthenticated liveness |
 | `GET /v1/capabilities` | | Whether Blender and each provider are configured, so the UI can hide unavailable modes |
 | `POST /v1/jobs/geometry?preview=false` | `ReconstructionRequest` JSON, 2 MiB max | Blend, GLB, and manifest |
-| `POST /v1/jobs/roomplan?render=true&preview=false` | `roomplan-scan/1.0` JSON from TadaimaScan | Imports the scan, optionally renders `draft/` |
+| `POST /v1/jobs/roomplan?render=true&preview=false` | TadaimaScan export: `roomplan-scan/1.0` JSON (2 MiB) or the scan + photos ZIP (144 MiB) | Imports the scan and optionally renders `draft/`. A ZIP also photo-textures the room |
 | `POST /v1/jobs/capture` | multipart: `capture` ZIP (32 MiB max), optional `proposal` JSON, form `infer`, `inferAppearance`, `render` (default true), `preview` | `infer` sends photos to OpenAI. `proposal` is the keyless hash-bound handoff |
 | `POST /v1/jobs/address` | JSON: `projectId`, `jobId`, `address`, optional `unit`, `targetRoom`, `listingUrls`, `inputRevision`, `discovery`, `collectOnly`, `renderDraft` (default true), `preview`, `inferAppearance`, `rounds` | Needs Browser Use unless `discovery` is supplied, and OpenAI unless `collectOnly` |
+| `GET /v1/jobs?kind=roomplan&limit=20` | | Most recent jobs first; used by the `/rooms` phone inbox |
 | `GET /v1/jobs/{id}` | | Status `queued` → `running` → `succeeded`/`failed`, plus a result receipt and `artifacts` |
 | `GET /v1/jobs/{id}/artifacts/{name}` | | Downloads one allow-listed file |
 
@@ -53,7 +54,7 @@ Submissions are validated before queueing. Invalid geometry, open RoomPlan loops
 
 `succeeded` means the pipeline finished. It does not mean the room is usable: read `result.status` (for example `needs_review`, `needs_capture`) and `result.warnings`. Capture and address results always carry `reviewRequired: true`, and photo-only scale stays labeled unverified.
 
-Only these files are downloadable: `manifest.json`, `scene.glb`, `scene.blend`, `preview.png`, `scene.json` for geometry jobs, and the dossier, `reconstruction.request.json`, inference/proposal JSON, and `draft/*` for the input jobs. Uploaded photos, raw scans, fetched pages, and the SQLite database are never served. Address strings are not stored in the job table.
+Only these files are downloadable: `manifest.json`, `scene.glb`, `scene.blend`, `preview.png`, `scene.json` for geometry jobs, and the RoomPlan/capture dossier, `reconstruction.request.json`, inference/proposal JSON, and `draft/*` (including `draft/scene.json`, which the web importer pairs with `draft/scene.glb`) for the input jobs. Uploaded photos, raw scans, the address dossier, fetched pages, and the SQLite database are never served. Address strings are not stored in the job table.
 
 ```bash
 curl -s -H "Authorization: Bearer $TADAIMA_API_KEY" -H 'content-type: application/json' \

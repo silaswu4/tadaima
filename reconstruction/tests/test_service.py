@@ -20,6 +20,7 @@ except ImportError:  # pragma: no cover - depends on optional service deps
 
 from test_capture_pipeline import handoff, photo_fixture, photo_proposal, write_bundle
 from test_roomplan import packet
+from test_roomplan_photo_bundle import archive_bytes, fixture as photo_bundle_fixture
 
 ROOT = Path(__file__).resolve().parents[2]
 FIXTURE = ROOT / "reconstruction" / "fixtures" / "living-room.request.json"
@@ -174,7 +175,38 @@ class ServiceTests(unittest.TestCase):
         response = self.client.post("/v1/jobs/roomplan", json=packet(), headers=self.auth)
         job = self.wait(response.json()["id"])
         self.assertEqual(job["status"], "succeeded", job["error"])
-        self.assertIn("draft/scene.glb", {artifact["name"] for artifact in job["artifacts"]})
+        names = {artifact["name"] for artifact in job["artifacts"]}
+        # The web importer needs the normalized scene.json that the GLB was built from.
+        self.assertTrue({"draft/scene.glb", "draft/scene.json"} <= names, names)
+
+    def test_phone_photo_bundle_zip_is_accepted_as_a_roomplan_job(self):
+        # TadaimaScan's "scan + photos" export is a ZIP; the phone uploads it as-is.
+        body = archive_bytes(*photo_bundle_fixture(count=2))
+        response = self.client.post("/v1/jobs/roomplan?render=false", content=body, headers=self.auth)
+        self.assertEqual(response.status_code, 202, response.text)
+        self.assertTrue(response.json()["params"]["photos"])
+        job = self.wait(response.json()["id"])
+        self.assertEqual(job["status"], "succeeded", job["error"])
+        self.assertEqual(job["result"]["photoCount"], 2)
+
+    def test_corrupt_photo_bundle_is_rejected_before_queueing(self):
+        response = self.client.post("/v1/jobs/roomplan", content=b"PK\x03\x04 not really a zip", headers=self.auth)
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(response.json()["detail"]["error"], "RoomPlanError")
+        self.assertTrue(self.staging_is_empty())
+
+    def test_recent_jobs_are_listed_newest_first_and_filterable(self):
+        # The /rooms phone inbox polls this list to find the scan that just arrived.
+        first = self.client.post("/v1/jobs/roomplan?render=false", json=packet(), headers=self.auth).json()["id"]
+        second = self.client.post("/v1/jobs/geometry", content=FIXTURE.read_bytes(), headers=self.auth).json()["id"]
+        listed = [job["id"] for job in self.client.get("/v1/jobs", headers=self.auth).json()["jobs"]]
+        self.assertEqual(listed[:2], [second, first])
+        only = self.client.get("/v1/jobs?kind=roomplan", headers=self.auth).json()["jobs"]
+        self.assertEqual([job["id"] for job in only], [first])
+        self.assertEqual(self.client.get("/v1/jobs?kind=bogus", headers=self.auth).status_code, 422)
+        self.assertEqual(self.client.get("/v1/jobs").status_code, 401)
+        for job_id in (first, second):  # let workers finish before the temp data dir is removed
+            self.wait(job_id)
 
     # --- privacy: only allow-listed outputs leave the service -------------------
 

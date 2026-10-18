@@ -16,6 +16,7 @@ from typing import Annotated, Any
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -24,6 +25,7 @@ from reconstruction.address.schema import validate_input
 from reconstruction.capture.bundle import MAX_ZIP_BYTES, read_bundle
 from reconstruction.pipeline import MAX_INPUT_BYTES, PipelineError, read_request, resolve_blender
 from reconstruction.roomplan.importer import _read as read_roomplan, import_scan
+from reconstruction.roomplan.photo_bundle import MAX_ZIP_BYTES as MAX_ROOMPLAN_ZIP_BYTES, read_photo_bundle
 from . import handlers
 from .jobs import JobRunner, JobStore
 from .settings import Settings
@@ -110,7 +112,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     Auth = Depends(authorize)
 
-    def stage(files: dict[str, bytes], validate) -> Path:
+    def _stage(files: dict[str, bytes], validate) -> Path:
         """Write inputs to a private staging directory and validate them there."""
         directory = Path(tempfile.mkdtemp(dir=staging_dir))
         try:
@@ -126,6 +128,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             shutil.rmtree(directory)
             raise _fail(422, type(error).__name__, str(error)[:2000]) from None
         return directory
+
+    async def stage(files: dict[str, bytes], validate) -> Path:
+        # Validation can take seconds on adversarial geometry; keep the event loop responsive.
+        return await run_in_threadpool(_stage, files, validate)
 
     def enqueue(request: Request, kind: str, params: dict, staged: Path | None, work) -> dict:
         store: JobStore = request.app.state.store
@@ -166,16 +172,23 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.post("/v1/jobs/geometry", status_code=202, dependencies=[Auth])
     async def submit_geometry(request: Request, preview: bool = False) -> dict:
         body = await _read_body(request, MAX_INPUT_BYTES)
-        staged = stage({"input.json": body}, lambda directory: read_request(directory / "input.json"))
+        staged = await stage({"input.json": body}, lambda directory: read_request(directory / "input.json"))
         return enqueue(request, "geometry", {"preview": preview}, staged, handlers.geometry(settings, preview=preview))
 
     @app.post("/v1/jobs/roomplan", status_code=202, dependencies=[Auth])
     async def submit_roomplan(request: Request, render: bool = True, preview: bool = False) -> dict:
-        body = await _read_body(request, MAX_INPUT_BYTES)
-        staged = stage({"input.json": body},
-                       lambda directory: import_scan(read_roomplan(directory / "input.json")[0]))
-        return enqueue(request, "roomplan", {"render": render, "preview": preview}, staged,
-                       handlers.roomplan(settings, render=render, preview=preview))
+        body = await _read_body(request, MAX_ROOMPLAN_ZIP_BYTES)
+        if body.startswith(b"PK"):
+            # Photo bundle from TadaimaScan: scan JSON plus calibrated JPEGs (and optional mesh).
+            files, validate = {"input.zip": body}, lambda directory: import_scan(read_photo_bundle(directory / "input.zip")["scan"])
+        elif len(body) <= MAX_INPUT_BYTES:
+            files, validate = {"input.json": body}, lambda directory: import_scan(read_roomplan(directory / "input.json")[0])
+        else:
+            raise _fail(413, "PayloadTooLarge", "RoomPlan JSON exceeds 2 MiB")
+        staged = await stage(files, validate)
+        photos = "input.zip" in files
+        return enqueue(request, "roomplan", {"render": render, "preview": preview, "photos": photos}, staged,
+                       handlers.roomplan(settings, render=render, preview=preview, photos=photos))
 
     @app.post("/v1/jobs/capture", status_code=202, dependencies=[Auth])
     async def submit_capture(
@@ -194,7 +207,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         files = {"input.zip": await _read_upload(capture, MAX_ZIP_BYTES, "Capture ZIP")}
         if proposal is not None:
             files["proposal.json"] = await _read_upload(proposal, MAX_INPUT_BYTES, "Proposal")
-        staged = stage(files, lambda directory: read_bundle(directory / "input.zip"))
+        staged = await stage(files, lambda directory: read_bundle(directory / "input.zip"))
         params = {"infer": infer, "inferAppearance": infer_appearance, "render": render,
                   "preview": preview, "proposal": proposal is not None}
         return enqueue(request, "capture", params, staged, handlers.capture(
@@ -230,6 +243,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if job is None:
             raise _fail(404, "NotFound", "No such job")
         return job
+
+    @app.get("/v1/jobs", dependencies=[Auth])
+    def list_jobs(request: Request, kind: str | None = None, limit: int = 20) -> dict:
+        if kind is not None and kind not in handlers.ARTIFACTS:
+            raise _fail(422, "InvalidRequest", "Unknown job kind")
+        jobs = request.app.state.store.recent(kind, max(1, min(limit, 100)))
+        return {"jobs": [describe(request, job) for job in jobs]}
 
     @app.get("/v1/jobs/{job_id}", dependencies=[Auth])
     def get_job(request: Request, job_id: str) -> dict:
