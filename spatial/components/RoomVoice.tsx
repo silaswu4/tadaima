@@ -30,6 +30,9 @@ type Props = {
   onPlace(result: ShopResult, job: Job<ShopJobOutput>): Promise<void>;
   onMove(itemId: string, spot: FloorSpot, unlock: boolean): Promise<void>;
   onStore(itemId: string, unlock: boolean): Promise<void>;
+  onRemove(itemId: string): Promise<void>;
+  onReplace(result: ShopResult, job: Job<ShopJobOutput>, itemId: string): Promise<void>;
+  onUndo(): Promise<boolean>;
 };
 
 /** The room's one voice session: always there once the room is connected, push to talk. */
@@ -65,6 +68,9 @@ export function RoomVoice(props: Props) {
       spot: () => p().getSpot(),
       move: (itemId, spot, unlock) => p().onMove(itemId, spot, unlock),
       store: (itemId, unlock) => p().onStore(itemId, unlock),
+      remove: (itemId) => p().onRemove(itemId),
+      replace: (result, job, itemId) => p().onReplace(result, job, itemId),
+      undo: () => p().onUndo(),
       liveSearch: initial.liveSearch,
     });
   };

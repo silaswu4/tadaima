@@ -733,6 +733,7 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
     return proposal;
   };
   const applyByVoice = async (proposalId: string) => {
+    remember();
     const proposal = agentProposalRef.current;
     if (!proposal || proposal.id !== proposalId) throw new Error("That proposal is gone. Plan it again.");
     await shopping.applyProposal(proposal);
@@ -743,7 +744,45 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
     const session = shoppingRef.current.session;
     if (!session || !job.output) throw new Error("The room isn't connected.");
     cancelProduct();
+    remember();
     await shopping.place(result.product.id, job.output.request.spot, session.plan.revision, job.id);
+  };
+  // a shopping pick the shopper rejects is gone; their own piece goes to inventory
+  const removeByVoice = async (itemId: string) => {
+    const item = shoppingRef.current.session?.plan.items.find((i) => i.id === itemId);
+    if (!item) throw new Error("That piece isn't in the room.");
+    remember();
+    if (item.origin === "proposed_purchase") await shopping.removeItem(itemId);
+    else await shopping.storeAgentItem(itemId, true);
+  };
+  const replaceByVoice = async (result: ShopResult, job: Job<ShopJobOutput>, itemId: string) => {
+    const session = shoppingRef.current.session;
+    const item = session?.plan.items.find((i) => i.id === itemId);
+    if (!session || !item || !job.output) throw new Error("The room isn't connected.");
+    cancelProduct();
+    remember();
+    if (item.locked) await shopping.unlockItem(itemId);
+    const fresh = shoppingRef.current.session!.plan;
+    await shopping.place(result.product.id, { roomId: item.roomId, position: [...item.position], rotationY: item.rotationY }, fresh.revision, job.id, itemId);
+  };
+  // Voice changes go through the server, so the engine's undo doesn't see them:
+  // keep the room as it was before each one, and "undo that" restores it.
+  const voiceHistory = useRef<RoomPlan[]>([]);
+  const remember = () => {
+    const plan = shoppingRef.current.session?.plan;
+    if (plan) voiceHistory.current = [...voiceHistory.current.slice(-9), structuredClone(plan)];
+  };
+  const undoByVoice = async () => {
+    const before = voiceHistory.current.at(-1);
+    if (before) {
+      await shopping.sync(before);
+      voiceHistory.current = voiceHistory.current.slice(0, -1);
+      return true;
+    }
+    const engine = api();
+    if (!engine || !canUndo) return false;
+    engine.undo();
+    return true;
   };
   const previewFromFetch = async (job: Job<ShopJobOutput>, productId: string) => {
     const owner = shopping.session?.plan.projectId;
@@ -1013,9 +1052,11 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
             plan={shopping.session?.plan ?? null} selectedId={selected?.id ?? null} previewedProductId={pending?.id ?? null} job={shopping.job} results={results}
             available={Boolean(shopping.session?.capabilities.voice)} liveSearch={Boolean(shopping.session?.capabilities.liveSearch)}
             getSpot={assistantSpot} onRefresh={shopping.refresh} onPropose={proposeByVoice}
-            onApply={applyByVoice} getProposal={() => agentProposalRef.current} onSetBudget={shopping.setBudget}
+            onApply={applyByVoice} getProposal={() => agentProposalRef.current} onSetBudget={async (minor) => { remember(); return shopping.setBudget(minor); }}
             onSearch={assistantSearch} onPreview={(result) => addProduct(result.product)} onPlace={placeByVoice}
-            onMove={shopping.moveAgentItem} onStore={shopping.storeAgentItem}
+            onMove={async (id, spot, unlock) => { remember(); await shopping.moveAgentItem(id, spot, unlock); }}
+            onStore={async (id, unlock) => { remember(); await shopping.storeAgentItem(id, unlock); }}
+            onRemove={removeByVoice} onReplace={replaceByVoice} onUndo={undoByVoice}
             onControls={registerVoiceControls} onStateChange={setVoiceState}
           />
           <button
@@ -1069,7 +1110,8 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
           <button type="button" className="room-x__tool" onClick={() => safely(() => { unlockFor(selected); api()?.rotate(selected.id, ROTATE_STEP); })} aria-label="Rotate" title="Rotate (R)">
             {Icon.rotate}<span className="room-x__key">R</span>
           </button>
-          <button type="button" className="room-x__tool" onClick={() => safely(() => { unlockFor(selected); putAway(selected); })} aria-label="Put away in inventory" title="Put away (Del)">
+          <button type="button" className="room-x__tool" onClick={() => safely(() => { unlockFor(selected); if (selected.origin === "proposed_purchase") remove(selected); else putAway(selected); })}
+            aria-label={selected.origin === "proposed_purchase" ? "Remove from the room and basket" : "Put away in inventory"} title={selected.origin === "proposed_purchase" ? "Remove (Del)" : "Put away (Del)"}>
             {Icon.close}<span className="room-x__key">Del</span>
           </button>
         </div>
@@ -1293,7 +1335,6 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
         onPropose={proposeWithAssistant} onApply={shopping.applyProposal}
         onSearch={assistantSearch} onPreview={(result) => addProduct(result.product)}
         proposal={agentProposal} onProposal={setAgentProposal} fetchConnection={fetchConnection} onFetchPreview={previewFromFetch} /> : null}
-      {room.sourceDescription ? <p className="room-x__source">{room.sourceDescription}</p> : null}
       {ready ? <RoomOnboarding xr={xr} touch={coarse} /> : null}
       {/* ---------- states ---------- */}
       <div className="room-x__veil" data-show={status === "loading" || undefined} aria-hidden={status !== "loading"}>

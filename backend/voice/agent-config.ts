@@ -23,6 +23,9 @@ Changing the room:
 - "Raise my budget to 2000" or "set the budget to 1800": confirm the amount, then call set_budget.
 - For anything else ("make it $300 cheaper", "swap the armchair for something cheaper"), call propose_change with their words. Read the summary in a sentence and ask. On yes, call apply_proposal.
 - To move a piece to where they're looking, call move_here with its id. "Put it away" is put_away; "bring it back here" is move_here on the stored piece. If a piece is locked, ask if it's okay first, then call again with unlock true.
+- Keep track of the conversation. The latest search results stay numbered until a new search; call check_search to see them again. get_room marks the selected piece and the one added most recently.
+- "I don't like this sofa, take it out": remove_item on that piece. "Take it out and try the third one instead": swap_with with that piece's id and choice 3, in one step (confirm in a sentence first if it changes the price a lot). "Undo that" or "put it back": undo_last.
+- "This one" means the selected piece; right after you placed something, "it" or "that sofa" means the piece added most recently. Only ask which piece if it's truly unclear.
 
 Checkout: when asked to pay or buy the basket, call get_cart first to read its current contents, total and blockers. Then explain that the shopper must review and approve payment on screen in the Basket. Never treat spoken approval as payment approval.
 
@@ -145,6 +148,36 @@ export const voiceAgentConfig = {
             name: "set_budget",
             description: "Set the room's total budget for new purchases. Call after the shopper agreed to the amount.",
             parameters: { type: "object", properties: { usd: { type: "number", description: "New total budget in dollars" } }, required: ["usd"] },
+            expects_response: true,
+          },
+          {
+            type: "client",
+            name: "remove_item",
+            description: "Take a piece out of the room. A piece you added for them is gone and leaves the basket; their own furniture goes to their inventory. Use get_room for ids.",
+            parameters: { type: "object", properties: { item_id: str("Item id from get_room") }, required: ["item_id"] },
+            expects_response: true,
+          },
+          {
+            type: "client",
+            name: "swap_with",
+            description: "Swap a piece in the room for a search result in the same spot, in one step (\"take this sofa out and try the third one\"). The old piece leaves the basket if you added it, or goes to their inventory if it's theirs. Call after the shopper agreed.",
+            parameters: {
+              type: "object",
+              properties: {
+                item_id: str("The piece to swap out, from get_room"),
+                choice: { type: "integer", description: "Option number from the latest search, starting at 1" },
+                product_id: str("Product id from the search results, if known"),
+                job_id: str("Search id; defaults to the latest"),
+              },
+              required: ["item_id"],
+            },
+            expects_response: true,
+          },
+          {
+            type: "client",
+            name: "undo_last",
+            description: "Undo the last change in the room (\"undo that\", \"put it back\").",
+            parameters: { type: "object", properties: {}, required: [] },
             expects_response: true,
           },
           {

@@ -30,7 +30,7 @@ export type FitResult =
 export interface PlaceOptions {
   /** An item being moved: it doesn't block itself. */
   ignoreItemId?: string | null;
-  /** How far from the spot to look before giving up. Default 1.2 m. */
+  /** How far from the spot to look before giving up. Default 2 m. */
   maxShiftM?: number;
   /** Grid step, meters. Default 0.05. */
   stepM?: number;
@@ -165,7 +165,8 @@ export function placeAt(
   if (opts.keepFacing) turns.splice(1);
 
   const step = opts.stepM ?? 0.05;
-  const maxShift = opts.maxShiftM ?? 1.2;
+  // look up to 2 m around the spot: a piece that fits a step away still "fits here"
+  const maxShift = opts.maxShiftM ?? 2;
   const { t, n } = near.edge;
 
   type Cand = { x: number; z: number; r: number; score: number; snapped: boolean };

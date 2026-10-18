@@ -53,7 +53,9 @@ function voiceFixture(overrides = {}) {
     // a search finishes its catalog pass at once
     search: async (input) => { calls.push(["search", input]); state.job = { ...job, id: "search-2" }; }, preview: (r) => { calls.push(["preview", r]); return true; },
     place: async (r) => { calls.push(["place", r]); },
-    spot: () => ({ position: [1, 0, 1] }), move: async (...args) => { calls.push(["move", ...args]); }, store: async (...args) => { calls.push(["store", ...args]); }, liveSearch: false, ...overrides });
+    spot: () => ({ position: [1, 0, 1] }), move: async (...args) => { calls.push(["move", ...args]); }, store: async (...args) => { calls.push(["store", ...args]); },
+    remove: async (id) => { calls.push(["remove", id]); }, replace: async (r, j, id) => { calls.push(["replace", r.product.id, id]); }, undo: async () => { calls.push("undo"); return true; },
+    liveSearch: false, ...overrides });
   return { tools, state, calls, result, proposal, stop: () => { active = false; } };
 }
 test("voice applies only the proposal on screen after a yes, and never pays", async () => {
@@ -218,4 +220,28 @@ test("one pending approval cannot place twice or switch the recommendation mid-s
   assert.match(await tools.check_search({}), /Wait for the approved placement/);
   assert.match(await tools.shop_here({ category: "chair" }), /Wait for the approved placement/);
   complete(); assert.match(await first, /^ok/); assert.equal(placements, 1);
+});
+
+test("remove_item, swap_with and undo_last act on the right piece and respect the budget", async () => {
+  const { tools, state, calls, result } = voiceFixture();
+  const pick = { ...state.plan.items[0], id: "item_pick", origin: "proposed_purchase", productId: result.product.id, stored: false };
+  state.plan.items.push(pick);
+  assert.match(await tools.remove_item({ item_id: "item_ghost" }), /Not completed/);
+  assert.match(await tools.remove_item({ item_id: "item_pick" }), /^ok: .* out of the room and the basket/);
+  assert.match(await tools.swap_with({ item_id: "item_pick", choice: 1 }), /^ok: .* in its place/);
+  assert.match(await tools.undo_last({}), /^ok: undid/);
+  assert.deepEqual(calls, [["remove", "item_pick"], ["replace", result.product.id, "item_pick"], "undo"]);
+  // a swap that blows the budget is refused before anything changes
+  state.plan.constraints.budget = { amountMinor: 1, currency: "USD" };
+  calls.length = 0;
+  assert.match(await tools.swap_with({ item_id: "item_pick", choice: 1 }), /^Not swapped: .* over the \$0 budget/);
+  assert.deepEqual(calls, []);
+});
+test("get_room tells the agent which piece is selected and which it added last", async () => {
+  const { tools, state, result } = voiceFixture();
+  state.plan.items.push({ ...state.plan.items[0], id: "item_new", label: "New sofa", origin: "proposed_purchase", productId: result.product.id, stored: false });
+  state.selectedId = state.plan.items[0].id;
+  const said = await tools.get_room({});
+  assert.match(said, /\(selected\)/);
+  assert.match(said, /New sofa \[id item_new\] \(added most recently\)/);
 });
