@@ -16,6 +16,43 @@
   font-family: var(--font-body), system-ui, sans-serif;
 }
 
+/* ---------- sign in, top left ---------- */
+.tadaima-hero .hero-account {
+  position: absolute;
+  z-index: 4;
+  top: 28px;
+  left: var(--hero-left);
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+}
+.tadaima-hero .hero-signin {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: 500 15px/20px var(--font-body), system-ui, sans-serif;
+  color: var(--hero-fg);
+  cursor: pointer;
+}
+.tadaima-hero .hero-signin__label { position: relative; }
+.tadaima-hero .hero-signin__label::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -3px;
+  height: 1px;
+  background: currentColor;
+  transform: scaleX(0);
+  transform-origin: 100% 50%;
+  transition: transform 0.5s var(--hero-ease);
+}
+.tadaima-hero .hero-signin:hover .hero-signin__label::after,
+.tadaima-hero .hero-signin:focus-visible .hero-signin__label::after { transform: scaleX(1); transform-origin: 0% 50%; }
+.tadaima-hero .hero-signin:focus-visible { outline: none; }
+.tadaima-hero .hero-signin__note { font-size: 13px; line-height: 18px; color: var(--hero-muted); }
+.tadaima-hero:not(.is-revealed) .hero-account { visibility: hidden; }
+
 /* ---------- the three ways in, down the left side ---------- */
 .tadaima-hero .hero-side {
   position: absolute;
@@ -196,9 +233,9 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  /* hugs the line until the timeline takes over the size */
+  /* hugs the lines until the timeline takes over the size */
   width: max-content;
-  height: 64px;
+  height: max-content;
 }
 .tadaima-hero .hero-loader__stack { display: inline-flex; flex-direction: column; gap: 4px; }
 .tadaima-hero .hero-loader__corner {
@@ -215,8 +252,8 @@
   margin: 0;
   font-family: var(--font-display), system-ui, sans-serif;
   font-weight: 500;
-  font-size: clamp(22px, 5.4vw, 36px);
-  line-height: 1.25;
+  font-size: clamp(30px, 9vw, 46px);
+  line-height: 1.05;
   letter-spacing: -0.03em;
   white-space: nowrap;
   color: var(--hero-fg);
@@ -240,5 +277,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .tadaima-hero .hero-row__label::after { transition: none; }
+  .tadaima-hero .hero-row__label::after,
+  .tadaima-hero .hero-signin__label::after { transition: none; }
 }

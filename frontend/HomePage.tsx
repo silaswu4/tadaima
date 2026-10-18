@@ -28,24 +28,26 @@ function Loader({ onLift, onDone, reduced }: { onLift: () => void; onDone: () =>
     const pct = q(".hero-loader__pct")[0] as HTMLElement;
     const frame = q(".hero-loader__frame");
     // the brackets are sized from the line they frame, so any copy fits
-    const w = (q(".hero-loader__stack")[0] as HTMLElement).offsetWidth;
+    const stack = q(".hero-loader__stack")[0] as HTMLElement;
+    const w = stack.offsetWidth;
+    const h = stack.offsetHeight;
     const ctx = gsap.context(() => {
       if (reduced) {
         pct.textContent = "100%";
         gsap.set(q(".hero-loader__meta"), { opacity: 1 });
-        gsap.set(frame, { width: w + 56, height: 132 });
+        gsap.set(frame, { width: w + 56, height: h + 64 });
         gsap.to(root, { autoAlpha: 0, duration: 0.3, delay: 0.25, onStart: onLift, onComplete: onDone });
         return;
       }
       const count = { v: 0 };
       gsap
         .timeline({ onComplete: onDone })
-        .fromTo(frame, { width: w - 24, height: 64 }, { width: w + 36, height: 84, duration: 0.55, ease: "power3.out" })
+        .fromTo(frame, { width: w - 24, height: h }, { width: w + 36, height: h + 24, duration: 0.55, ease: "power3.out" })
         .fromTo(word, { yPercent: 35, autoAlpha: 0 }, { yPercent: 0, autoAlpha: 1, duration: 0.5, ease: "power3.out" }, 0)
         .to(q(".hero-loader__meta"), { opacity: 1, duration: 0.2 }, 0.35)
-        .to(frame, { width: w + 56, height: 108, duration: 0.5, ease: "power3.out" }, 0.55)
+        .to(frame, { width: w + 56, height: h + 44, duration: 0.5, ease: "power3.out" }, 0.55)
         .to(count, { v: 100, duration: 0.7, ease: "back.out(1.7)", onUpdate: () => (pct.textContent = `${Math.max(0, Math.round(count.v))}%`) }, 0.6)
-        .to(frame, { height: 132, duration: 0.4, ease: "power3.out" }, 1.3)
+        .to(frame, { height: h + 64, duration: 0.4, ease: "power3.out" }, 1.3)
         .add(onLift, 1.55)
         .to(root, { yPercent: -100, duration: 0.75, ease: "power3.inOut" }, 1.55)
         .to(q(".hero-loader__stack"), { yPercent: -80, duration: 0.75, ease: "power3.inOut" }, 1.55);
@@ -61,7 +63,11 @@ function Loader({ onLift, onDone, reduced }: { onLift: () => void; onDone: () =>
         <span className="hero-loader__corner bl" />
         <span className="hero-loader__corner br" />
         <div className="hero-loader__stack">
-          <p className="hero-loader__word">Furniture shopping, reimagined</p>
+          <p className="hero-loader__word">
+            Furniture shopping,
+            <br />
+            reimagined
+          </p>
           <p className="hero-loader__meta">
             <span>Loading</span>
             <span className="hero-loader__pct">0%</span>
@@ -91,6 +97,7 @@ export default function Home() {
   const [captureUrl, setCaptureUrl] = useState("/capture");
   const [address, setAddress] = useState("");
   const [addressError, setAddressError] = useState("");
+  const [signInNote, setSignInNote] = useState(false);
   const addressRef = useRef<HTMLInputElement>(null);
   const reveal = useCallback(() => setRevealed(true), []);
   const finishLoading = useCallback(() => setLoaderGone(true), []);
@@ -106,6 +113,7 @@ export default function Home() {
         gsap.fromTo(`${layer} .hero-word__char`, { yPercent: 105 }, { yPercent: 0, duration: 1.15, ease: "power4.out", stagger: 0.05, delay: 0.1, force3D });
       }
       // each option rises out of its own line, like the wordmark
+      gsap.fromTo(".hero-account", { autoAlpha: 0, y: -6 }, { autoAlpha: 1, y: 0, duration: 0.7, ease: "power3.out", delay: 0.4 });
       gsap.fromTo(".hero-row__label", { yPercent: 110 }, { yPercent: 0, duration: 0.9, ease: "power4.out", stagger: 0.1, delay: 0.45 });
     }, root);
     return () => ctx.revert();
@@ -171,6 +179,18 @@ export default function Home() {
         breeze={false}
         className="h-full"
       >
+        {/* accounts are not built yet, so the button says so rather than going nowhere */}
+        <div className="hero-account">
+          <button type="button" className="hero-signin" onClick={() => setSignInNote((v) => !v)} aria-expanded={signInNote}>
+            <span className="hero-signin__label">Sign in</span>
+          </button>
+          {signInNote ? (
+            <small className="hero-signin__note" role="status">
+              Accounts are coming soon.
+            </small>
+          ) : null}
+        </div>
+
         <div className="hero-side">
           <ul className="hero-list">
             {ROWS.map((row) => (
