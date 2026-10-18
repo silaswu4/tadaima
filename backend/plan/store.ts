@@ -86,9 +86,12 @@ const proposalKey = (projectId: string, id: string) => `proposal:${projectId}:${
 
 /** Fixture-backed projects seed themselves on first read. */
 const SEEDS: Record<string, RoomPlan> = { proj_demo: demoPlan, proj_dev: { ...demoPlan, projectId: "proj_dev" } };
-/** `proj_test_<id>` gets its own throwaway copy of the demo room (end-to-end tests). */
+/**
+ * `proj_demo_<suffix>` (one per ASI:One chat) and `proj_test_<suffix>` (end-to-end
+ * tests) each get their own copy of the demo room on first read.
+ */
 const seedFor = (projectId: string): RoomPlan | null =>
-  SEEDS[projectId] ?? (/^proj_test_[a-z0-9]{6,40}$/.test(projectId) ? { ...demoPlan, projectId } : null);
+  SEEDS[projectId] ?? (/^proj_(demo|test)_[a-z0-9]{6,40}$/.test(projectId) ? { ...demoPlan, projectId } : null);
 
 export async function getPlan(projectId: string): Promise<RoomPlan | null> {
   const plan = await db().get<RoomPlan>(planKey(projectId));

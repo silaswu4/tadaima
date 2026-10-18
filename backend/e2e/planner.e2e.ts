@@ -59,12 +59,17 @@ const CASES: Array<{ name: string; intent: string; selected?: string; unlocks?: 
     },
   },
   {
-    name: "raise budget, nicer chair",
-    intent: "Raise my budget to $2000 and get me a nicer, pricier armchair.",
+    name: "raise budget, nicer rug",
+    intent: "Raise my budget to $2000 and get me a nicer, pricier rug.",
     check: ({ before, p }) => {
       assert.equal(p.result.constraints.budget?.amountMinor, 200000);
-      assert.ok(price(p.result, "item_armchair") >= price(before, "item_armchair"));
+      assert.ok(price(p.result, "item_rug") > price(before, "item_rug"));
     },
+  },
+  {
+    name: "partial: budget up even with no pricier chair",
+    intent: "Raise my budget to $2000 and get me a pricier armchair.",
+    check: ({ p }) => assert.equal(p.result.constraints.budget?.amountMinor, 200000, "did the possible part"),
   },
   {
     name: "cheapest possible, keep 4 seats",

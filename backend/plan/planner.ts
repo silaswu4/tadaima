@@ -122,7 +122,7 @@ Hard rules, checked by code after you answer:
 
 Geometry: x and z are meters on the floor, center is the footprint center, sizeWHD is [width, height, depth] before rotation, rotationY is radians about +Y (at pi/2 or -pi/2 width and depth swap on the floor).
 
-Make the smallest set of changes that satisfies the request. Prefer swaps over removals. When the shopper says "cheaper by $N", the new purchases total must drop by at least N. If the request can't be met, return no changes, feasible false, and say in the summary which rule blocks it and what would unblock it.`;
+Make the smallest set of changes that satisfies the request. Prefer swaps over removals. If only part of a request can be done (for example a budget change is possible but no pricier product exists), do the possible part and say plainly what you couldn't do and why. When the shopper says "cheaper by $N", the new purchases total must drop by at least N. If the request can't be met, return no changes, feasible false, and say in the summary which rule blocks it and what would unblock it.`;
 
 export interface PlannerResult {
   changes: PlanChange[];
