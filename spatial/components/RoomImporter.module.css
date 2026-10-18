@@ -10,6 +10,10 @@
 .field input[type=file] { padding: 8px; font-size: 11px; }
 .field input::file-selector-button { border: 1px solid #bcb2a3; border-radius: 2px; background: #e9e3d8; color: #302c27; padding: 7px 10px; margin-right: 10px; font: inherit; cursor: pointer; }
 .field small { font-size: 10px; line-height: 1.65; color: #746b60; }
+.modelUpdate { margin: 20px 0; }
+.modelUpdate label { display: flex; align-items: center; gap: 10px; min-height: 44px; font-size: 12px; cursor: pointer; }
+.modelUpdate input { width: 18px; height: 18px; flex-shrink: 0; accent-color: #302c27; }
+.modelUpdate p { margin: 0 0 0 28px; font-size: 10px; line-height: 1.65; color: #746b60; }
 .privacy { font-size: 10px; line-height: 1.75; border-top: 1px solid #d6d1c5; padding-top: 16px; color: #746b60; }
 .error { font-size: 12px; line-height: 1.6; color: #9b362a; background: #f7e8e2; border: 1px solid #e4b5a9; padding: 12px; overflow-wrap: anywhere; }
 .submit { width: 100%; min-height: 46px; padding: 12px 16px; margin-top: 12px; border: 1px solid #302c27; border-radius: 2px; background: #302c27; color: #fffdf7; font: inherit; font-size: 12px; cursor: pointer; }
