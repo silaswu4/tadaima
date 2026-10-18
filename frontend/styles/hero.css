@@ -256,6 +256,7 @@
   line-height: 1.05;
   letter-spacing: -0.03em;
   white-space: nowrap;
+  text-align: center;
   color: var(--hero-fg);
 }
 .tadaima-hero .hero-loader__meta {
