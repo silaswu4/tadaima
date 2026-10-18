@@ -587,6 +587,8 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
     try {
       engine.cancelProductPreview(); setPending(null);
       engine.previewProduct(product, { swapId: swapTarget?.id, placement: result.placement });
+      // turn to face the preview so the shopper actually sees it in the room
+      engine.lookAt(result.placement.position[0], result.placement.position[2]);
       setPendingPlacement({ spot: swapTarget ? { roomId: result.placement.roomId, position: [...result.placement.position], rotationY: result.placement.rotationY } : searchSpot,
         revision: session.plan.revision, jobId: shopping.job?.id, swapId: swapTarget?.id, raiseBudgetTo: budgetFor(result) ?? undefined });
       setPending(product);
@@ -720,6 +722,7 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
     const engine = api()!;
     engine.cancelProductPreview();
     engine.previewProduct(product, { placement: result.placement });
+    engine.lookAt(result.placement.position[0], result.placement.position[2]);
     setSearchSpot(job.output.request.spot); setSwapTarget(null);
     setPendingPlacement({ spot: job.output.request.spot, revision: plan.revision, jobId: job.id });
     setPending(product); setPanel(null); openerRef.current = null;
@@ -1047,9 +1050,15 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
         </div>
       ) : null}
 
-      {pending && ready ? <div className="room-x__placement" role="region" aria-label="Confirm furniture placement">
-        <strong>{pending.label.split(",")[0]}</strong><p>{pending.price ? formatMoney(pending.price.amountMinor, pending.price.currency) : "Price unknown"}{pendingPlacement?.raiseBudgetTo ? ` · raises your budget to ${formatMoney(pendingPlacement.raiseBudgetTo, "USD")}` : ""}</p>
-        <div><button type="button" className="room-x__chip-btn" onClick={cancelProduct}>Cancel</button><button type="button" className="room-x__chip-btn room-x__chip-btn--ink" onClick={confirmProduct} disabled={blocked}>Add to room</button></div>
+      {pending && ready ? <div className="room-x__placement" role="region" aria-label="Previewing a piece">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        {pending.imageUrl ? <img src={pending.imageUrl} alt="" referrerPolicy="no-referrer" /> : <span className="room-x__placement-ph" aria-hidden="true" />}
+        <div className="room-x__placement-text">
+          <strong>{pending.label.split(",")[0]}</strong>
+          <span>{pending.price ? formatMoney(pending.price.amountMinor, pending.price.currency) : "Price unknown"}{pendingPlacement?.raiseBudgetTo ? ` · budget to ${formatMoney(pendingPlacement.raiseBudgetTo, "USD")}` : ""} · previewing in your room</span>
+        </div>
+        <button type="button" className="room-x__chip-btn" onClick={cancelProduct}>Cancel</button>
+        <button type="button" className="room-x__chip-btn room-x__chip-btn--ink" onClick={confirmProduct} disabled={blocked}>Add</button>
       </div> : null}
       {/* ---------- selected piece: a small toolbar over it ---------- */}
       {selected && ready && !pending && !moving ? (

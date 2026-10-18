@@ -1937,8 +1937,24 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
     callbacks.onModeChange?.(mode, pointerLocked);
   }
 
+  /** An eased turn of the head toward a floor point (a previewed piece); the shopper's own look cancels it. */
+  let lookTurn: { yaw0: number; yaw1: number; pitch0: number; pitch1: number; t0: number; dur: number } | null = null;
+  function lookAt(x: number, z: number) {
+    if (mode !== "walk") return;
+    const dx = x - rig.position.x, dz = z - rig.position.z;
+    const dist = Math.hypot(dx, dz);
+    if (dist < 0.3) return;
+    let to = Math.atan2(-dx, -dz);
+    // the short way round
+    while (to - yaw > Math.PI) to -= 2 * Math.PI;
+    while (to - yaw < -Math.PI) to += 2 * Math.PI;
+    const down = THREE.MathUtils.clamp(-Math.atan2(EYE_HEIGHT * 0.7, dist), -0.9, -0.05);
+    lookTurn = { yaw0: yaw, yaw1: to, pitch0: pitch, pitch1: down, t0: performance.now(), dur: reduced ? 0 : 650 };
+  }
+
   function onMouseMove(event: MouseEvent) {
     if (!pointerLocked || mode !== "walk") return;
+    lookTurn = null;
     yaw -= event.movementX * LOOK_SPEED;
     pitch = THREE.MathUtils.clamp(pitch - event.movementY * LOOK_SPEED, -1.45, 1.45);
   }
@@ -2220,6 +2236,13 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
         if (Math.abs(movedZ) < Math.abs(stepZ) * 0.5) { locomotion.vz = movedZ / dt; locomotion.az = 0; }
       }
     }
+    if (lookTurn) {
+      const k = lookTurn.dur ? Math.min(1, (performance.now() - lookTurn.t0) / lookTurn.dur) : 1;
+      const e = k * k * (3 - 2 * k);
+      yaw = lookTurn.yaw0 + (lookTurn.yaw1 - lookTurn.yaw0) * e;
+      pitch = lookTurn.pitch0 + (lookTurn.pitch1 - lookTurn.pitch0) * e;
+      if (k >= 1) lookTurn = null;
+    }
     rig.rotation.y = yaw;
     camera.rotation.set(pitch, 0, 0);
     // Mouse look stays 1:1; only a small footstep bob, never under reduced motion.
@@ -2434,6 +2457,7 @@ export function createWalkScene(canvas: HTMLCanvasElement, plan: RoomPlan, callb
     setMode,
     setWindowBlindsRaised,
     lockPointer: requestLock,
+    lookAt,
     setMoveInput,
     xrSupported,
     enterXR,
