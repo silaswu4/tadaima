@@ -98,8 +98,9 @@ export default function Home() {
     if (reduced) return;
     const ctx = gsap.context(() => {
       // the fill and the outline are two stacked copies, so they rise together letter by letter
-      for (const layer of [".hero-word__fill", ".hero-word__edge"]) {
-        gsap.fromTo(`${layer} .hero-word__char`, { yPercent: 105 }, { yPercent: 0, duration: 1.15, ease: "power4.out", stagger: 0.05, delay: 0.1 });
+      // 2D transforms on the outline copy: in Safari a 3D-promoted letter slips out from under the outline filter
+      for (const [layer, force3D] of [[".hero-word__fill", true], [".hero-word__edge", false]] as const) {
+        gsap.fromTo(`${layer} .hero-word__char`, { yPercent: 105 }, { yPercent: 0, duration: 1.15, ease: "power4.out", stagger: 0.05, delay: 0.1, force3D });
       }
       gsap.fromTo(".hero-row", { y: 14, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: 0.8, ease: "power3.out", stagger: 0.1, delay: 0.45 });
     }, root);
@@ -243,8 +244,12 @@ export default function Home() {
           so overlapping strokes inside letters and the mark's panels never show */}
       <svg className="hero-defs" aria-hidden="true" focusable="false">
         <filter id="hero-word-outline" x="-2%" y="-2%" width="104%" height="104%">
-          <feMorphology in="SourceAlpha" operator="dilate" radius="1" result="grown" />
-          <feComposite in="grown" in2="SourceAlpha" operator="out" result="ring" />
+          {/* the source is drawn almost invisible, so lift its alpha back to solid first */}
+          <feComponentTransfer in="SourceAlpha" result="solid">
+            <feFuncA type="linear" slope="255" />
+          </feComponentTransfer>
+          <feMorphology in="solid" operator="dilate" radius="1" result="grown" />
+          <feComposite in="grown" in2="solid" operator="out" result="ring" />
           <feFlood floodColor="#f6ebd9" floodOpacity="0.75" />
           <feComposite in2="ring" operator="in" />
         </filter>

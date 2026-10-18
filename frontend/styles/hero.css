@@ -146,10 +146,12 @@
 .tadaima-hero .hero-word__edge {
   position: absolute;
   inset: 0;
-  color: #000;
+  /* nearly invisible on purpose: the filter traces this shape, and if a frame ever skips
+     the filter there is nothing dark to flash */
+  color: rgba(246, 235, 217, 0.01);
   filter: url(#hero-word-outline);
 }
-.tadaima-hero .hero-word__edge .hero-word__mark { background: #000; }
+.tadaima-hero .hero-word__edge .hero-word__mark { background: rgba(246, 235, 217, 0.01); }
 .tadaima-hero .hero-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
 .tadaima-hero .hero-word__char { display: inline-block; }
 /* a little under the ascender height, sat on the baseline, tucked close to the word */
