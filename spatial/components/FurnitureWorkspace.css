@@ -242,3 +242,18 @@
 
 .furniture-item:disabled { opacity: .5; cursor: default; }
 .furniture-item:disabled:hover { background: transparent; }
+
+.furniture-shop { border: 1px solid var(--surface-deep); background: var(--surface-soft); padding: 20px; margin-bottom: 20px; }
+.furniture-shop h2 { font-size: 20px; font-weight: 450; margin-bottom: 14px; }
+.furniture-shop label { display: grid; gap: 7px; font-size: 11px; margin: 12px 0; }
+.furniture-shop select, .furniture-shop input { width: 100%; min-height: 44px; padding: 10px; border: 1px solid var(--surface-deep); background: var(--surface); color: var(--ink); font: inherit; }
+.furniture-product { display: grid; gap: 8px; border-top: 1px solid var(--surface-deep); padding: 16px 0; font-size: 11px; }
+.furniture-product strong { font-weight: 500; font-size: 13px; }
+.furniture-product span { color: var(--ink-soft); font-size: 10px; line-height: 1.6; }
+.furniture-product button, .furniture-confirm { border: 1px solid var(--accent-deep); min-height: 44px; padding: 10px; background: var(--surface); color: var(--accent-deep); font: inherit; font-size: 11px; cursor: pointer; }
+.furniture-confirm { width: 100%; background: var(--accent-deep); color: #fff; }
+.furniture-product a { color: var(--accent-deep); text-underline-offset: 3px; }
+.furniture-crosshair { position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); font-size: 22px; color: #fff; text-shadow: 0 0 3px #000; pointer-events: none; }
+.furniture-lookButton { position: absolute; top: 12px; left: 12px; max-width: calc(100% - 24px); padding: 10px; min-height: 44px; background: var(--surface); color: var(--ink); border: 1px solid var(--surface-deep); font: inherit; font-size: 10px; cursor: pointer; }
+.furniture-walkPad { position: absolute; bottom: 15px; right: 15px; display: grid; grid-template-columns: repeat(2,1fr); gap: 5px; touch-action: none; }
+.furniture-walkPad button { min-width: 52px; min-height: 44px; background: var(--surface); color: var(--ink); border: 1px solid var(--surface-deep); font: inherit; font-size: 10px; user-select: none; touch-action: none; }

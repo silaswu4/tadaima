@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
-import type { RoomPlan, PlacedItem } from "../../backend/contracts";
+import type { RoomPlan, PlacedItem, FloorSpot, ProductCandidate, Placement } from "../../backend/contracts";
 import { makeExplodeController, type ExplodeController } from "./explode";
 import { makeWorkspaceDemo } from "./workspace-fixture";
 import { block, rug, standingLamp, surface } from "./parts";
@@ -12,13 +12,17 @@ import { insideFloor, planWindowDaylight } from "./window-daylight";
 import { createFurnitureProxy, placeFurnitureModel } from "./furniture-model";
 import { bindCapturedRoom, bindTexturedRoom, validateLocalCapturedGlb, validateLocalTexturedGlb, type CapturedRoomBinding } from "./textured-model";
 
+import { createNavigationWorld, findNavigationSpawn, canNavigateAt, createFirstPersonNavigation } from "./navigation";
+import { createWorkspaceXR, type WorkspaceXRShopping } from "./workspace-xr";
+import { assetFor } from "../../backend/shopping/assets";
+
 export type WorkspaceItem = {
   id: string;
   label: string;
   /** Local model bounds, not retailer-verified dimensions. */
   size: [number, number, number];
   modelAvailable: boolean;
-  representation: "detected_size_proxy" | "photo_textured_proxy" | "photo_informed_model" | "demo_model" | "demo_proxy";
+  representation: "detected_size_proxy" | "photo_textured_proxy" | "photo_informed_model" | "demo_model" | "demo_proxy" | "product_approximation";
   locked: boolean;
   evidence: string[];
 };
@@ -28,12 +32,27 @@ export type WorkspaceScene = {
   selectItem(id: string | null): void;
   resetCamera(): void;
   setCapturedView(active: boolean): void;
+  setWalking(active: boolean): void;
+  setMoveInput(forward: number, right: number): void;
+  requestPointerLock(): void;
+  enterVR(): Promise<void>;
+  exitVR(): Promise<void>;
+  setShoppingState(state: WorkspaceXRShopping): void;
+  setShoppingPreview(product: ProductCandidate | null, placement?: Placement | null): void;
+  addShoppingItem(item: PlacedItem): Promise<void>;
+  removeShoppingItem(id:string): void;
   dispose(): void;
 };
 type Callbacks = {
   onReady(items: WorkspaceItem[]): void;
   onSelect(id: string | null): void;
   onError(message: string): void;
+  onNavigation?(walking: boolean, pointerLocked: boolean): void;
+  onVR?(presenting: boolean): void;
+  onFloorSpot?(spot: FloorSpot): void;
+  onPreviewOffer?(id: string): void;
+  onConfirmOffer?(): void;
+  onNavigationError?(message: string): void;
   onPhotoModel?(loaded: boolean, message?: string, representation?: "photo_projected" | "photo_informed_parametric"): void;
   onCapturedModel?(loaded: boolean, message?: string): void;
 };
@@ -129,6 +148,7 @@ export function createFurnitureWorkspace(
     const floor = new THREE.Mesh(geometry, lighting.makeSurface("floor", appearance));
     floor.position.y = -.1;
     floor.receiveShadow = true;
+    floor.userData.workspaceFloor = true;
     shell.add(floor);
   }
   const floorBounds = new THREE.Box3().setFromObject(shell);
@@ -219,7 +239,94 @@ export function createFurnitureWorkspace(
   let selectedId: string | null = null;
   let exploded = false;
   let disposed = false;
-  let raf = 0;
+  let walking = false;
+  let navigationWorld = createNavigationWorld(plan);
+  let navigation = makeNavigation();
+  let shoppingPreview: THREE.Group | null = null;
+  let previewGeneration = 0;
+  const ceilings = new THREE.Group();
+  ceilings.visible = false;
+  for (const room of plan.geometry.rooms) {
+    const shape = new THREE.Shape(room.floorPolygon.map(([x,z]) => new THREE.Vector2(x,-z)));
+    const ceiling = new THREE.Mesh(new THREE.ShapeGeometry(shape), new THREE.MeshStandardMaterial({ color: "#e8e4d8", roughness: .95, side: THREE.DoubleSide }));
+    ceiling.rotation.x = -Math.PI / 2; ceiling.position.y = room.height;
+    ceilings.add(ceiling);
+  }
+  scene.add(ceilings);
+  const xr = createWorkspaceXR({ renderer, scene, camera, getPlan: () => plan,
+    getFloorMeshes: floorMeshes, getItemRoots: () => [...roots].map(([id,object]) => ({id,object})),
+    getOccluders: () => [shell, ceilings],
+    getSpawnPoint: () => { const spawn = findNavigationSpawn(navigationWorld, [camera.position.x,camera.position.z]); return spawn.ok ? new THREE.Vector3(...spawn.position) : null; },
+    isFloorSpotValid: (point) => canNavigateAt(navigationWorld,[point.x,point.z]),
+    onSelectItem: selectItem,
+    onFloorSelect: (point) => callbacks.onFloorSpot?.({position:[point.x,0,point.z]}),
+    onPreviewOffer: (id) => callbacks.onPreviewOffer?.(id), onConfirmOffer: () => callbacks.onConfirmOffer?.(),
+    onSessionChange: (presenting) => {
+      if (presenting) { navigation.exit(); walking = false; cameraMove = null; }
+      controls.enabled = !presenting; ceilings.visible = presenting;
+      callbacks.onNavigation?.(false,false); callbacks.onVR?.(presenting);
+      if (!presenting && !disposed) fit(false,true);
+    }, onError: (message) => callbacks.onNavigationError?.(message),
+  });
+  function makeNavigation() {
+    return createFirstPersonNavigation(camera, canvas, navigationWorld, {
+      onPointerLock: (locked) => callbacks.onNavigation?.(walking, locked),
+      onError: (message) => callbacks.onNavigationError?.(message),
+    });
+  }
+  function floorMeshes() {
+    const floors: THREE.Object3D[] = [];
+    shell.traverse((node) => { if (node.userData.workspaceFloor || node.userData.role === "room_floor") floors.push(node); });
+    return floors;
+  }
+  function rebuildInventory() {
+    // dispose restores the original canonical poses synchronously. Advancing
+    // the controller clock into the future would stall the next transition.
+    controller?.dispose();
+    exploded = false;
+    controller = makeExplodeController(plan.items.map((item)=>({id:item.id,object:roots.get(item.id)!})),roomBounds,{reducedMotion:options.reducedMotion,floorY:0,gap:.75});
+  }
+  function setWalking(active: boolean) {
+    if (disposed || xr.presenting) return;
+    if (active) {
+      setCapturedView(false);
+      if (exploded || controller?.transitioning) rebuildInventory();
+      controls.enabled = false; cameraMove = null;
+      const spawn = navigation.enter();
+      if (!spawn.ok) { controls.enabled = true; callbacks.onNavigationError?.(spawn.reason); return; }
+      walking = true; camera.fov = 70; camera.updateProjectionMatrix();
+    } else {
+      navigation.exit(); walking = false; controls.enabled = true;
+      camera.fov = 42; camera.updateProjectionMatrix(); fit(false,true);
+    }
+    ceilings.visible = walking;
+    callbacks.onNavigation?.(walking,navigation.pointerLocked);
+  }
+  function chooseAt(ndc: THREE.Vector2) {
+    raycaster.setFromCamera(ndc,camera);
+    const hits = raycaster.intersectObjects([shell,...roots.values()],true);
+    for (const hit of hits) {
+      if (!walking && hit.object instanceof THREE.Mesh) {
+        const mats = Array.isArray(hit.object.material) ? hit.object.material : [hit.object.material];
+        if (mats.every((mat) => mat.transparent && mat.opacity <= .08)) continue;
+      }
+      let node: THREE.Object3D | null = hit.object;
+      while (node) {
+        if (node.userData.workspaceItemId) { selectItem(node.userData.workspaceItemId); return; }
+        if (node.userData.workspaceFloor || node.userData.role === "room_floor") {
+          callbacks.onFloorSpot?.({position:[hit.point.x,0,hit.point.z]}); return;
+        }
+        node = node.parent;
+      }
+      // A visible solid wall occludes the floor and furniture behind it.
+      return;
+    }
+  }
+  function interact(event: KeyboardEvent) {
+    if (!walking || event.code !== "KeyE" || event.repeat || event.target !== canvas) return;
+    event.preventDefault(); chooseAt(new THREE.Vector2());
+  }
+  canvas.addEventListener("keydown",interact);
   let padOpacity = 0;
   let previousTime = performance.now();
   let cameraMove: { start: number; position: THREE.Vector3; target: THREE.Vector3; endPosition: THREE.Vector3; endTarget: THREE.Vector3 } | null = null;
@@ -251,6 +358,7 @@ export function createFurnitureWorkspace(
     controls.update();
   }
   function setCapturedView(active: boolean) {
+    if (active && (walking || xr.presenting)) return;
     const next = active && !!capturedReference;
     if (next === capturedView) return;
     capturedView = next;
@@ -263,6 +371,7 @@ export function createFurnitureWorkspace(
     if (next) capturedCamera(); else fit(false, true);
   }
   function fit(animate: boolean, reset = false, focus?: THREE.Box3) {
+    if (walking || xr.presenting) return;
     if (capturedView) { if (reset) capturedCamera(); return; }
     const bounds = focus?.clone() ?? assembledBounds.clone();
     if (!focus && exploded && controller) bounds.union(controller.inventoryBounds);
@@ -292,7 +401,7 @@ export function createFurnitureWorkspace(
   }
 
   function resize() {
-    if (disposed) return;
+    if (disposed || renderer.xr.isPresenting) return;
     const { width, height } = canvas.getBoundingClientRect();
     renderer.setSize(Math.max(1, width), Math.max(1, height), false);
     camera.aspect = Math.max(1, width) / Math.max(1, height);
@@ -325,16 +434,12 @@ export function createFurnitureWorkspace(
     pointerDown = { x: event.clientX, y: event.clientY, id: event.pointerId };
   }
   function up(event: PointerEvent) {
-    if (capturedView) { pointerDown = null; return; }
+    if (capturedView || xr.presenting) { pointerDown = null; return; }
     const start = pointerDown;
     pointerDown = null;
     if (!start || start.id !== event.pointerId || event.button !== 0 || Math.hypot(event.clientX - start.x, event.clientY - start.y) > 6) return;
     const rect = canvas.getBoundingClientRect();
-    raycaster.setFromCamera(new THREE.Vector2((event.clientX - rect.left) / rect.width * 2 - 1, -(event.clientY - rect.top) / rect.height * 2 + 1), camera);
-    const hit = raycaster.intersectObjects([...roots.values()], true)[0];
-    let object: THREE.Object3D | undefined = hit?.object;
-    while (object && !object.userData.workspaceItemId) object = object.parent ?? undefined;
-    selectItem(object?.userData.workspaceItemId ?? null);
+    chooseAt(navigation.pointerLocked ? new THREE.Vector2() : new THREE.Vector2((event.clientX-rect.left)/rect.width*2-1,-(event.clientY-rect.top)/rect.height*2+1));
   }
   function cancelPointer() { pointerDown = null; }
   canvas.addEventListener("pointerdown", down);
@@ -451,6 +556,23 @@ export function createFurnitureWorkspace(
       }) };
   }
 
+  async function productRoot(item: Pick<PlacedItem,"id"|"position"|"rotationY"|"dimensions"|"category">) {
+    const dims = item.dimensions ?? [1,1,1];
+    const asset = assetFor(item.category,dims);
+    let model: THREE.Object3D;
+    try {
+      if (asset.kind !== "model") throw new Error("Procedural category");
+      model = (await loader.loadAsync(asset.url)).scene;
+      model.rotation.y = asset.yaw; model.updateMatrixWorld(true);
+      const box = new THREE.Box3().setFromObject(model,true), size = box.getSize(new THREE.Vector3()), center = box.getCenter(new THREE.Vector3());
+      model.position.sub(new THREE.Vector3(center.x,box.min.y,center.z));
+      const scaled = new THREE.Group(); scaled.add(model);
+      scaled.scale.set(dims[0]/Math.max(.001,size.x),dims[1]/Math.max(.001,size.y),dims[2]/Math.max(.001,size.z));
+      model = scaled;
+    } catch { model = createFurnitureProxy(dims); }
+    return placeFurnitureModel(item,model).root;
+  }
+
   function frame(now: number) {
     if (disposed) return;
     const delta = Math.min(100, now - previousTime);
@@ -463,9 +585,9 @@ export function createFurnitureWorkspace(
       controls.target.lerpVectors(cameraMove.target, cameraMove.endTarget, eased);
       if (t === 1) cameraMove = null;
     }
-    controls.update();
+    if (xr.presenting) xr.update(); else if (walking) navigation.update(delta/1000); else controls.update();
     for (const wall of wallViews) {
-      const near = wall.interior || wall.outward.dot(camera.position.clone().sub(wall.midpoint)) > 0;
+      const near = !walking && !xr.presenting && (wall.interior || wall.outward.dot(camera.position.clone().sub(wall.midpoint)) > 0);
       for (const material of wall.materials) {
         const baseOpacity = material.userData.cutawayBaseOpacity ?? 1;
         material.opacity = (near ? .075 : 1) * baseOpacity;
@@ -482,10 +604,10 @@ export function createFurnitureWorkspace(
     selection.visible = !capturedView && !!selected;
     if (selected) selection.box.setFromObject(selected, true).expandByScalar(.025);
     renderer.render(scene, camera);
-    raf = requestAnimationFrame(frame);
+
   }
   resize();
-  raf = requestAnimationFrame(frame);
+  renderer.setAnimationLoop(frame);
   const ready = Promise.all([preparePhotoModel(), prepareCapturedModel()]).then(() => {
     if (disposed) return [[], undefined] as [Array<WorkspaceItem | null>, void];
     return Promise.all([Promise.all(plan.items.map(loadItem)), lighting.ready]);
@@ -538,7 +660,9 @@ export function createFurnitureWorkspace(
   function dispose() {
     if (disposed) return;
     disposed = true;
-    cancelAnimationFrame(raf);
+    renderer.setAnimationLoop(null);
+    navigation.dispose(); xr.dispose();
+    canvas.removeEventListener("keydown",interact);
     resizeObserver.disconnect();
     controls.removeEventListener("start", cancelCameraMove);
     controls.dispose();
@@ -555,14 +679,65 @@ export function createFurnitureWorkspace(
   return {
     ready,
     setExploded(value) {
-      if (disposed || exploded === value) return;
+      if (walking || xr.presenting || disposed || exploded === value) return;
       exploded = value;
       controller?.setExploded(value, performance.now());
       fit(true);
     },
     selectItem,
     setCapturedView,
-    resetCamera() { if (!disposed) fit(true, true); },
+    resetCamera() { if (walking) { navigation.exit(); navigation.enter(); } else if (!disposed) fit(true, true); },
+    setWalking, setMoveInput: (forward,right) => navigation.setMoveInput(forward,right),
+    requestPointerLock: () => navigation.requestPointerLock(),
+    async enterVR() {
+      if (walking) setWalking(false);
+      setCapturedView(false);
+      if (exploded || controller?.transitioning) rebuildInventory();
+      cameraMove = null; await xr.enter();
+    },
+    exitVR: () => xr.exit(), setShoppingState: (state) => xr.setShoppingState(state),
+    setShoppingPreview(product,placement) {
+      const generation = ++previewGeneration;
+      if (shoppingPreview) { scene.remove(shoppingPreview); release(shoppingPreview); shoppingPreview = null; }
+      if (!product || !placement || !product.dimensions) return;
+      void productRoot({id:"shopping-preview",position:placement.position,rotationY:placement.rotationY,dimensions:product.dimensions,category:product.category}).then((root) => {
+        if (disposed || generation !== previewGeneration) { release(root); return; }
+        root.traverse((node) => { if (node instanceof THREE.Mesh) {
+          const materials = (Array.isArray(node.material) ? node.material : [node.material]).map((mat) => { const own = mat.clone(); own.transparent = true; own.opacity = .55; own.depthWrite = false; return own; });
+          node.material = Array.isArray(node.material) ? materials : materials[0]; node.castShadow = false;
+        } });
+        shoppingPreview = root; scene.add(root);
+      });
+    },
+    removeShoppingItem(id) {
+      const index=plan.items.findIndex((item)=>item.id===id && item.origin==="proposed_purchase");
+      if (index<0) return;
+      rebuildInventory();
+      const root=roots.get(id);if(root){root.removeFromParent();release(root);roots.delete(id);}
+      plan.items.splice(index,1);
+      navigationWorld=createNavigationWorld(plan);
+      const position:[number,number]=[camera.position.x,camera.position.z];
+      navigation.dispose();navigation=makeNavigation();
+      if(walking)navigation.enter(position);
+      rebuildInventory();
+      if(selectedId===id)selectItem(null);
+    },
+    async addShoppingItem(item) {
+      if (exploded || controller?.transitioning) rebuildInventory();
+      const root = await productRoot(item);
+      if (disposed) { release(root); return; }
+      rebuildInventory();
+      root.traverse((node) => { if (node instanceof THREE.Mesh) { node.castShadow = node.receiveShadow = true; } });
+      roots.set(item.id,root); scene.add(root); plan.items.push(structuredClone(item));
+      navigationWorld = createNavigationWorld(plan);
+      const currentPosition: [number,number] = [camera.position.x,camera.position.z];
+      navigation.dispose(); navigation = makeNavigation();
+      if (walking) {
+        const spawn = navigation.enter(currentPosition);
+        if (!spawn.ok) { setWalking(false); callbacks.onNavigationError?.(spawn.reason); }
+      }
+      rebuildInventory();
+    },
     dispose,
   };
 }
