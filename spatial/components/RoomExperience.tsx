@@ -324,7 +324,8 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
         closePanel();
         return;
       }
-      if (ENGINE_KEYS.has(e.key.toLowerCase())) e.stopImmediatePropagation();
+      // turning is local and safe to queue; everything else waits for the sync
+      if (ENGINE_KEYS.has(e.key.toLowerCase()) && !(blocked && !panel && ["r", "q", "e"].includes(e.key.toLowerCase()))) e.stopImmediatePropagation();
     };
     window.addEventListener("keydown", onKey, { capture: true });
     return () => window.removeEventListener("keydown", onKey, { capture: true });
@@ -1107,7 +1108,13 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
           <button type="button" className="room-x__tool" onClick={() => safely(() => { unlockFor(selected); beginMove({ ...selected, locked: false }); })} aria-label="Pick up and move" title="Move (G)">
             {Icon.move}<span className="room-x__key">G</span>
           </button>
-          <button type="button" className="room-x__tool" onClick={() => safely(() => { unlockFor(selected); api()?.rotate(selected.id, ROTATE_STEP); })} aria-label="Rotate" title="Rotate (R)">
+          <button type="button" className="room-x__tool" 
+            // hold to spin freely, tap for a 15 degree turn (same as the R key)
+            onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); safely(() => { unlockFor(selected); api()?.beginSpin(selected.id, 1); }); }}
+            onPointerUp={() => api()?.endSpin()} onPointerCancel={() => api()?.endSpin()}
+            onKeyDown={(e) => { if ((e.key === "Enter" || e.key === " ") && !e.repeat) { e.preventDefault(); unlockFor(selected); api()?.beginSpin(selected.id, 1); } }}
+            onKeyUp={(e) => { if (e.key === "Enter" || e.key === " ") api()?.endSpin(); }}
+            aria-label="Rotate (hold to spin)" title="Rotate: tap for 15°, hold to spin (R)">
             {Icon.rotate}<span className="room-x__key">R</span>
           </button>
           <button type="button" className="room-x__tool" onClick={() => safely(() => { unlockFor(selected); if (selected.origin === "proposed_purchase") remove(selected); else putAway(selected); })}
