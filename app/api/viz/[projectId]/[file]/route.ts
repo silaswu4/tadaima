@@ -12,6 +12,9 @@ const notFound = () => new Response("not found", { status: 404, headers: { "Cach
 
 export async function GET(req: Request, ctx: RouteContext<"/api/viz/[projectId]/[file]">) {
   const { projectId, file } = await ctx.params;
+  // Browser-owned scans are never public chat images, even when development
+  // permits unsigned demo images. Pairing doesn't grant a shareable media URL.
+  if (projectId.startsWith("proj_room_")) return notFound();
   if (!vizSigOk(`${projectId}/${file}`, new URL(req.url).searchParams.get("s"))) return notFound();
   const m = /^(r|p)([\w-]{1,80})\.png$/.exec(file);
   if (!m) return notFound();

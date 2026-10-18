@@ -1,0 +1,6 @@
+.room-fetch { border-top: 1px solid #d9d4c9; padding-top: 18px; display: grid; gap: 12px; min-width: 0; }
+.room-fetch h3 { margin: 0; font: inherit; font-weight: 600; }
+.room-fetch__code { display: grid; gap: 8px; font-size: 12px; }
+.room-fetch__code input { width: 100%; min-width: 0; box-sizing: border-box; border: 1px solid #d4cec2; background: #fffdf7; padding: 10px; border-radius: 7px; font: 12px monospace; color: inherit; }
+.room-fetch__results { display: grid; gap: 10px; }
+.room-fetch__results > div { display: grid; gap: 6px; justify-items: start; border-bottom: 1px solid #e7e1d6; padding-bottom: 10px; font-size: 12px; }

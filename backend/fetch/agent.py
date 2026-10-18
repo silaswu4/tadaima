@@ -6,7 +6,8 @@ A thin Agent Chat Protocol adapter. Every turn becomes a call to the same
 real canonical plan, never a copy. Planning, validation and pricing all stay
 in backend/plan; this file only talks and renders cards.
 
-Each ASI:One sender gets a private copy of the demo room (proj_demo_<hash>).
+A paired ASI:One sender uses the website's canonical scanned room with a scoped
+credential. Demo/account room creation is retained as an optional legacy flow.
 
 Run: see backend/fetch/README.md. Needs uagents 0.26.x / uagents-core 0.4.x.
 """
@@ -23,6 +24,7 @@ from uuid import uuid4
 import aiohttp
 
 import brain
+from pairing import CURRENT_PAIRING, CONNECT, PAIRED_TOOLS, expired, paired_headers, valid_binding
 import checkout
 from payments import PaymentsUnavailable, StripeError, handle_chat_confirmation, on_paid, payment_protocol, request_fee
 from viz import images_enabled, plan_image_url, proposal_image_url
@@ -85,13 +87,19 @@ class Rejected(Exception):
 
 
 async def api(method: str, path: str, body: dict | None = None, timeout: float = 30) -> dict:
-    headers = {"content-type": "application/json"}
-    if AGENT_API_KEY:
+    binding = CURRENT_PAIRING.get()
+    try:
+        scoped_headers = paired_headers(method, path, binding)
+    except (PermissionError, ValueError) as e:
+        raise Rejected(str(e)) from e
+    headers = {"content-type": "application/json", **scoped_headers}
+    if AGENT_API_KEY and binding is None:
         headers["x-agent-key"] = AGENT_API_KEY
     if BYPASS:
         headers["x-vercel-protection-bypass"] = BYPASS
     # one retry on network errors and 5xx; a 4xx is a real answer and is not retried
-    for attempt in range(2):
+    attempts = 1 if (binding and method != "GET") or path == "/api/agent/pairings/redeem" else 2
+    for attempt in range(attempts):
         try:
             async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=timeout)) as http:
                 async with http.request(method, f"{BACKEND}{path}", json=body, headers=headers) as res:
@@ -104,7 +112,7 @@ async def api(method: str, path: str, body: dict | None = None, timeout: float =
                     retry = BackendError(err)
         except (aiohttp.ClientError, asyncio.TimeoutError) as e:
             retry = BackendError(type(e).__name__)
-        if attempt == 0:
+        if attempt + 1 < attempts:
             await asyncio.sleep(1.5)
     raise retry
 
@@ -275,7 +283,7 @@ def products_carousel(plan: dict, title: str) -> MetadataContent | None:
 
 
 def room_image(project: str, rev: int) -> str | None:
-    return f"![your room, revision {rev}]({plan_image_url(project, rev)})" if images_enabled() else None
+    return f"![your room, revision {rev}]({plan_image_url(project, rev)})" if images_enabled() and not project.startswith("proj_room_") else None
 
 
 def msg(*blocks) -> ChatMessage:
@@ -332,10 +340,10 @@ async def show_room(ctx: Context, sender: str, project: str, intro: bool = False
             "Hey, I'm Tadaima. I plan furniture for a real room and only suggest things that physically fit, "
             "stay in budget and keep what you told me to keep.\n\n"
         )
-    tail = (
+    tail = ("\n\nResearch and previews use this scanned room. Confirm changes and purchases on the website." if CURRENT_PAIRING.get() else (
         "\n\nTell me what you want, for example: *keep the sofa and desk, make the room $300 cheaper, "
         "and keep seating for four*. Say **cart** when you're happy, or **reset** to start over."
-    )
+    ))
     await ctx.send(sender, msg(room_image(project, plan["revision"]), head + room_summary(plan, cost) + tail, products_carousel(plan, "What you'd be buying")))
 
 
@@ -354,6 +362,11 @@ async def propose(ctx: Context, sender: str, project: str, intent: str, item_id:
     lines += ["", f"New purchases: {usd(p['costBefore']['knownSubtotal'])} → **{usd(p['costAfter']['knownSubtotal'])}**", f"Seats: {seats(before)} → {seats(p['result'])}"]
     if issues:
         lines += ["", "Heads up:"] + [f"- {i}" for i in issues]
+
+    if CURRENT_PAIRING.get():
+        lines += ["", "This is a proposal for your scanned room. Review it in Tadaima and apply it on the website; nothing has changed yet."]
+        await ctx.send(sender, msg("\n".join(lines)))
+        return p
 
     can_apply = bool(p["changes"]) and not any(v["status"] == "fail" for v in p["validations"])
     if not can_apply:
@@ -408,6 +421,10 @@ async def apply(ctx: Context, sender: str, project: str, proposal_id: str | None
 
 
 async def cart(ctx: Context, sender: str, project: str):
+    if CURRENT_PAIRING.get():
+        data = await api("GET", "/api/agent/pairings/cart")
+        await ctx.send(sender, msg(checkout.cart_text({"cart": data.get("cart", data)}), "Review and confirm purchases in Tadaima on the website. No payment is authorized in this chat."))
+        return
     data = await api("GET", f"/api/projects/{project}")
     plan, cost = data["plan"], data["cost"]
     products = by_id(plan["products"])
@@ -491,8 +508,9 @@ def result_card(results: list[dict], job_id: str, spot: dict, replace_item_id: s
             id=p["id"][:64], image=p.get("imageUrl") or None, title=p["label"][:80], subtitle=usd(p.get("price")),
             secondary_text=f"{d[0]:.2f} x {d[2]:.2f} m, fits there" if d else "fits there",
             badges=badges,
-            primary_cta=CtaAction(label="Swap it in" if replace_item_id else "Add to room", selection={
+            primary_cta=CtaAction(label="Preview in room" if CURRENT_PAIRING.get() else "Swap it in" if replace_item_id else "Add to room", selection={
                 "action": "place", "productId": p["id"], "jobId": job_id, "x": x, "z": z, "replaceItemId": replace_item_id,
+                "projectId": (CURRENT_PAIRING.get() or {}).get("projectId"),
             }),
         ))
     if not cards:
@@ -504,10 +522,15 @@ async def follow_live_search(ctx: Context, sender: str, project: str, job_id: st
     """Live store search takes minutes; post what it finds into the same chat when it's done."""
     for _ in range(36):
         await asyncio.sleep(10)
+        binding = CURRENT_PAIRING.get()
+        if binding and (expired(binding) or conv(ctx, sender).get("pairing") != binding):
+            return
         try:
             job = await api("GET", f"/api/projects/{project}/shop/{job_id}")
         except (BackendError, Rejected):
             continue
+        if binding and conv(ctx, sender).get("pairing") != binding:
+            return
         out = job.get("output") or {}
         if out.get("live") == "running":
             continue
@@ -530,7 +553,7 @@ def tools_for(ctx: Context, sender: str, project: str) -> dict:
     async def propose_change(a):
         p = await propose(ctx, sender, project, a["intent"], a.get("item_id"))
         return json.dumps({"summary": p["summary"], "changes": len(p["changes"]), "passes": not any(v["status"] == "fail" for v in p["validations"]),
-                           "cost_before": usd(p["costBefore"]["knownSubtotal"]), "cost_after": usd(p["costAfter"]["knownSubtotal"]), "shown_with_apply_button": True})
+                           "cost_before": usd(p["costBefore"]["knownSubtotal"]), "cost_after": usd(p["costAfter"]["knownSubtotal"]), "shown_with_apply_button": not bool(CURRENT_PAIRING.get()), "review_on_website": bool(CURRENT_PAIRING.get())})
 
     async def apply_proposal(_a):
         r = await apply(ctx, sender, project, None, None)
@@ -619,12 +642,13 @@ def tools_for(ctx: Context, sender: str, project: str) -> dict:
         await cart(ctx, sender, project)
         return "shown to the shopper"
 
-    return {
+    tools = {
         "get_room": get_room, "show_room": show, "propose_change": propose_change, "apply_proposal": apply_proposal,
         "search_products": search_products, "place_product": place_product, "move_item": move_item, "put_away": put_away,
         "set_constraints": set_constraints, "lock_item": lock_item, "show_cart": show_cart, "check_delivery": check_delivery,
         "hire_scout": hire_scout,
     }
+    return {name: fn for name, fn in tools.items() if not CURRENT_PAIRING.get() or name in PAIRED_TOOLS}
 
 
 async def scout_and_show(ctx: Context, sender: str, project: str, req: ResearchRequest, spot: dict, replace_item_id: str | None):
@@ -665,6 +689,12 @@ def placed_text(r: dict, ok_text: str) -> str:
 
 
 async def place(ctx: Context, sender: str, project: str, product_id: str, job_id: str | None, spot: dict, replace_item_id: str | None) -> dict:
+    if CURRENT_PAIRING.get():
+        if replace_item_id:
+            await ctx.send(sender, msg("I can preview this new piece. Store or replace existing furniture explicitly on the website."))
+        preview = await api("POST", "/api/agent/pairings/preview", {"productId": product_id, "jobId": job_id, "spot": spot})
+        await ctx.send(sender, msg("Preview prepared in Tadaima. Open the website to review the fit and confirm it; the room and basket are unchanged."))
+        return preview
     r = await api("POST", f"/api/projects/{project}/place", {"productId": product_id, "jobId": job_id, "spot": spot, "replaceItemId": replace_item_id})
     if r["ok"]:
         cost = (await api("GET", f"/api/projects/{project}"))["cost"]
@@ -697,8 +727,10 @@ async def _fee_paid(ctx: Context, sender: str, project_id: str):
 
 
 async def think(ctx: Context, sender: str, project: str, text: str):
+    if brain.client is None and not os.getenv("ANTHROPIC_API_KEY"):
+        return await ctx.send(sender, msg("Your room is connected. Free-form requests need ANTHROPIC_API_KEY configured in the Fetch agent process. You can still say **room** or **cart**."))
     key = f"hist:{sender}:{project}"
-    reply, history = await brain.run_turn(ctx.storage.get(key) or [], text, tools_for(ctx, sender, project), ctx.logger.error)
+    reply, history = await brain.run_turn(ctx.storage.get(key) or [], text, tools_for(ctx, sender, project), ctx.logger.error, paired=bool(CURRENT_PAIRING.get()))
     ctx.storage.set(key, history)
     if reply:
         await ctx.send(sender, msg(reply))
@@ -728,6 +760,8 @@ async def account(sender: str) -> dict:
 
 
 async def onboard_start(ctx: Context, sender: str):
+    if os.getenv("FETCH_ENABLE_LEGACY_ONBOARDING") != "1":
+        return await ctx.send(sender, msg("Open your scanned room in Tadaima, choose Connect Fetch, then send **connect CODE** here. I will use that exact room for product research and previews. Changes and payments stay under your control on the website. You can also say **demo** for a separate synthetic room."))
     acct = await account(sender)
     user, rooms = acct["user"], acct["rooms"]
     if user and rooms:
@@ -878,7 +912,7 @@ async def open_room(ctx: Context, sender: str, project_id: str):
     await show_room(ctx, sender, project_id)
 
 
-async def handle_turn(ctx: Context, sender: str, m: ChatMessage):
+async def _handle_turn(ctx: Context, sender: str, m: ChatMessage):
     started = any(isinstance(c, StartSessionContent) for c in m.content)
     if started:
         # lets ASI:One users attach room photos
@@ -886,11 +920,34 @@ async def handle_turn(ctx: Context, sender: str, m: ChatMessage):
 
     sel = parse_selection(m)
     text = clean_text(m) if sel is None else ""
-    if sel and await handle_chat_confirmation(ctx, sender, sel):
+    if sel and not CURRENT_PAIRING.get() and await handle_chat_confirmation(ctx, sender, sel):
         return
     photos = [c for c in m.content if isinstance(c, ResourceContent)]
     action = (sel or {}).get("action")
     step = conv(ctx, sender)["step"]
+
+    # Paired rooms never enter legacy account, reset, apply or payment routes.
+    if CURRENT_PAIRING.get():
+        project = project_for(ctx, sender)
+        if action == "place":
+            if sel.get("projectId") != project:
+                return await ctx.send(sender, msg("That product card belongs to another room connection. Search again in the current room before previewing it."))
+            spot = {"position": [float(sel["x"]), 0, float(sel["z"])]}
+            return await place(ctx, sender, project, str(sel["productId"]), sel.get("jobId"), spot, sel.get("replaceItemId"))
+        if action in {"apply", "checkout_start", *checkout.CHECKOUT_ACTIONS} or RESET.search(text) or CHECKOUT.search(text):
+            return await ctx.send(sender, msg("Review and confirm changes and payments in Tadaima on the website. This chat cannot approve or pay for your scanned room."))
+        if action == "cart" or CART.search(text):
+            return await cart(ctx, sender, project)
+        if action == "intent":
+            return await propose(ctx, sender, project, str(sel.get("intent", "")), sel.get("itemId"))
+        if action == "discard":
+            ctx.storage.set(f"pending:{sender}", None)
+            return await ctx.send(sender, msg("You can dismiss the proposal on the website. Tell me what to try instead."))
+        if photos:
+            return await ctx.send(sender, msg("Your scanned room is already connected. Keep photos and scan files in Tadaima; tell me what furniture to find."))
+        if action == "room" or not text or GREETING.match(text) or SHOW.search(text) or MY_ROOMS.search(text):
+            return await show_room(ctx, sender, project)
+        return await think(ctx, sender, project, text)
 
     # anywhere in the conversation
     if action == "open_room":
@@ -952,10 +1009,40 @@ async def handle_turn(ctx: Context, sender: str, m: ChatMessage):
     return await think(ctx, sender, project, text)
 
 
+async def handle_turn(ctx: Context, sender: str, m: ChatMessage):
+    text = clean_text(m)
+    match = CONNECT.fullmatch(text)
+    if match:
+        # No browser cookie, agent global secret or raw scan is transferred.
+        result = await api("POST", "/api/agent/pairings/redeem", {"code": match.group(1), "sender": sender})
+        binding = valid_binding(result)
+        set_conv(ctx, sender, step="ready", projectId=binding["projectId"], pairing=binding)
+        ctx.storage.set(f"pending:{sender}", None)
+        await ctx.send(sender, msg("Connected to your scanned room. I can research furniture, prepare previews and propose changes. Review and confirm them in Tadaima on the website. Say **disconnect** to stop using this room in chat."))
+        token = CURRENT_PAIRING.set(binding)
+        try:
+            return await show_room(ctx, sender, binding["projectId"])
+        finally:
+            CURRENT_PAIRING.reset(token)
+    if text.lower() == "disconnect":
+        set_conv(ctx, sender, step="new", projectId=None, pairing=None)
+        ctx.storage.set(f"pending:{sender}", None)
+        return await ctx.send(sender, msg("Disconnected in this chat. Revoke the connection in Tadaima to invalidate the credential on the server."))
+    binding = conv(ctx, sender).get("pairing")
+    if binding and expired(binding):
+        set_conv(ctx, sender, step="new", projectId=None, pairing=None)
+        return await ctx.send(sender, msg("Your room connection expired. Create a new code in Tadaima and send **connect CODE**."))
+    token = CURRENT_PAIRING.set(binding)
+    try:
+        return await _handle_turn(ctx, sender, m)
+    finally:
+        CURRENT_PAIRING.reset(token)
+
+
 @chat.on_message(ChatMessage)
 async def on_chat(ctx: Context, sender: str, m: ChatMessage):
     await ctx.send(sender, ChatAcknowledgement(acknowledged_msg_id=m.msg_id))
-    ctx.logger.info(f"turn from {sender[:16]}: {m.text()[:120]!r}")
+    ctx.logger.info(f"turn from {sender[:16]}")
     try:
         await handle_turn(ctx, sender, m)
     except Rejected as e:

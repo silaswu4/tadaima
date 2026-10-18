@@ -18,7 +18,7 @@ MODEL = "claude-opus-5-5"
 MAX_STEPS = 8
 HISTORY_TURNS = 10
 
-client = AsyncAnthropic()
+client: AsyncAnthropic | None = None
 
 SYSTEM = """You are Tadaima, a furniture planning agent inside an ASI:One chat. You work on the shopper's real room plan through tools; every change is checked by deterministic rules (fits in the room, clearance, locked items kept, budget, seats, sizes known, in stock).
 
@@ -83,7 +83,7 @@ TOOLS = [
     },
     {
         "name": "place_product",
-        "description": "Add a product from a search to the room at a spot (placed so it fits), optionally replacing an existing item. Joins the cart as a planned purchase.",
+        "description": "Prepare a product from search at a spot. For a paired scanned room this only sends an on-screen preview for the shopper to confirm; it never changes the room or cart. For legacy demo rooms, adds the product after the shopper asks.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -161,16 +161,19 @@ TOOLS = [
 Tool = Callable[[dict], Awaitable[str]]
 
 
-async def run_turn(history: list[dict], text: str, tools: dict[str, Tool], log=None) -> tuple[str, list[dict]]:
+async def run_turn(history: list[dict], text: str, tools: dict[str, Tool], log=None, *, paired: bool = False) -> tuple[str, list[dict]]:
     """One shopper message. Returns (final reply text, updated history of plain-text turns)."""
+    global client
+    if client is None:
+        client = AsyncAnthropic()
     messages = [*history[-HISTORY_TURNS * 2 :], {"role": "user", "content": text}]
     reply = ""
     for _ in range(MAX_STEPS):
         res = await client.beta.messages.create(
             model=MODEL,
             max_tokens=4000,
-            system=[{"type": "text", "text": SYSTEM, "cache_control": {"type": "ephemeral"}}],
-            tools=TOOLS,
+            system=[{"type": "text", "text": SYSTEM + ("\nThis is a paired private scanned room. You may read, search, propose, and prepare a product preview. place_product ONLY prepares an on-screen preview; it never adds to the room or basket. The shopper must review and confirm all changes and payments on the website. Do not claim a change was applied. Private photos and models are unavailable. Use the room floor polygon coordinates exactly as returned; do not assume a back-left origin." if paired else ""), "cache_control": {"type": "ephemeral"}}],
+            tools=[tool for tool in TOOLS if tool["name"] in tools],
             messages=messages,
             output_config={"effort": "low"},
             betas=["server-side-fallback-2026-07-01"],

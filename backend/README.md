@@ -25,6 +25,7 @@ Owner: **Matthew**. This is the application and agent integration area. Work alo
 - [`research/browserUse.ts`](research/browserUse.ts): Browser Use Cloud v4 product research with structured output.
 - [`checkout/`](checkout/) and [`payments/stripe.ts`](payments/stripe.ts): cart derived from the plan, live price recheck, Stripe test-mode card, shopper-approved mandate, agent pays within it. Test mode only; retailer orders are simulated.
 - [`voice/`](voice/): ElevenLabs agent config and the browser client tools.
+- [`fetch/`](fetch/README.md): Matthew's Fetch/ASI:One Python adapter, with single-use browser pairing to the actual private scanned room. [`session/fetch.ts`](session/fetch.ts) scopes research/proposals/previews/cart reads; explicit acceptance remains in the web room. The Python process must run separately with the team's existing seed and the same backend URL.
 
 Item `position` is the center of the footprint on the floor, `dimensions` are `[width, height, depth]` before rotation, `rotationY` is radians about +Y (three.js convention). A piece's front is local +Z.
 
@@ -84,7 +85,8 @@ Locked pieces (the shopper's own, marked keep) refuse to move or store unless th
 | Command | What it checks | Cost |
 | --- | --- | --- |
 | `npm test` | Rules, room brief, placement solver (including a property test that every placement passes the validator), spot ranking, 3D library | free |
-| `npm run e2e` | Every API route against a running server (`npm run dev -- -p 3009`): reads, edits, races, shop, place, move, checkout, plus the 16-case planner exam | ~$1 Claude |
+| `npm run e2e` | Every API route against a running server (`npm run dev -- -p 3009`): reads, edits, races, shop, place, move, inventory, room sessions, checkout | ~$0.10 Claude |
+| `E2E_PLANNER=1 npm run e2e` | Also the 16-case planner exam | +~$1 Claude |
 | `E2E_LIVE=1 npm run e2e` | Also live Browser Use searches on IKEA | +~$0.05 |
 | `npm run e2e:voice` | ElevenLabs agent behavior via its conversation simulator, including spot shopping | ElevenLabs credits |
 

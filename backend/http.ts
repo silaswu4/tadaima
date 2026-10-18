@@ -5,6 +5,7 @@ import { authorizeRoomProject, InvalidRoomSync, RoomSessionError } from "@/backe
 import { CheckoutRefused } from "@/backend/checkout/service";
 import { PaymentsUnavailable } from "@/backend/payments/stripe";
 import { NotFound, Unprocessable } from "@/backend/plan/operations";
+import { authorizeFetchProject, recordFetchResult, redactFetchMedia } from "@/backend/session/fetch";
 
 /** Shared error mapping so every route answers the same way. */
 export async function handle(fn: () => Promise<unknown>) {
@@ -48,7 +49,14 @@ export const PlanChangeSchema = z.discriminatedUnion("kind", [
   }),
 ]);
 
-/** Every private project route checks the browser session before touching plan, jobs or checkout. */
+/** Private routes require their browser owner or an explicitly scoped Fetch research credential. */
 export async function handleProject(req: Request, projectId: string, fn: () => Promise<unknown>) {
-  return handle(async () => { await authorizeRoomProject(req, projectId); return fn(); });
+  return handle(async () => {
+    const fetchAccess = await authorizeFetchProject(req, projectId);
+    if (!fetchAccess) await authorizeRoomProject(req, projectId);
+    const result = await fn();
+    if (!fetchAccess) return result;
+    await recordFetchResult(req, fetchAccess, result);
+    return redactFetchMedia(result);
+  });
 }
