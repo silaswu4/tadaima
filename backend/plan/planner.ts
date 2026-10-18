@@ -4,7 +4,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import type { PlanChange, RoomPlan, ValidationResult } from "@/backend/contracts";
-import { applyChanges, costOf, PlanChangeError, validate, passes } from "@/backend/plan/rules";
+import { applyChanges, costOf, PlanChangeError, passes, validateChanges } from "@/backend/plan/rules";
 
 /**
  * Turns "make it $300 cheaper, keep the sofa, seat 4" into PlanChange[].
@@ -169,7 +169,7 @@ export async function planChanges(plan: RoomPlan, intent: string, selectedItemId
       if (!(e instanceof PlanChangeError)) throw e;
       problem = e.message;
     }
-    const validations = validate(result, plan);
+    const validations = validateChanges(plan, changes, result);
     last = { changes, result, validations, summary: out.summary, feasible: out.feasible, attempts: attempt };
 
     const failures = validations.filter((v) => v.status === "fail");

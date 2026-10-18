@@ -248,3 +248,10 @@ export function validate(plan: RoomPlan, base?: RoomPlan): ValidationResult[] {
 }
 
 export const passes = (results: ValidationResult[]) => results.every((r) => r.status !== "fail");
+
+/** Validate `next` against `base`, treating items the changes explicitly unlock as no longer locked. */
+export function validateChanges(base: RoomPlan, changes: PlanChange[], next: RoomPlan): ValidationResult[] {
+  const unlocked = new Set(changes.flatMap((c) => (c.kind === "lock" && !c.locked ? [c.itemId] : [])));
+  const unlockedBase = { ...base, items: base.items.map((i) => (unlocked.has(i.id) ? { ...i, locked: false } : i)) };
+  return validate(next, unlockedBase);
+}
