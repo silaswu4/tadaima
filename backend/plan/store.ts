@@ -84,20 +84,25 @@ function db(): Backend {
 const planKey = (projectId: string) => `plan:${projectId}`;
 const proposalKey = (projectId: string, id: string) => `proposal:${projectId}:${id}`;
 
-/** Fixture-backed projects seed themselves on first read. */
+/**
+ * Fixture-backed projects seed themselves on first read. `proj_demo_<suffix>`
+ * gets its own copy of the demo room, so each ASI:One chat has a private plan.
+ */
 const SEEDS: Record<string, RoomPlan> = { proj_demo: demoPlan };
+const seedFor = (projectId: string): RoomPlan | null =>
+  SEEDS[projectId] ?? (/^proj_demo_[a-z0-9]{6,40}$/.test(projectId) ? { ...demoPlan, projectId } : null);
 
 export async function getPlan(projectId: string): Promise<RoomPlan | null> {
   const plan = await db().get<RoomPlan>(planKey(projectId));
   if (plan) return plan;
-  const seed = SEEDS[projectId];
+  const seed = seedFor(projectId);
   if (!seed) return null;
   await db().set(planKey(projectId), seed);
   return structuredClone(seed);
 }
 
 export async function resetPlan(projectId: string): Promise<RoomPlan | null> {
-  const seed = SEEDS[projectId];
+  const seed = seedFor(projectId);
   if (!seed) return null;
   await db().set(planKey(projectId), seed);
   return structuredClone(seed);
