@@ -180,9 +180,9 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
   const [query, setQuery] = useState("");
   const [maxPrice, setMaxPrice] = useState("300");
   const [merchant, setMerchant] = useState<"IKEA" | "Target">("IKEA");
-  const [liveSearch, setLiveSearch] = useState(true);
+  const [liveSearch] = useState(true);
   const [searchSpot, setSearchSpot] = useState<FloorSpot | null>(null);
-  const [pendingPlacement, setPendingPlacement] = useState<{ spot: FloorSpot; revision: number; jobId?: string; swapId?: string } | null>(null);
+  const [pendingPlacement, setPendingPlacement] = useState<{ spot: FloorSpot; revision: number; jobId?: string; swapId?: string; raiseBudgetTo?: number } | null>(null);
   const shopping = useRoomShopping({ roomId: room.id, sourceProjectId: room.plan.projectId, persist: onPlanChange, notice: setNotice });
   const shoppingRef = useRef(shopping);
   useLayoutEffect(() => { shoppingRef.current = shopping; });
@@ -494,9 +494,9 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
       engine.cancelProductPreview(); setPending(null);
       engine.previewProduct(product, { swapId: swapTarget?.id, placement: result.placement });
       setPendingPlacement({ spot: swapTarget ? { roomId: result.placement.roomId, position: [...result.placement.position], rotationY: result.placement.rotationY } : searchSpot,
-        revision: session.plan.revision, jobId: shopping.job?.id, swapId: swapTarget?.id });
+        revision: session.plan.revision, jobId: shopping.job?.id, swapId: swapTarget?.id, raiseBudgetTo: budgetFor(result) ?? undefined });
       setPending(product);
-      setNotice(`Previewing ${product.label}. Confirm placement to add it to this room.`);
+      setNotice(null);
       setPanel(null); openerRef.current = null;
       return true;
     } catch (cause) { setNotice(cause instanceof Error ? cause.message : "That piece could not be previewed."); return false; }
@@ -506,10 +506,13 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
   const confirmProduct = () => {
     if (!pending || !pendingPlacement || blocked) return;
     const engine = api();
-    void shopping.place(pending.id, pendingPlacement.spot, pendingPlacement.revision, pendingPlacement.jobId, pendingPlacement.swapId).then(() => {
+    const raise = pendingPlacement.raiseBudgetTo;
+    // the shopper chose a piece over budget with the raise shown on the button: raise it, then place
+    void (raise ? shopping.setBudget(raise).then((plan) => plan.revision) : Promise.resolve(pendingPlacement.revision))
+      .then((revision) => shopping.place(pending.id, pendingPlacement.spot, revision, pendingPlacement.jobId, pendingPlacement.swapId)).then(() => {
       if (!engine || api() !== engine) return;
       setPending(null); setPendingPlacement(null); setSwapTarget(null);
-      setNotice("Added to this room and its server basket. Nothing purchased.");
+      setNotice("Added to the room and your basket.");
     }).catch(() => { if (engine && api() === engine) { engine.cancelProductPreview(); setPending(null); setPendingPlacement(null); } });
   };
   useLayoutEffect(() => { confirmRef.current = confirmProduct; });
@@ -537,6 +540,27 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
     if (shoppingRef.current.session?.plan.projectId !== owner || !walkRef.current) throw new Error("This room assistant session has ended.");
     setAgentProposal(proposal);
     return proposal;
+  };
+  const agentProposalRef = useRef<PlanProposal | null>(null);
+  useLayoutEffect(() => { agentProposalRef.current = agentProposal; });
+  const proposeByVoice = async (request: string) => {
+    const proposal = await shopping.propose(request, selected?.id ?? null);
+    setAgentProposal(proposal);
+    agentProposalRef.current = proposal;
+    return proposal;
+  };
+  const applyByVoice = async (proposalId: string) => {
+    const proposal = agentProposalRef.current;
+    if (!proposal || proposal.id !== proposalId) throw new Error("That proposal is gone. Plan it again.");
+    await shopping.applyProposal(proposal);
+    setAgentProposal(null);
+    agentProposalRef.current = null;
+  };
+  const placeByVoice = async (result: ShopResult, job: Job<ShopJobOutput>) => {
+    const session = shoppingRef.current.session;
+    if (!session || !job.output) throw new Error("The room isn't connected.");
+    cancelProduct();
+    await shopping.place(result.product.id, job.output.request.spot, session.plan.revision, job.id);
   };
   const previewFromFetch = async (job: Job<ShopJobOutput>, productId: string) => {
     const owner = shopping.session?.plan.projectId;
@@ -569,15 +593,14 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
   const inventory = useMemo(() => items.filter((i) => i.stored), [items]);
   const basketTotal = formatTotals(basket);
 
-  const exportBasket = () => {
-    const url = URL.createObjectURL(new Blob([JSON.stringify({ roomId: room.id, room: room.label, previewOnly: true,
-      exportedAt: new Date().toISOString(), items: basket.map((item) => ({ ...item, sourceUrl: shopping.session?.plan.products.find((p) => p.id === item.productId)?.sourceUrl ?? null })) }, null, 2)], { type: "application/json" }));
-    const link = document.createElement("a"); link.href = url; link.download = `tadaima-basket-${room.id}.json`; link.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-  };
 
 
   const categories = Object.keys(CATEGORY_LABEL) as FurnitureCategory[];
+  function budgetFor(result: ShopResult): number | null {
+    const budget = shopping.session?.plan.constraints.budget;
+    if (result.withinBudget !== false || !budget || result.overBudgetUsd == null) return null;
+    return Math.ceil((budget.amountMinor + Math.round(result.overBudgetUsd * 100)) / 5000) * 5000;
+  }
   const results = useMemo(() => {
     const output = shopping.job?.output, plan = shopping.session?.plan;
     if (!output || !plan) return [];
@@ -630,6 +653,7 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
     <div
       className="room-x"
       data-ready={ready || undefined}
+      data-shopping={shopping.session ? "connected" : shopping.connecting ? "connecting" : "offline"}
       data-mode={mode}
       data-locked={locked || undefined}
       data-touch={coarse || undefined}
@@ -644,9 +668,10 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
         onPointerDown={onCanvasPointerDown}
       />
 
-      <div className="room-x__connection" role="status">
-        {shopping.connecting ? "Connecting room shopping…" : shopping.error ? <>{shopping.error} <button type="button" onClick={() => { const engine = api(); if (engine) void shopping.connect(engine); }}>Retry connection</button></> : shopping.session ? `Shopping connected · ${shopping.session.capabilities.persistence === "memory" ? "local server session" : "saved server room"}` : "Room shopping is offline"}
-      </div>
+      {/* only when the room can't reach the server; action errors show as notices */}
+      {!shopping.session ? <div className="room-x__connection" role="status">
+        {shopping.connecting ? "Connecting…" : shopping.error ? <>{shopping.error} <button type="button" onClick={() => { const engine = api(); if (engine) void shopping.connect(engine); }}>Retry</button></> : "Offline"}
+      </div> : null}
       {/* ---------- top bar ---------- */}
       <header className="room-x__bar">
         <div className="room-x__start">
@@ -774,8 +799,9 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
           <RoomVoice key={shopping.session?.plan.projectId ?? "offline"}
             plan={shopping.session?.plan ?? null} selectedId={selected?.id ?? null} job={shopping.job} results={results}
             available={Boolean(shopping.session?.capabilities.voice)} liveSearch={Boolean(shopping.session?.capabilities.liveSearch)}
-            getSpot={assistantSpot} onRefresh={shopping.refresh} onPropose={proposeWithAssistant}
-            onSearch={assistantSearch} onPreview={(result) => addProduct(result.product)}
+            getSpot={assistantSpot} onRefresh={shopping.refresh} onPropose={proposeByVoice}
+            onApply={applyByVoice} getProposal={() => agentProposalRef.current} onSetBudget={shopping.setBudget}
+            onSearch={assistantSearch} onPreview={(result) => addProduct(result.product)} onPlace={placeByVoice}
             onMove={shopping.moveAgentItem} onStore={shopping.storeAgentItem} disabled={presenting}
           />
           <button
@@ -789,13 +815,12 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
             {Icon.plus}
             <span>Add furniture</span>
           </button>
-          <button type="button" className="room-x__pill" disabled={blocked || !shopping.session || presenting} aria-haspopup="dialog" aria-expanded={panel === "assistant"} onClick={() => { cancelProduct(); openPanel("assistant"); }}>Ask Tadaima</button>
         </div>
       ) : null}
 
       {pending && ready ? <div className="room-x__placement" role="region" aria-label="Confirm furniture placement">
-        <strong>{pending.label}</strong><p>{pending.price ? formatMoney(pending.price.amountMinor, pending.price.currency) : "Price unknown"} · approximate display model, listed product dimensions</p>
-        <div><button type="button" className="room-x__chip-btn" onClick={cancelProduct}>Cancel preview</button><button type="button" className="room-x__chip-btn room-x__chip-btn--ink" onClick={confirmProduct} disabled={blocked}>Confirm placement</button></div>
+        <strong>{pending.label.split(",")[0]}</strong><p>{pending.price ? formatMoney(pending.price.amountMinor, pending.price.currency) : "Price unknown"}{pendingPlacement?.raiseBudgetTo ? ` · raises your budget to ${formatMoney(pendingPlacement.raiseBudgetTo, "USD")}` : ""}</p>
+        <div><button type="button" className="room-x__chip-btn" onClick={cancelProduct}>Cancel</button><button type="button" className="room-x__chip-btn room-x__chip-btn--ink" onClick={confirmProduct} disabled={blocked}>Add to room</button></div>
       </div> : null}
       {/* ---------- selection card ---------- */}
       {selected && ready && !pending ? (
@@ -882,42 +907,28 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
         <div className="room-x__panel-head">
           <div>
             <h2 className="room-x__panel-title">{swapTarget ? "Swap a piece" : "Add furniture"}</h2>
-            <p className="room-x__panel-sub">
-              {swapTarget
-                ? `Replacing ${swapTarget.label}. The new piece takes its spot.`
-                : "Search real retailers for pieces that fit this floor spot. Display models are approximate."}
-            </p>
+            {swapTarget ? <p className="room-x__panel-sub">Replacing {swapTarget.label}.</p> : null}
           </div>
           <button ref={catalogCloseRef} type="button" className="room-x__icon-btn" onClick={closePanel} aria-label="Close">
             {Icon.close}
           </button>
         </div>
 
-        <form className="room-x__search" onSubmit={(event) => { event.preventDefault(); runSearch(); }}>
-          <label>What are you looking for?<input value={query} maxLength={300} placeholder="e.g. walnut chair, modern, easy to clean" onChange={(event) => setQuery(event.target.value)} /></label>
-          <div className="room-x__search-row"><label>Under $<input type="number" min="0.01" max="100000" step="0.01" value={maxPrice} onChange={(event) => setMaxPrice(event.target.value)} /></label>
-          <label>Store<select value={merchant} onChange={(event) => setMerchant(event.target.value as "IKEA" | "Target")}><option>IKEA</option><option>Target</option></select></label></div>
-          <label className="room-x__live"><input type="checkbox" checked={liveSearch && Boolean(shopping.session?.capabilities.liveSearch)} disabled={!shopping.session?.capabilities.liveSearch} onChange={(event) => setLiveSearch(event.target.checked)} /> Browse store live</label>
-          {!shopping.session?.capabilities.liveSearch ? <p>Live browsing needs Browser Use configured on the server. Catalog search works now.</p> : null}
-          <p>{swapTarget ? "Shopping at the selected piece’s spot." : floorSpot ? "Shopping at your selected floor spot." : "Shopping where you’re looking. Tap a clear floor spot in Dollhouse to change it."}</p>
-          <button type="submit" className="room-x__chip-btn room-x__chip-btn--ink" disabled={blocked || !shopping.session}>Search furniture</button>
-        </form>
-        {shopping.job ? <p className="room-x__search-status" role="status">{shopping.job.output ? `${CATEGORY_LABEL[shopping.job.output.request.category]} · ${shopping.job.output.request.merchant ?? "IKEA"} · ` : ""}{shopping.job.stage}{shopping.job.output?.live === "failed" ? " · live search unavailable; catalog results remain usable." : ""}</p> : null}
-        <div className="room-x__chips" role="group" aria-label="Filter by category">
+        <div className="room-x__chips" role="group" aria-label="What kind of piece">
           {categories.map((c) => (
-            <button
-              key={c}
-              type="button"
-              className="room-x__chip"
-              aria-pressed={category === c}
-              onClick={() => { setCategory(c); }}
-            >
+            <button key={c} type="button" className="room-x__chip" aria-pressed={category === c} onClick={() => { setCategory(c); }}>
               {CATEGORY_LABEL[c]}
             </button>
           ))}
         </div>
+        <form className="room-x__search room-x__search--row" onSubmit={(event) => { event.preventDefault(); runSearch(); }}>
+          <input aria-label="Describe it" value={query} maxLength={300} placeholder="Describe it (optional)" onChange={(event) => setQuery(event.target.value)} />
+          <label className="room-x__cap">Under $<input aria-label="Max price in dollars" type="number" min="1" max="100000" step="1" value={maxPrice} onChange={(event) => setMaxPrice(event.target.value)} /></label>
+          <button type="submit" className="room-x__chip-btn room-x__chip-btn--ink" disabled={blocked || !shopping.session}>Search</button>
+        </form>
+        {shopping.job ? <p className="room-x__search-status" role="status">{shopping.job.stage}</p> : null}
 
-        {shopping.job && !results.length ? <p className="room-x__empty">No matches yet. Try another category, price cap or floor spot.</p> : null}
+        {shopping.job && !results.length ? <p className="room-x__empty">Nothing fits there under that price yet. Try a higher price or another spot.</p> : null}
         <ul className="room-x__products">
           {results.map((result) => {
             const p = result.product;
@@ -931,27 +942,24 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
                     <img src={p.imageUrl} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" />
                   ) : null}
                 </div>
-                <p className="room-x__product-name">{p.label}</p>
+                <p className="room-x__product-name"><a href={/^https:\/\//i.test(p.sourceUrl) ? p.sourceUrl : undefined} target="_blank" rel="noreferrer">{p.label.split(",")[0]}</a></p>
                 <p className="room-x__product-meta">
-                  <span>{p.merchant}</span>
+                  <span>{p.dimensions ? formatDimensions(p.dimensions).split(" · ")[0] : "Size not listed"}</span>
                   {p.price ? <span className="room-x__product-price">{formatMoney(p.price.amountMinor, p.price.currency)}</span> : null}
                 </p>
-                <p className="room-x__product-dims">{p.dimensions ? formatDimensions(p.dimensions) : "Size not listed"}</p>
-                <p className="room-x__product-dims">{result.source === "live" ? "Found by live search" : "Catalog observation"} · {result.fits ? result.withinBudget === false ? "Fits this spot, exceeds room budget" : "Fits this spot" : result.problems.join(" ") || "Does not fit"}</p>
-                <a className="room-x__text-btn" href={/^https:\/\//i.test(p.sourceUrl) ? p.sourceUrl : undefined} target="_blank" rel="noreferrer">View at {p.merchant}</a>
-                <button
-                  type="button"
-                  className="room-x__chip-btn room-x__chip-btn--ink room-x__product-add"
-                  onClick={() => addProduct(p)}
-                  disabled={!known || !p.price || !result.fits || result.withinBudget === false || blocked || !ready}
-                  aria-label={`Preview ${p.label}`}
-                >
-                  {p.availability === "unavailable" ? "Unavailable" : "Preview"}
-                </button>
+                <p className="room-x__product-fit" data-ok={result.fits || undefined}>
+                  {p.availability === "unavailable" ? "Out of stock" : !result.fits ? result.problems[0] ?? "Doesn't fit here" : result.withinBudget === false ? `Fits · $${Math.ceil(result.overBudgetUsd ?? 0)} over budget` : result.placement?.againstWallId ? "Fits against the wall" : "Fits here"}
+                </p>
+                {result.fits && known && p.price && p.availability !== "unavailable" ? (
+                  <button type="button" className="room-x__chip-btn room-x__chip-btn--ink room-x__product-add" onClick={() => addProduct(p)} disabled={blocked || !ready}>
+                    {budgetFor(result) ? `Add · budget to ${formatMoney(budgetFor(result)!, "USD")}` : "Add to room"}
+                  </button>
+                ) : null}
               </li>
             );
           })}
         </ul>
+        <button type="button" className="room-x__text-btn room-x__more" onClick={() => { cancelProduct(); openPanel("assistant"); }} disabled={!shopping.session}>Plan a change by text, or shop with Fetch</button>
       </div>
 
       {/* ---------- basket ---------- */}
@@ -965,7 +973,6 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
         <div className="room-x__panel-head">
           <div>
             <h2 className="room-x__panel-title">Basket</h2>
-            <p className="room-x__panel-sub">New pieces in this room. Things you already own stay free.</p>
           </div>
           <button ref={basketCloseRef} type="button" className="room-x__icon-btn" onClick={closePanel} aria-label="Close">
             {Icon.close}
@@ -973,13 +980,13 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
         </div>
 
         {basket.length === 0 ? (
-          <p className="room-x__empty">Nothing here yet. Pieces you add to the room show up in your basket.</p>
+          <p className="room-x__empty">Nothing yet. Pieces you add to the room land here.</p>
         ) : (
           <ul className="room-x__lines">
             {basket.map((i) => (
               <li key={i.id} className="room-x__line">
                 <div className="room-x__line-main">
-                  <p className="room-x__line-name">{i.label}</p>
+                  <p className="room-x__line-name">{i.label.split(",")[0]}</p>
                   <p className="room-x__line-dims">{formatDimensions(i.dimensions)}</p>
                 </div>
                 <div className="room-x__line-end">
@@ -998,8 +1005,7 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
             <span>Total</span>
             <span>{basketTotal}</span>
           </p>
-          <button type="button" className="room-x__pill room-x__pill--ink room-x__checkout" disabled={!basket.length} onClick={exportBasket}>Export basket</button>
-          {connectedProject && panel === "basket" ? <RoomCheckout projectId={connectedProject} planRevision={shopping.session!.plan.revision} onPlanRefresh={async () => { await shopping.refresh(); }} testPaymentsAvailable={shopping.session!.capabilities.testPayments} /> : <p className="room-x__note">Connect room shopping to review checkout.</p>}
+          {connectedProject && panel === "basket" && basket.length ? <RoomCheckout projectId={connectedProject} planRevision={shopping.session!.plan.revision} onPlanRefresh={async () => { await shopping.refresh(); }} testPaymentsAvailable={shopping.session!.capabilities.testPayments} /> : null}
         </div>
       </div>
 
@@ -1014,7 +1020,6 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
         <div className="room-x__panel-head">
           <div>
             <h2 className="room-x__panel-title">Inventory</h2>
-            <p className="room-x__panel-sub">Pieces you put away. They are still yours, take one out to place it again.</p>
           </div>
           <button ref={inventoryCloseRef} type="button" className="room-x__icon-btn" onClick={closePanel} aria-label="Close">
             {Icon.close}
@@ -1022,13 +1027,13 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
         </div>
 
         {inventory.length === 0 ? (
-          <p className="room-x__empty">Nothing put away. Select a piece you own and choose Put away.</p>
+          <p className="room-x__empty">Nothing put away.</p>
         ) : (
           <ul className="room-x__lines">
             {inventory.map((i) => (
               <li key={i.id} className="room-x__line">
                 <div className="room-x__line-main">
-                  <p className="room-x__line-name">{i.label}</p>
+                  <p className="room-x__line-name">{i.label.split(",")[0]}</p>
                   <p className="room-x__line-dims">{formatDimensions(i.dimensions)}</p>
                 </div>
                 <div className="room-x__line-end">
