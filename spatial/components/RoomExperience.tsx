@@ -12,6 +12,7 @@ import { roomXRActions, roomXRSearch } from "../rooms/xr-actions";
 import type { WalkCallbacks, WalkEnvironment, WalkItem, WalkMode, WalkOptions, WalkScene } from "../room/walk-api";
 import mark from "../assets/tadaima-mark.png";
 import { WipeLink, useWipeHold } from "./PageWipe";
+import { RoomOnboarding } from "../onboarding/RoomOnboarding";
 import "./RoomExperience.css";
 
 export type ExperienceRoom = { id: string; label: string; plan: RoomPlan; environment?: WalkEnvironment; reconstruction?: WalkOptions["reconstruction"]; sourceDescription?: string };
@@ -1138,6 +1139,7 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
         onSearch={assistantSearch} onPreview={(result) => addProduct(result.product)}
         proposal={agentProposal} onProposal={setAgentProposal} fetchConnection={fetchConnection} onFetchPreview={previewFromFetch} /> : null}
       {room.sourceDescription ? <p className="room-x__source">{room.sourceDescription}</p> : null}
+      {ready ? <RoomOnboarding xr={xr} touch={coarse} /> : null}
       {/* ---------- states ---------- */}
       <div className="room-x__veil" data-show={status === "loading" || undefined} aria-hidden={status !== "loading"}>
         <p className="room-x__veil-title">{room.label}</p>
