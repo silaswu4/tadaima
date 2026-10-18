@@ -181,7 +181,7 @@ export default function PlanSketch({ phase, reduced }: { phase: PlanPhase; reduc
               <g key={it.id} className={`plan-item plan-item--${it.id}`}>
                 <rect className="plan-item__body" x={x} y={z} width={w} height={d} rx={sofa ? 9 : 4} />
                 {sofa ? (
-                  <path className="plan-ink plan-ink--soft" d={`M${x + 20} ${z + 16}V${z + d - 16}M${x} ${z + 16}H${x + w}M${x} ${z + d - 16}H${x + w}M${x + 20} ${z + d / 2}H${x + w}`} />
+                  <path className="plan-ink plan-ink--soft" d={`M${x + 20} ${z + 16}V${z + d - 16}M${x} ${z + 16}H${x + w}M${x} ${z + d - 16}H${x + w}`} />
                 ) : null}
                 <text
                   className="plan-label plan-label--item"
