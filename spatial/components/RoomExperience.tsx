@@ -8,7 +8,7 @@ import { placeAt } from "../../backend/shopping/placement";
 import { evaluate } from "../../backend/shopping/spot";
 import { useRoomShopping } from "../rooms/use-room-shopping";
 import { useRoomFetch } from "../rooms/use-room-fetch";
-import { roomXRActions, roomXRSearch } from "../rooms/xr-actions";
+import { roomXRActions, roomXRProducts, roomXRSearch } from "../rooms/xr-actions";
 import type { WalkCallbacks, WalkCarryStatus, WalkEnvironment, WalkItem, WalkMode, WalkOptions, WalkScene } from "../room/walk-api";
 import mark from "../assets/tadaima-mark.png";
 import { WipeLink, useWipeHold } from "./PageWipe";
@@ -792,10 +792,11 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
   useEffect(() => {
     if (status !== "ready") return;
     walkRef.current?.setXRShopping({
-      offers: results.filter((entry) => entry.fits).slice(0, 3).map(({ product: p, source }) => ({ id: p.id, label: p.label, detail: p.price ? `${formatMoney(p.price.amountMinor, p.price.currency)} · ${p.merchant} · ${source === "live" ? "live search" : "catalog"}` : p.merchant })),
-      selectedItemLabel: selected?.label, pendingOfferId: pending?.id, canConfirm: Boolean(pending) && !blocked,
+      offers: roomXRProducts(results, pending).map(({ product: p, source }) => ({ id: p.id, label: p.label, detail: p.price ? `${formatMoney(p.price.amountMinor, p.price.currency)} · ${p.merchant} · ${source === "live" ? "live search" : source === "catalog" ? "catalog" : "preview"}` : p.merchant })),
+      selectedItemLabel: selected?.label, selectedItemLocked: selected?.locked, pendingOfferId: pending?.id, canConfirm: Boolean(pending) && !blocked,
+      busy: blocked, basketLabel: `Basket ${basket.length} · ${basketTotal}`,
       actions: xrActions,
-      status: `Basket ${basket.length} · ${basketTotal}. ${blocked ? "Working with room service…" : notice ?? shopping.job?.stage ?? "Find furniture here, preview, then confirm placement. Left stick walks; right stick turns."}`,
+      status: blocked ? "Updating your room…" : notice ?? shopping.job?.stage ?? "Point at clear floor to choose where you shop.",
     });
   }, [status, results, selected, pending, notice, blocked, shopping.job, shopping.session, moving, basket.length, basketTotal, xrActions]);
 

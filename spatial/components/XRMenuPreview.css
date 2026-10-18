@@ -1,0 +1,12 @@
+.xr-preview { min-height: 100dvh; background: #e5e6de; color: #202a24; padding: 30px max(18px, 5vw); font: 15px system-ui, sans-serif; }
+.xr-preview header { max-width: 1000px; margin: 0 auto 16px; display: flex; justify-content: space-between; align-items: center; gap: 20px; }
+.xr-preview header p { color: #59645c; font-size: 13px; margin-bottom: 5px; }
+.xr-preview h1 { margin: 0; font-size: 25px; font-weight: 600; }
+.xr-preview a { color: inherit; }
+.xr-preview__note, .xr-preview__tools { max-width: 1000px; margin: 12px auto; }
+.xr-preview__note { color: #59645c; }
+.xr-preview__tools { display: flex; flex-wrap: wrap; gap: 8px; }
+.xr-preview__tools button { border: 1px solid #c8cebf; border-radius: 99px; background: #f6f3eb; color: inherit; padding: 9px 16px; font: inherit; text-transform: capitalize; cursor: pointer; }
+.xr-preview__tools button[aria-pressed="true"] { background: #304b3d; color: #fffef9; border-color: #304b3d; }
+.xr-preview__canvas { max-width: 1000px; margin: 20px auto; filter: drop-shadow(0 18px 22px #202a2422); }
+.xr-preview__canvas canvas { display: block; width: 100%; height: auto; border-radius: 30px; }

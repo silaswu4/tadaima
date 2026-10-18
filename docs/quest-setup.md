@@ -36,17 +36,27 @@ Keep the development server and USB connection active. The physical boundary rem
 | Right thumbstick left/right | Turn in discrete 30-degree steps; release to turn again |
 | Left controller grip | Bring the shopping panel in front of the wearer |
 | Right controller grip | Hide/show the shopping panel; showing it also repositions it |
-| Trigger on a product card | Choose a product preview supplied by the application |
+| Trigger on a product row in Shop | Choose a product preview supplied by the application |
 | Trigger on a valid floor spot | Choose a shopping placement spot; position the local preview when a product is selected. This does not teleport. |
 | Trigger on Confirm placement | Confirm that preview through the application's callback; this does not purchase furniture |
 | Find chairs / rugs / lamps | Search the saved retailer catalog at your current floor spot, without leaving VR |
-| Rotate 45° / Put away | Edit the selected unlocked piece through the same canonical server queue |
+| Rotate 45° / Put in storage | Edit the selected unlocked piece through the same canonical server queue |
 | Cancel preview | Discard the candidate before it joins the basket |
 | Exit VR | Return to the website |
 
 Controller rays respect the nearest supplied wall or furnishing. Trigger selection and locomotion are separate. Walking is the default; the headset menu retains teleport for comfort. Walking uses the existing swept desktop navigation solver at 1.3 meters/second, with thumbstick dead-zone/diagonal normalization, a capped frame delta, wall/furniture sliding and unchanged tracked eye height. Browser/system UI pauses input; center the sticks before locomotion resumes. Teleport destinations use the same room clearance checks. Moving your physical head is still physical movement, so the app's navigation checks do not replace the Quest boundary.
 
-The headset panel is actual Three.js scene geometry. Ordinary DOM shopping controls are not visible inside an immersive VR session. The panel shows up to three current offers with supplied prices/dimension summaries, including the selected offer if it was chosen elsewhere in the result list, plus at most six application actions and movement/exit controls. Saved-catalog presets search chairs/rugs up to $300 and lamps up to $150 using the same canonical room and fit checker; they are explicitly labeled catalog searches. Basket count and total appear in the header. Rotate/store controls require an unlocked selected item; the headset never implicitly unlocks kept furniture. Display text is bounded, unchanged states reuse their existing panel textures, disabled panels block click-through, and confirmation is unavailable without a matching selected offer. The panel does not invent retailer results or call checkout. Search/loading/error status and selected offers come from the surrounding application.
+The headset menu is actual Three.js scene geometry; ordinary DOM controls are not visible inside immersive VR. It uses one 1440 × 1000 canvas texture on a level 1.04-meter panel, positioned 1.25 meters ahead and slightly below eye center when opened or recentered. Three tabs keep the tasks separate:
+
+- **Shop:** Chairs/Rugs/Lamps saved-catalog presets and up to three current offers with supplied prices/details. The selected preview stays in the visible result subset.
+- **Room:** Selected furniture, Rotate 45° and Put in storage. Locked furniture stays protected and explains how to unlock it on the website.
+- **Controls:** Walking/teleport choice, controller hints and Exit VR.
+
+Basket count/total stay in the header. A pending preview keeps Cancel preview and Confirm placement in the footer on every tab. Search/loading/error status comes from the surrounding application. Rays show a cursor and button hover feedback; the complete menu rectangle blocks clicks through to the room, including disabled buttons and whitespace. The menu is drawn above nearby room geometry so furniture cannot clip its controls. Close or right grip hides it; left grip brings it back in front of you.
+
+Saved-catalog presets search chairs/rugs up to $300 and lamps up to $150 using the same canonical room and fit checker. The menu does not invent retailer results or execute checkout. Confirmation requires a matching visible selected offer and application permission. It reuses its texture, redraws only when visible state/hover changes, and releases resources on disposal. This keeps the existing Quest room lighting budget unchanged.
+
+For visual QA without a headset, open `/dev/vr-ui`. It displays the exact menu canvas with explicitly synthetic products and start/results/placement/locked scenarios. Its controls never call APIs or mutate a real room. This verifies layout and hit regions; headset readability, comfort and frame rate still need physical testing.
 
 ## Get the scanned room onto Quest
 
