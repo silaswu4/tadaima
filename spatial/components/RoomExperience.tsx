@@ -984,7 +984,6 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
       {/* ---------- selected piece: a small toolbar over it ---------- */}
       {selected && ready && !pending && !moving ? (
         <div ref={cardRef} className="room-x__toolbar" role="toolbar" aria-label={`Edit ${selected.label}`}>
-          <span className="room-x__toolbar-name">{selected.label.split(",")[0]}</span>
           <button type="button" className="room-x__tool" onClick={() => safely(() => { unlockFor(selected); beginMove({ ...selected, locked: false }); })} aria-label="Pick up and move" title="Move (G)">
             {Icon.move}<span className="room-x__key">G</span>
           </button>
@@ -994,6 +993,17 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
           <button type="button" className="room-x__tool" onClick={() => safely(() => { unlockFor(selected); putAway(selected); })} aria-label="Put away in inventory" title="Put away (Del)">
             {Icon.close}<span className="room-x__key">Del</span>
           </button>
+        </div>
+      ) : null}
+
+      {/* ---------- the selected piece's details, above the hotbar ---------- */}
+      {selected && ready && !pending && !moving ? (
+        <div className="room-x__carry room-x__info" role="status" key={selected.id}>
+          <strong>{selected.label.split(",")[0]}</strong>
+          <span>
+            {formatDimensions(selected.dimensions)}
+            {selected.priceMinor != null && selected.currency && selected.origin !== "existing_owned" ? ` · ${formatMoney(selected.priceMinor, selected.currency)}` : ""}
+          </span>
         </div>
       ) : null}
 
