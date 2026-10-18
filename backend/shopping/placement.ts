@@ -1,4 +1,4 @@
-import type { FloorSpot, FurnitureCategory, Placement, PointXZ, RoomGeometry, RoomPlan, Vector3Meters } from "@/backend/contracts";
+import type { FloorSpot, FurnitureCategory, PlacedItem, Placement, PointXZ, RoomGeometry, RoomPlan, Vector3Meters } from "@/backend/contracts";
 import { collides, footprint, inside, NO_FOOTPRINT } from "@/backend/plan/rules";
 
 /**
@@ -112,7 +112,7 @@ export function facingAt(plan: RoomPlan, spot: Spot) {
 
 export function placeAt(
   plan: RoomPlan,
-  piece: { category: FurnitureCategory; dimensions: Vector3Meters | null },
+  piece: { category: FurnitureCategory; dimensions: Vector3Meters | null; collision?: PlacedItem["collision"] },
   spot: Spot,
   opts: PlaceOptions = {},
 ): FitResult {
@@ -149,7 +149,8 @@ export function placeAt(
     const item = { position: [x, 0, z] as Vector3Meters, rotationY, dimensions: piece.dimensions };
     if (!footprint(item)!.every((p) => inside(p, room.floorPolygon))) return false;
     if (!withObstacles || !solid) return true;
-    const held = { ...item, category: piece.category };
+    // model-derived solid parts travel with the piece, so dragCheck agrees with collides() everywhere
+    const held = { ...item, category: piece.category, collision: piece.collision ?? null };
     return !obstacles.some((o) => collides(held, o, gap));
   };
 

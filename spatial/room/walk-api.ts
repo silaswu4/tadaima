@@ -107,10 +107,21 @@ export type WalkScene = {
   /** Change protection only in the editable draft, including stored furniture. Undoable. */
   setLocked(id: string, locked: boolean): void;
   rotate(id: string, radians: number): void;
+  /** Turn by any angle, eased over a few frames, one undo step. Stops early rather than turn into a wall or neighbour. */
+  rotateBy(id: string, radians: number): void;
+  /**
+   * Start turning a piece continuously (the carried one, or one standing in the room): about 120 degrees a
+   * second with an eased start. `direction` > 0 turns like E/R, < 0 like Q. Hold-to-spin buttons call
+   * endSpin on release; a release within 0.18 s turns exactly 15 degrees instead.
+   */
+  beginSpin(id: string, direction: number): void;
+  /** Let go of the spin started by beginSpin (or a held R/Q/E): it coasts to a stop. */
+  endSpin(): void;
   /**
    * Start moving a piece: it lifts and eases after the view (desktop) or controller (headset) until confirmed
-   * or cancelled. R turns it 90 degrees, Shift+R, Q/E and the scroll wheel 15 degrees. Wall pieces back onto
-   * a nearby wall until turned by hand. A green/amber/red footprint shows where it lands.
+   * or cancelled. Turning is free: hold R or Q/E to spin, tap for 15 degrees, Shift lands on a multiple of 45,
+   * the scroll wheel turns about 5 degrees a notch. Wall pieces back onto a nearby wall until turned by hand.
+   * A green/amber/red footprint in the shape of the piece's solid parts shows where it lands.
    */
   beginMove(id: string): void;
   /** True only when a valid move was committed (it lands at the checked, possibly snapped, pose). A refused drop shakes and stays in hand. */

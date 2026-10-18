@@ -4,7 +4,8 @@ import { blocking, collides, collisionFootprint, footprint, inside, NO_FOOTPRINT
 import { itemFor, purchaseProblems } from "@/backend/shopping/spot";
 
 const equal = isDeepStrictEqual;
-const fixed = (item: PlacedItem) => Object.fromEntries(Object.entries(item).filter(([key]) => !["position", "rotationY", "roomId", "locked", "stored"].includes(key)));
+// collision is derived from the drawn model (its solid parts), never physical identity
+const fixed = (item: PlacedItem) => Object.fromEntries(Object.entries(item).filter(([key]) => !["position", "rotationY", "roomId", "locked", "stored", "collision"].includes(key)));
 export class InvalidRoomSync extends Error {}
 function refuse(message: string): never { throw new InvalidRoomSync(message); }
 
@@ -17,6 +18,17 @@ export function reconcileRoomSnapshot(base: RoomPlan, snapshot: RoomPlan): { pla
   const evidence = new Map(base.evidence.map((entry) => [entry.id, entry]));
   for (const entry of snapshot.evidence) if (!equal(entry, evidence.get(entry.id))) refuse("source observations cannot be changed");
   const next = { ...structuredClone(snapshot), revision: base.revision, products: structuredClone(base.products), evidence: structuredClone(base.evidence) };
+  // Model-derived collision parts can arrive or change for pieces that never moved.
+  // Judge "what did this edit break" against the base seen with the same parts, so
+  // newly known shapes neither block a no-op nor hide a real new clash.
+  const shapes = new Map(next.items.map((item) => [item.id, item.collision]));
+  base = { ...base, items: base.items.map((item) => {
+    if (!shapes.has(item.id)) return item;
+    const rest = { ...item };
+    delete rest.collision;
+    const parts = shapes.get(item.id);
+    return parts === undefined ? rest : { ...rest, collision: structuredClone(parts) };
+  }) };
   const changes: PlanChange[] = [];
   const originals = new Map(base.items.map((item) => [item.id, item]));
   for (const item of next.items) {

@@ -3,8 +3,8 @@
  * Backend aliases/JSON tests use the application's tsx loader separately. */
 import { spawnSync } from "node:child_process";
 const groups = [
-  ["--experimental-strip-types", "--test", ...["test-captured-model.mjs", "test-textured-model.mjs", "test-captured-furniture.mjs", "test-explode.mjs", "test-room-appearance.mjs", "test-navigation.mjs", "test-quest-open.mjs", "test-walk-source.mjs", "test-walk-input.mjs", "test-walk-revision.mjs", "test-walk-material.mjs", "test-walk-authority.mjs", "test-indoor-lighting.mjs", "test-baked-indirect.mjs", "test-window-glass.mjs", "test-shadow-cache.mjs", "test-game-feel.mjs"].map((file) => `spatial/tests/${file}`)],
-  ["--import", "tsx", "--test", "spatial/tests/test-workspace-xr.mjs", "spatial/tests/test-local-shopping.mjs", "reconstruction/local-preview.test.ts", "spatial/tests/test-walk-shopping.mjs", "spatial/tests/test-room-registry.mjs", "spatial/tests/test-room-agent.mjs", "spatial/tests/test-room-xr-actions.mjs", "spatial/tests/test-xr-menu.mjs"],
+  ["--experimental-strip-types", "--test", ...["test-captured-model.mjs", "test-textured-model.mjs", "test-captured-furniture.mjs", "test-explode.mjs", "test-room-appearance.mjs", "test-navigation.mjs", "test-quest-open.mjs", "test-walk-source.mjs", "test-walk-input.mjs", "test-walk-revision.mjs", "test-walk-material.mjs", "test-walk-authority.mjs", "test-indoor-lighting.mjs", "test-baked-indirect.mjs", "test-window-glass.mjs", "test-shadow-cache.mjs", "test-game-feel.mjs", "test-spin.mjs", "test-mesh-collider.mjs"].map((file) => `spatial/tests/${file}`)],
+  ["--import", "tsx", "--test", "spatial/tests/test-workspace-xr.mjs", "spatial/tests/test-local-shopping.mjs", "reconstruction/local-preview.test.ts", "spatial/tests/test-walk-shopping.mjs", "spatial/tests/test-room-registry.mjs", "spatial/tests/test-room-agent.mjs", "spatial/tests/test-room-xr-actions.mjs", "spatial/tests/test-xr-menu.mjs", "spatial/tests/test-real-colliders.mjs"],
 ];
 for (const args of groups) {
   const result = spawnSync(process.execPath, args, { stdio: "inherit" });
