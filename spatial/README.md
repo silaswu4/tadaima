@@ -153,7 +153,7 @@ Run `node --experimental-strip-types --test spatial/tests/test-captured-furnitur
 
 ### Local photo-textured reconstruction models
 
-At `/room`, choose **Open room file** for the reconstruction JSON, then **Open textured model** for its generated `scene.glb`. The model is read in the browser without uploading files. **Remove photo model** restores the procedural preview, and importing another JSON clears the previous model. A mismatched or unsupported GLB reports an error and keeps the procedural room usable.
+At `/room`, choose **Open room file** for the reconstruction JSON, then **Open room model** for its generated `scene.glb`. The model is read in the browser without uploading files. **Remove room model** restores the procedural preview, and importing another JSON clears the previous model. A mismatched or unsupported GLB reports an error and keeps the procedural room usable.
 
 The importer accepts one static GLB up to 64 MiB with embedded PNG/JPEG images, no resource URLs (including data URLs), bounded image dimensions/decoded pixel count, and supported material extensions. Before replacing the preview, it checks the exported project ID and input revision, every floor/wall/opening/furniture semantic ID and role, wall/opening/furniture transforms, actual floor/wall/furniture extents, finite vertices and at least one `photo_projected` entity. This binds the model to the opened project/revision and geometry. The viewer does not check the job ID (the shared plan does not retain it), independently verify a photo’s identity, or establish visibility.
 
@@ -164,3 +164,39 @@ Run the focused resource/import/placement regressions:
 ```bash
 node --experimental-strip-types --test spatial/tests/test-textured-model.mjs spatial/tests/test-captured-furniture.mjs spatial/tests/test-explode.mjs spatial/tests/test-room-appearance.mjs
 ```
+
+
+### Observed surface reference
+
+For scans that include ARKit surface geometry and photos, open the matching reconstruction JSON with **Open room file**, then use **Open captured room** for its detailed `scene.glb`. This is a separate view of the sensor's actual partial surface mesh, including furniture contours; it does not replace the editable layout with falsely detailed furniture assets. **Show editable layout** restores the procedural or photo-projected planning scene, previous selection and explode state. **Show captured room** returns to the reference. Inventory selection and explode are disabled in the reference because scan chunks are not individual furniture objects.
+
+The initial camera uses the first captured camera pose when available; otherwise it is placed inside the room at eye level, avoiding a ceiling blocking the overview. Reset returns to that view. Photo-bearing surfaces render unlit and double-sided because RGB images already include captured lighting. Unobserved regions remain fallback surfaces; holes and rough geometry reflect missing sensor coverage. This is not a watertight replica, an individually segmented furniture model, or measured reflectance.
+
+The browser binds the GLB's scene extras `captureRepresentation: "observed_surface_mesh"`, `projectId`, text `inputRevision`, `jobId`, and `sourceRequestSha256` or `inputSha256` to the exact opened JSON bytes. Only semantic `captured_surface` nodes with unique `mesh-<lowercase UUID>` IDs are accepted; a node may own multiple material primitive meshes. Geometry must be finite and rigidly transformed, with bounded triangle indices and no unidentified meshes. Captured imports allow a 128 MiB GLB with up to 4 MiB JSON and 16 million total accessor elements; the editable photo-only model retains its 64 MiB limit. Both require embedded PNG/JPEG images, at most 64 million decoded image pixels, and no URLs. Captured geometry has total 1.8 million exported vertex / 600k triangle budgets (up to three UV-seam vertices per source triangle). Nothing is uploaded. Opening a new reconstruction JSON clears both local models.
+
+```bash
+node --experimental-strip-types --test spatial/tests/test-captured-model.mjs spatial/tests/test-textured-model.mjs spatial/tests/test-captured-furniture.mjs spatial/tests/test-explode.mjs spatial/tests/test-room-appearance.mjs
+```
+
+
+### Clean photo-informed room models
+
+**Open room model** also accepts a complete structured GLB with scene `captureRepresentation: "photo_informed_parametric"`. This mode retains the full measured shell and stable furniture IDs, poses and metric envelopes while replacing boxes with modeled furniture forms and photo-informed PBR finishes. Furniture remains independently selectable and supports reversible explode/return. The optional raw surface reference remains available through **Open captured room**.
+
+Structured models bind their project, revision, job and `sourceRequestSha256` or `inputSha256` to the exact opened reconstruction JSON. The importer keeps all floor/wall/opening geometry checks and furniture local-envelope checks. Each furniture semantic root must declare `representation: "photo_informed_parametric"`, `appearanceStatus: "photo_inferred"`, and `proxyGeometry: "photo_informed_parts"`; an optional `visualLabel` (up to 200 characters) appears in the inventory. Multiple material primitive meshes may live beneath one semantic item root. Standard PBR materials and the local 64 MiB embedded-resource limits still apply.
+
+This explicitly identified mode does not require a `photo_projected` surface: its forms and finishes are estimates informed by photos, rather than direct pixel projection or exact object reconstruction. Legacy photo-textured models retain their projection requirement. The interface labels the structured model and explains the uncertainty instead of describing it as an exact furniture scan or a bounding box.
+
+### First-person shopping and Quest in the PBR room
+
+`/room` now supports **Walk inside** for the same imported clean room model: WASD/arrows, mouse lock or drag-look, 1.6 m eye height, collision against measured walls and furniture, and touch movement buttons. Escape releases mouse look so product controls remain usable. E selects at the crosshair; clicking a free floor spot in overview also selects a shopping location. Overview and explode remain separate presentation modes.
+
+The local shopping adapter reuses Matthew's real retailer catalog and shared placement/plan rules. Products preview at their listed dimensions using approximate category models; explicit confirmation adds a separate proposed item and local preview basket. Removing a preview purchase preserves all scanned items. Catalog prices/stock are saved observations, shipping/tax remain unknown, and no live research, server plan registration, checkout or purchase is implied. Purchases survive Next.js Activity navigation within the open tab; a full reload resets the local basket.
+
+**Enter VR** uses the same PBR scene in WebXR `local-floor`, with full walls and an inferred ceiling. Trigger selects an item or shopping location, left-stick aim/release teleports to clear floor, right stick snap-turns, and grip repositions the shopping panel. Headset cards support preview and separate placement confirmation. Teleport destinations use room/furniture collision checks; physical tracked movement still follows the headset's guardian. No passthrough alignment is claimed.
+
+See [Quest setup](../docs/quest-setup.md) for USB localhost forwarding and the private development-only capture bridge. Mac file imports do not appear on the Quest automatically. The bridge serves only the configured JSON/GLB with a temporary token, is loopback-only, and refuses production requests. Photos and generated scans remain outside Git/public assets. The token may be retained only in that browser tab's session storage to restore the local scan after reload; Back to demo/manual room import clears it.
+
+Run the complete spatial suite with `npm run test:spatial`. It runs existing Three.js ESM fixtures with native Node type stripping, and backend-alias/JSON/XR tests through `tsx` separately. Running every file through `tsx` creates different ESM/CJS Three.js constructor identities and invalidates `instanceof` fixture checks; do not misdiagnose that harness mismatch as a model failure. Run `npm test`, `npx tsc --noEmit`, `npm run lint` and `npm run build` as well. This repository enables Next.js cache components, so new route handlers must avoid incompatible `runtime`/`dynamic` segment exports; the private handler uses request headers and no-store responses.
+
+Automated XR tests cover synthetic controller rays, tracking loss, teleport cancellation, snap turns, HUD bounds, entry/exit/reentry/disposal races and camera restoration. They do not establish Quest frame rate, controller feel or comfort; those remain physical-device checks.

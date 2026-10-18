@@ -30,3 +30,30 @@ struct CapturedScanPhoto: Sendable {
     let metadata: ScanPhotoMetadata
     let jpeg: Data
 }
+
+/// Export availability depends on retained data, never on whether a mesh was requested.
+enum ScanPhotoExportKind: Equatable {
+    case photos, photosWithoutDetailedMesh, detailed
+
+    static func available(photoCount: Int, hasMesh: Bool, requestedMesh: Bool) -> Self? {
+        guard photoCount > 0 else { return nil }
+        if hasMesh { return .detailed }
+        return requestedMesh ? .photosWithoutDetailedMesh : .photos
+    }
+
+    var label: String {
+        switch self {
+        case .photos: "Share scan + photos"
+        case .photosWithoutDetailedMesh: "Share photos + layout (no detailed mesh)"
+        case .detailed: "Share detailed scan + photos"
+        }
+    }
+}
+
+/// A share retry may clear transient messages, but must retain the capture failure.
+struct ScanReviewMessages {
+    var transient: String?
+    var captureWarning: String?
+
+    mutating func beginExport() { transient = nil }
+}

@@ -22,7 +22,7 @@ enum ScanPhotoArchive {
     }
 
     private struct Manifest: Encodable {
-        let schemaVersion = "roomplan-photo-bundle/1.0"
+        let schemaVersion: String
         let projectId: String
         let jobId: String
         let inputRevision: Int
@@ -30,10 +30,21 @@ enum ScanPhotoArchive {
         let imageConvention = "raw-sensor-top-left"
         let scan: ScanReference
         let photos: [ScanPhotoMetadata]
+        let mesh: MeshReference?
+    }
+
+    private struct MeshReference: Encodable {
+        let path: String
+        let sha256: String
+        let byteLength: Int
+    }
+
+    static func maximumArchiveBytes(hasMesh: Bool) -> Int {
+        (hasMesh ? 144 : 36) * 1024 * 1024
     }
 
     static func encode(scanData: Data, projectId: String, jobId: String,
-                       inputRevision: Int, photos: [CapturedScanPhoto]) throws -> Data {
+                       inputRevision: Int, photos: [CapturedScanPhoto], mesh: ScanMeshPacket? = nil) throws -> Data {
         guard !scanData.isEmpty, scanData.count <= 2 * 1024 * 1024,
               !projectId.isEmpty, projectId.utf8.count <= 200,
               !jobId.isEmpty, jobId.utf8.count <= 200, inputRevision >= 0,
@@ -71,16 +82,32 @@ enum ScanPhotoArchive {
             }
             try validate(metadata: metadata, jpeg: photo.jpeg)
         }
-        let manifest = Manifest(projectId: projectId, jobId: jobId, inputRevision: inputRevision,
-            scan: ScanReference(path: "roomplan.json", sha256: digest(scanData)), photos: photos.map(\.metadata))
+        let meshData: Data?
+        if let mesh {
+            guard mesh.projectId == projectId, mesh.jobId == jobId, mesh.inputRevision == inputRevision else {
+                throw ScanPhotoArchiveError.invalid("mesh and scan identities do not match")
+            }
+            meshData = try ScanMeshWire.encode(mesh)
+        } else { meshData = nil }
+        let manifest = Manifest(schemaVersion: mesh == nil ? "roomplan-photo-bundle/1.0" : "roomplan-photo-bundle/1.1",
+            projectId: projectId, jobId: jobId, inputRevision: inputRevision,
+            scan: ScanReference(path: "roomplan.json", sha256: digest(scanData)), photos: photos.map(\.metadata),
+            mesh: meshData.map { MeshReference(path: "mesh.json", sha256: digest($0), byteLength: $0.count) })
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
         let manifestData = try encoder.encode(manifest)
         guard manifestData.count <= 256 * 1024 else {
             throw ScanPhotoArchiveError.invalid("photo metadata exceeds the size limit")
         }
-        return zip(entries: [("manifest.json", manifestData), ("roomplan.json", scanData)]
-            + photos.map { ($0.metadata.path, $0.jpeg) })
+        var entries = [("manifest.json", manifestData), ("roomplan.json", scanData)]
+        if let meshData { entries.append(("mesh.json", meshData)) }
+        entries += photos.map { ($0.metadata.path, $0.jpeg) }
+        let archive = zip(entries: entries)
+        let maximumBytes = maximumArchiveBytes(hasMesh: meshData != nil)
+        guard archive.count <= maximumBytes else {
+            throw ScanPhotoArchiveError.invalid("archive exceeds \(maximumBytes / (1024 * 1024)) MiB")
+        }
+        return archive
     }
 
     private static func digest(_ data: Data) -> String {

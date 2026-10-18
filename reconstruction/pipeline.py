@@ -34,15 +34,21 @@ def _reject_constant(value):
     raise GeometryError(f"Non-finite JSON number: {value}")
 
 
-def read_request(path: Path):
-    if path.stat().st_size > MAX_INPUT_BYTES:
+def _request_source(path: Path):
+    with path.open("rb") as stream:
+        body = stream.read(MAX_INPUT_BYTES + 1)
+    if len(body) > MAX_INPUT_BYTES:
         raise GeometryError("Request exceeds the 2 MiB limit")
     try:
-        raw = json.loads(path.read_text(encoding="utf-8"), object_pairs_hook=_unique_keys,
+        raw = json.loads(body.decode("utf-8"), object_pairs_hook=_unique_keys,
                          parse_constant=_reject_constant)
     except (json.JSONDecodeError, UnicodeError, RecursionError) as error:
         raise GeometryError(f"Invalid request JSON: {error}") from error
-    return validate_request(raw)
+    return validate_request(raw), body
+
+
+def read_request(path: Path):
+    return _request_source(path)[0]
 
 
 def resolve_blender(explicit: str | None = None) -> str:
@@ -65,13 +71,17 @@ def _sha256(path: Path) -> str:
 
 def generate(request_path: Path, output_path: Path, *, blender: str | None = None,
              timeout: float = 120, preview: bool = False,
-             photo_bundle: Path | None = None) -> dict:
+             photo_bundle: Path | None = None,
+             design_profile: Path | None = None) -> dict:
     """Publish a complete fresh artifact directory, or leave no final directory.
 
     Caller supplies trusted output/configuration paths. Input JSON never chooses
     filenames or executable code. Existing outputs are never overwritten.
     """
-    request = read_request(request_path)
+    request, request_bytes = _request_source(request_path)
+    source_request_sha256 = hashlib.sha256(request_bytes).hexdigest()
+    if design_profile is not None and photo_bundle is None:
+        raise GeometryError("A visual design profile requires its original matching photo bundle")
     if isinstance(timeout, bool) or not math.isfinite(timeout) or timeout <= 0:
         raise PipelineError("Timeout must be a positive finite number of seconds")
     binary = resolve_blender(blender)
@@ -87,7 +97,8 @@ def generate(request_path: Path, output_path: Path, *, blender: str | None = Non
                                          allow_nan=False) + "\n", encoding="utf-8")
         command = [binary, "--background", "--factory-startup", "--disable-autoexec",
                    "--python-exit-code", "1", "--python", str(Path(__file__).with_name("blender_worker.py")),
-                   "--", "--request", str(scene_json), "--output", str(staging)]
+                   "--", "--request", str(scene_json), "--output", str(staging),
+                   "--source-request-sha256", source_request_sha256]
         photo_sources = staging / "photo-sources"
         if photo_bundle is not None:
             # A private sidecar, not a second room schema or an arbitrary image
@@ -95,6 +106,15 @@ def generate(request_path: Path, output_path: Path, *, blender: str | None = Non
             from reconstruction.roomplan.texture_source import prepare_texture_source
             source = prepare_texture_source(Path(photo_bundle), request, photo_sources)
             command.extend(["--photo-source", str(source)])
+            if design_profile is not None:
+                from reconstruction.design_profile import read_design_profile
+                source_metadata = json.loads(source.read_text())
+                design = read_design_profile(design_profile, request, source_metadata["photos"])
+                if {item["itemId"] for item in design["items"]} != {item["id"] for item in request.get("items", [])}:
+                    raise GeometryError("Structured room rendering requires a visual binding for every captured item")
+                profile_path = staging / "visual-design.input.json"
+                profile_path.write_text(json.dumps(design, sort_keys=True, indent=2, allow_nan=False) + "\n")
+                command.extend(["--design-profile", str(profile_path)])
         if preview:
             command.append("--preview")
         log_path = staging / "worker.log"
@@ -109,7 +129,7 @@ def generate(request_path: Path, output_path: Path, *, blender: str | None = Non
             raise PipelineError(f"Blender failed (exit {process.returncode}):\n{tail}")
         metadata = json.loads((staging / "worker-result.json").read_text())
         if photo_bundle is not None:
-            if not isinstance(metadata.get("photoTexturing"), dict):
+            if not isinstance(metadata.get("photoTexturing", metadata.get("surfaceReconstruction", metadata.get("visualDesign"))), dict):
                 raise PipelineError("Photo texturing was requested but the worker produced no coverage report")
             # The original archive stays with its caller. All render textures
             # must already be packed into both portable artifacts.
@@ -134,24 +154,38 @@ def generate(request_path: Path, output_path: Path, *, blender: str | None = Non
             ("Openings are real apertures with metadata markers; door leaves, glass, frames, ceilings"
              + (", and furniture" if not request.get("items") else "") + " are not generated."),
         ]
-        if request.get("items"):
+        if request.get("items") and not metadata.get("surfaceReconstruction"):
             warnings.append("Existing furniture is represented by separate sensor-size proxies, not exact textured meshes or merchant products.")
         if photo_bundle is not None:
-            report = staging / "photo-texturing.json"
+            report_key = ("visualDesign" if metadata.get("visualDesign") else
+                          "surfaceReconstruction" if metadata.get("surfaceReconstruction") else "photoTexturing")
+            report = staging / {"visualDesign": "visual-design.json", "surfaceReconstruction": "surface-reconstruction.json",
+                                "photoTexturing": "photo-texturing.json"}[report_key]
             if not report.is_file() or report.is_symlink():
                 raise PipelineError("Photo texturing coverage report is missing")
-            files["photoTexturing"] = {
-                "assetId": f"{request['projectId']}:{request['jobId']}:photoTexturing",
+            files[report_key] = {
+                "assetId": f"{request['projectId']}:{request['jobId']}:{report_key}",
                 "fileName": report.name, "mediaType": "application/json",
                 "byteLength": report.stat().st_size, "sha256": _sha256(report),
             }
-            warnings.extend(metadata["photoTexturing"].get("warnings", []))
+            warnings.extend(metadata[report_key].get("warnings", []))
+            if report_key == "surfaceReconstruction":
+                warnings = ["The visible model preserves observed LiDAR surfaces; RoomPlan planning proxies remain separate in the Blender file."] + metadata[report_key].get("warnings", [])
+            elif report_key == "visualDesign":
+                warnings = list(metadata[report_key].get("warnings", []))
+                profile_path = staging / "visual-design.input.json"
+                files["visualDesignInput"] = {
+                    "assetId": f"{request['projectId']}:{request['jobId']}:visualDesignInput",
+                    "fileName": profile_path.name, "mediaType": "application/json",
+                    "byteLength": profile_path.stat().st_size, "sha256": _sha256(profile_path),
+                }
         if any(e["dimensionStatus"] == "inferred" for e in request["evidence"]):
             warnings.append("Some evidence is inferred; user confirmation does not turn it into a physical measurement.")
         manifest = {
             "schemaVersion": "1.0", "jobId": request["jobId"], "projectId": request["projectId"],
             "inputRevision": request["inputRevision"], "generatorVersion": GENERATOR_VERSION,
             "inputSha256": files["sceneJson"]["sha256"],
+            "sourceRequestSha256": source_request_sha256,
             "units": "m", "coordinateSystem": "right-handed-y-up",
             "wallAlignment": "centerline", "floorThicknessMeters": 0.08,
             "artifacts": artifacts, "files": files, "warnings": warnings, **metadata,

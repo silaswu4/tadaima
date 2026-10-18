@@ -9,7 +9,9 @@
     "lint": "eslint",
     "test": "tsx --test 'backend/**/*.test.ts'",
     "e2e": "tsx --test --test-concurrency=8 'backend/e2e/*.e2e.ts'",
-    "e2e:voice": "tsx --env-file=.env.local --test --test-concurrency=6 backend/e2e/voice.e2e.ts backend/e2e/voice-shop.e2e.ts"
+    "e2e:voice": "tsx --env-file=.env.local --test --test-concurrency=6 backend/e2e/voice.e2e.ts backend/e2e/voice-shop.e2e.ts",
+    "test:spatial": "node spatial/tests/run-tests.mjs",
+    "quest:open": "node scripts/quest-open.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.135.0",

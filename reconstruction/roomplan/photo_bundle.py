@@ -19,8 +19,10 @@ import zipfile
 import zlib
 
 from reconstruction.capture.bundle import BundleError, _jpeg_dimensions, _read_entry
+from .mesh import MAX_MESH_BYTES, validate_mesh
 
-MAX_ZIP_BYTES = 36 * 1024 * 1024
+MAX_ZIP_BYTES = 144 * 1024 * 1024
+LEGACY_MAX_ZIP_BYTES = 36 * 1024 * 1024
 MAX_MANIFEST_BYTES = 256 * 1024
 MAX_SCAN_BYTES = 2 * 1024 * 1024
 MAX_PHOTO_BYTES = 2 * 1024 * 1024
@@ -64,14 +66,14 @@ def _framing(body):
     if end + 22 + int.from_bytes(body[end + 20:end + 22], "little") != len(body):
         _fail("truncated ZIP or trailing payload")
     disk, directory_disk, disk_count, count, size, offset = struct.unpack("<HHHHII", body[end + 4:end + 20])
-    if disk or directory_disk or disk_count != count or not 3 <= count <= MAX_PHOTOS + 2:
-        _fail("expected one scan, one manifest and 1–32 photos in a single-disk ZIP")
+    if disk or directory_disk or disk_count != count or not 3 <= count <= MAX_PHOTOS + 3:
+        _fail("expected one scan, one manifest, optional mesh and 1–32 photos in a single-disk ZIP")
     if offset + size != end:
         _fail("invalid or unsupported ZIP central directory")
     cursor = offset
     actual = 0
     while cursor < end:
-        if actual >= MAX_PHOTOS + 2 or cursor + 46 > end or body[cursor:cursor + 4] != b"PK\x01\x02":
+        if actual >= MAX_PHOTOS + 3 or cursor + 46 > end or body[cursor:cursor + 4] != b"PK\x01\x02":
             _fail("invalid or oversized ZIP central directory")
         name, extra, comment = struct.unpack("<HHH", body[cursor + 28:cursor + 34])
         cursor += 46 + name + extra + comment
@@ -83,9 +85,17 @@ def _framing(body):
 def _validate_manifest(raw, scan):
     from .importer import _object, _number, _transform
     fields = {"schemaVersion", "projectId", "jobId", "inputRevision", "coordinateSystem", "imageConvention", "scan", "photos"}
+    if isinstance(raw, dict) and raw.get("schemaVersion") == "roomplan-photo-bundle/1.1":
+        fields.add("mesh")
     manifest = _object(raw, fields, "photo manifest")
-    if manifest["schemaVersion"] != "roomplan-photo-bundle/1.0":
+    if manifest["schemaVersion"] not in {"roomplan-photo-bundle/1.0", "roomplan-photo-bundle/1.1"}:
         _fail("unsupported manifest version")
+    if "mesh" in manifest:
+        mesh = _object(manifest["mesh"], {"path", "sha256", "byteLength"}, "photo manifest.mesh")
+        if (mesh["path"] != "mesh.json" or not isinstance(mesh["sha256"], str)
+                or not _HASH.fullmatch(mesh["sha256"]) or type(mesh["byteLength"]) is not int
+                or not 0 < mesh["byteLength"] <= MAX_MESH_BYTES):
+            _fail("invalid mesh path, SHA-256 or byte length")
     if manifest["coordinateSystem"] != "arkit-gravity-y-up-metres" or manifest["imageConvention"] != "raw-sensor-top-left":
         _fail("unsupported camera/image convention")
     for key in ("projectId", "jobId", "inputRevision"):
@@ -145,7 +155,7 @@ def read_photo_bundle(path):
         with Path(path).open("rb") as stream:
             body = stream.read(MAX_ZIP_BYTES + 1)
         if len(body) > MAX_ZIP_BYTES:
-            _fail("ZIP exceeds 36 MiB")
+            _fail("ZIP exceeds 144 MiB")
         _framing(body)
         with zipfile.ZipFile(io.BytesIO(body)) as archive:
             entries = {}
@@ -153,7 +163,7 @@ def read_photo_bundle(path):
             for entry in archive.infolist():
                 name = entry.filename
                 if (name != entry.orig_filename or name in entries or "\\" in name
-                        or (name not in {"manifest.json", "roomplan.json"} and not _PHOTO_PATH.fullmatch(name))):
+                        or (name not in {"manifest.json", "roomplan.json", "mesh.json"} and not _PHOTO_PATH.fullmatch(name))):
                     _fail("unexpected, duplicate or unsafe ZIP path")
                 mode = entry.external_attr >> 16
                 if entry.is_dir() or entry.external_attr & 0x10 or stat.S_IFMT(mode) not in {0, stat.S_IFREG}:
@@ -162,7 +172,8 @@ def read_photo_bundle(path):
                     _fail("encrypted or patched entries are forbidden")
                 if entry.compress_type not in {zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED}:
                     _fail("unsupported ZIP compression")
-                maximum = MAX_MANIFEST_BYTES if name == "manifest.json" else MAX_SCAN_BYTES if name == "roomplan.json" else MAX_PHOTO_BYTES
+                maximum = (MAX_MANIFEST_BYTES if name == "manifest.json" else MAX_SCAN_BYTES
+                           if name == "roomplan.json" else MAX_MESH_BYTES if name == "mesh.json" else MAX_PHOTO_BYTES)
                 if not 0 < entry.file_size <= maximum or not 0 <= entry.compress_size <= MAX_ZIP_BYTES:
                     _fail("entry exceeds declared byte limits")
                 if entry.file_size > 1024 * 1024 and entry.file_size > max(1, entry.compress_size) * 200:
@@ -174,7 +185,7 @@ def read_photo_bundle(path):
                     _fail("local and central ZIP headers disagree")
                 if not entry.flag_bits & 8 and (local[6], local[7], local[8]) != (entry.CRC, entry.compress_size, entry.file_size):
                     _fail("local and central ZIP sizes or CRC disagree")
-                if name not in {"manifest.json", "roomplan.json"}:
+                if _PHOTO_PATH.fullmatch(name):
                     total += entry.file_size
                 entries[name] = entry
             if total > MAX_TOTAL_PHOTO_BYTES:
@@ -186,11 +197,24 @@ def read_photo_bundle(path):
             raw_scan = _json(scan_bytes)
             scan = validate_scan(raw_scan)
             manifest = _validate_manifest(_json(manifest_bytes), scan)
+            if manifest["schemaVersion"] == "roomplan-photo-bundle/1.0" and len(body) > LEGACY_MAX_ZIP_BYTES:
+                _fail("legacy ZIP exceeds 36 MiB")
             if hashlib.sha256(scan_bytes).hexdigest() != manifest["scan"]["sha256"]:
                 _fail("scan SHA-256 mismatch")
-            if set(entries) != {"manifest.json", "roomplan.json"} | {photo["path"] for photo in manifest["photos"]}:
+            declared = {"manifest.json", "roomplan.json"} | {photo["path"] for photo in manifest["photos"]}
+            if "mesh" in manifest:
+                declared.add("mesh.json")
+            if set(entries) != declared:
                 _fail("archive differs from manifest-declared members")
             files = {}
+            mesh = None
+            if "mesh" in manifest:
+                mesh_bytes = _read_entry(archive, entries["mesh.json"], MAX_MESH_BYTES)
+                if (len(mesh_bytes) != manifest["mesh"]["byteLength"]
+                        or hashlib.sha256(mesh_bytes).hexdigest() != manifest["mesh"]["sha256"]):
+                    _fail("mesh length or SHA-256 mismatch")
+                mesh = validate_mesh(_json(mesh_bytes), scan)
+                files["mesh.json"] = mesh_bytes
             for photo in manifest["photos"]:
                 data = _read_entry(archive, entries[photo["path"]], MAX_PHOTO_BYTES)
                 if len(data) != photo["byteLength"] or hashlib.sha256(data).hexdigest() != photo["sha256"]:
@@ -202,6 +226,7 @@ def read_photo_bundle(path):
                 files[photo["path"]] = data
             return {"scan": raw_scan, "scanBytes": scan_bytes, "manifest": manifest,
                     "manifestBytes": manifest_bytes, "files": files, "archiveBytes": body,
+                    **({"mesh": mesh} if mesh is not None else {}),
                     "sha256": hashlib.sha256(body).hexdigest()}
     except RoomPlanError:
         raise

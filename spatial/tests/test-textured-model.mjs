@@ -117,3 +117,95 @@ test("image preflight bounds dimensions and total decoded pixels before image de
   assert.throws(() => validateLocalTexturedGlb(glb(j => { j.images = Array.from({ length: 17 }, () => ({ bufferView: 0, mimeType: "image/png" })); }, pngHeader(2048, 2048))), /texture memory limit/);
   assert.throws(() => validateLocalTexturedGlb(glb(j => { j.images = [{ bufferView: 0, mimeType: "image/webp" }]; }, pngHeader(512, 512))), /PNG\/JPEG/);
 });
+
+function structuredFixture() {
+  const value = fixture();
+  const { scene, entities, plan } = value;
+  const binding = { jobId: "scan-structured", inputSha256: "c".repeat(64) };
+  scene.userData = { ...scene.userData, captureRepresentation: "photo_informed_parametric", jobId: binding.jobId, sourceRequestSha256: binding.inputSha256 };
+  for (const node of entities.values()) delete node.userData.appearanceStatus;
+  const old = entities.get("chair"), root = new THREE.Group(), [width, height, depth] = plan.items[0].dimensions;
+  root.position.copy(old.position); root.rotation.copy(old.rotation);
+  root.userData = { entityId: "chair", role: "existing_furniture", representation: "photo_informed_parametric", appearanceStatus: "photo_inferred", proxyGeometry: "photo_informed_parts", visualLabel: "Cream upholstered dining chair" };
+  old.removeFromParent(); scene.add(root); entities.set("chair", root);
+  function part(geometry, position, color) { const mesh = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({ color })); mesh.position.set(...position); root.add(mesh); }
+  part(new THREE.BoxGeometry(width, .15, depth), [0, .62, 0], "#d6c7aa");
+  part(new THREE.BoxGeometry(width, height - .7, .12), [0, (height + .7) / 2, -depth / 2 + .06], "#d6c7aa");
+  for (const x of [-width / 2 + .045, width / 2 - .045]) for (const z of [-depth / 2 + .045, depth / 2 - .045]) {
+    part(new THREE.CylinderGeometry(.045, .045, .62, 8), [x, .31, z], "#644c39");
+  }
+  return { ...value, binding, chair: root };
+}
+
+test("photo-informed multi-part furniture loads without projected photos, preserves measured envelope and exact explode return", () => {
+  const { scene, plan, binding, chair } = structuredFixture(), source = structuredClone(plan);
+  const bound = bindTexturedRoom(scene, plan, binding), root = bound.furniture.get("chair");
+  assert.equal(bound.projectedEntities, 0); assert.equal(bound.representation, "photo_informed_parametric");
+  assert.equal(root.userData.representation, "photo_informed_parametric");
+  assert.equal(root.userData.visualLabel, "Cream upholstered dining chair");
+  assert.equal(chair.children.length, 6);
+  // Detailed geometry need not contain the eight corners of its sensor envelope.
+  const [w, h, d] = plan.items[0].dimensions;
+  const envelopeCorner = new THREE.Vector3(w / 2, h, d / 2);
+  assert.ok(!chair.children.some((node) => {
+    const positions = node.geometry.getAttribute("position");
+    return Array.from({ length: positions.count }, (_, index) => new THREE.Vector3().fromBufferAttribute(positions, index).add(node.position))
+      .some((position) => position.distanceTo(envelopeCorner) < 1e-5);
+  }));
+  assert.ok(chair.children.some((node) => node.geometry.type === "CylinderGeometry"));
+  assert.equal(new Set(chair.children.map((node) => node.material.color.getHex())).size, 2);
+  const before = root.matrix.clone(), positions = chair.children.map((node) => node.position.toArray());
+  const controller = makeExplodeController([{ id: "chair", object: root }], new THREE.Box3(new THREE.Vector3(0, -.08, 0), new THREE.Vector3(4.2, 2.7, 3.5)), { reducedMotion: true });
+  controller.setExploded(true, 0); controller.setExploded(false, 1); root.updateMatrix();
+  assert.ok(root.matrix.equals(before)); assert.deepEqual(chair.children.map((node) => node.position.toArray()), positions);
+  assert.deepEqual(plan, source); controller.dispose();
+});
+
+for (const [name, change] of Object.entries({
+  "missing input binding": value => { value.binding = undefined; },
+  "different job": ({ scene }) => { scene.userData.jobId = "another-scan"; },
+  "different source bytes": ({ scene }) => { scene.userData.sourceRequestSha256 = "0".repeat(64); },
+  "wrong furniture representation": ({ chair }) => { chair.userData.representation = "sensor_bounding_box"; },
+  "wrong appearance status": ({ chair }) => { chair.userData.appearanceStatus = "photo_projected"; },
+  "wrong proxy kind": ({ chair }) => { chair.userData.proxyGeometry = "sensor_bounding_box"; },
+  "oversized label": ({ chair }) => { chair.userData.visualLabel = "x".repeat(201); },
+  "different measured envelope": ({ chair }) => { chair.children[0].geometry.scale(1.1, 1, 1); },
+  "different canonical pose": ({ chair }) => { chair.position.x += .02; },
+})) test(`photo-informed binder rejects ${name}`, () => {
+  const value = structuredFixture(); change(value);
+  assert.throws(() => bindTexturedRoom(value.scene, value.plan, value.binding), /Photo model:/);
+});
+
+test("legacy photo model still requires actual photo_projected metadata", () => {
+  const { scene, plan, binding } = structuredFixture(); delete scene.userData.captureRepresentation;
+  assert.throws(() => bindTexturedRoom(scene, plan, binding), /photo-textured reconstruction/);
+});
+
+test("photo-informed model also accepts the exact normalized scene JSON hash", () => {
+  const { scene, plan, binding } = structuredFixture();
+  scene.userData.inputSha256 = binding.inputSha256; delete scene.userData.sourceRequestSha256;
+  assert.equal(bindTexturedRoom(scene, plan, binding).representation, "photo_informed_parametric");
+});
+
+
+test("strictly bound structured opening frames and glass remain inside the measured aperture", () => {
+  const { scene, plan, binding, entities } = structuredFixture();
+  const opening = entities.get(plan.geometry.openings[0].id);
+  const glass = new THREE.Mesh(new THREE.BoxGeometry(1.8, 1.8, .05), new THREE.MeshStandardMaterial({ transparent: true, opacity: .22 }));
+  opening.add(glass);
+  const bound = bindTexturedRoom(scene, plan, binding);
+  assert.ok(bound.shell.getObjectById(glass.id));
+  assert.equal(glass.parent, opening);
+});
+
+test("structured trim outside its opening envelope is rejected", () => {
+  const { scene, plan, binding, entities } = structuredFixture();
+  entities.get(plan.geometry.openings[0].id).add(new THREE.Mesh(new THREE.BoxGeometry(2.04, 1, 1), new THREE.MeshStandardMaterial()));
+  assert.throws(() => bindTexturedRoom(scene, plan, binding), /opening trim exceeds/);
+});
+
+test("legacy photo projection still rejects geometry owned by an opening", () => {
+  const { scene, plan, entities } = fixture();
+  entities.get(plan.geometry.openings[0].id).add(new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial()));
+  assert.throws(() => bindTexturedRoom(scene, plan), /unidentified geometry/);
+});
