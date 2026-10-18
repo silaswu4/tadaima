@@ -1,8 +1,8 @@
 "use client";
 
 import Image from "next/image";
-import Link from "next/link";
 import mark from "../assets/tadaima-mark.png";
+import { WipeLink } from "./PageWipe";
 import { IsoRoomGallery, type GalleryRoom } from "./IsoRoomGallery";
 import "./RoomsPage.css";
 
@@ -13,21 +13,21 @@ export function RoomsPage({ rooms, scanHref = "/capture" }: { rooms: RoomsPageRo
   return (
     <main className="rooms-page">
       <header className="rooms-page__header">
-        <Link href="/" className="rooms-page__wordmark" aria-label="tadaima home">
+        <WipeLink href="/" className="rooms-page__wordmark" aria-label="tadaima home">
           <Image src={mark} alt="" className="rooms-page__mark" priority />
           tadaima
-        </Link>
+        </WipeLink>
         <p className="rooms-page__heading">Your rooms</p>
         <nav className="rooms-page__nav" aria-label="Rooms">
-          <Link href="/#how" className="rooms-page__link">
+          <WipeLink href="/#how" className="rooms-page__link">
             How it works
-          </Link>
-          <Link href={scanHref} className="rooms-page__link">
+          </WipeLink>
+          <WipeLink href={scanHref} className="rooms-page__link">
             Scan
-          </Link>
-          <Link href="/dev" className="rooms-page__link">
+          </WipeLink>
+          <WipeLink href="/dev" className="rooms-page__link">
             Basket
-          </Link>
+          </WipeLink>
         </nav>
       </header>
 
@@ -41,7 +41,7 @@ export function RoomsPage({ rooms, scanHref = "/capture" }: { rooms: RoomsPageRo
       </div>
 
       <footer className="rooms-page__footer">
-        <Link href={scanHref} className="rooms-page__scan">
+        <WipeLink href={scanHref} className="rooms-page__scan">
           <span className="rooms-page__scan-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24">
               <path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3" />
@@ -49,7 +49,7 @@ export function RoomsPage({ rooms, scanHref = "/capture" }: { rooms: RoomsPageRo
             </svg>
           </span>
           <span>Scan a room</span>
-        </Link>
+        </WipeLink>
         <p className="rooms-page__note">Or step into one of ours. Every piece is at its real size.</p>
       </footer>
     </main>

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { RoomPlan } from "../../backend/contracts";
 import type { BakedRoom, IsoGallery } from "../room/iso-gallery";
+import { WipeLink } from "./PageWipe";
 
 export type GalleryRoom = { id: string; label: string; plan?: RoomPlan; baked?: BakedRoom };
 import "./IsoRoomGallery.css";
@@ -173,11 +174,11 @@ export function IsoRoomGallery({ rooms, initial = 0, hrefFor = () => "/room", cl
         <h2 className="iso-gallery__title" aria-live="polite">
           <Swap text={room.label} dir={dir} axis="x" />
         </h2>
-        <a className="iso-gallery__enter" href={hrefFor(room)}>
+        <WipeLink className="iso-gallery__enter" href={hrefFor(room)}>
           <span className="iso-gallery__enter-text" data-text="Step inside">
             Step inside
           </span>
-        </a>
+        </WipeLink>
       </div>
 
       {failed ? <p className="iso-gallery__error">Your rooms could not load. Refresh to try again.</p> : null}

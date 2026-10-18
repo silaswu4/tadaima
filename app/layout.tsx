@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Inter, Inter_Tight } from "next/font/google";
 import localFont from "next/font/local";
 import "@/frontend/styles/globals.css";
 
@@ -9,6 +10,10 @@ const mono = localFont({
   weight: "100 800",
 });
 
+// the product faces: Inter Tight for display, Inter for everything else
+const display = Inter_Tight({ subsets: ["latin"], variable: "--font-display" });
+const body = Inter({ subsets: ["latin"], variable: "--font-body" });
+
 export const metadata: Metadata = {
   title: "Michael",
   description: "Scan your room, swap anything, buy what fits.",
@@ -16,7 +21,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={`${mono.variable} antialiased`}>
+    <html lang="en" className={`${mono.variable} ${display.variable} ${body.variable} antialiased`}>
       <body>{children}</body>
     </html>
   );

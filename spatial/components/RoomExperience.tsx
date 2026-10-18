@@ -1,12 +1,12 @@
 "use client";
 
 import Image from "next/image";
-import Link from "next/link";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { FurnitureCategory, ProductCandidate, RoomPlan, Vector3Meters } from "../../backend/contracts";
 import catalogJson from "../../backend/fixtures/real-catalog.json";
 import type { WalkCallbacks, WalkCore, WalkEnvironment, WalkItem, WalkMode, WalkScene } from "../room/walk-api";
 import mark from "../assets/tadaima-mark.png";
+import { WipeLink } from "./PageWipe";
 import "./RoomExperience.css";
 
 type Props = { room: { id: string; label: string; plan: RoomPlan; environment?: WalkEnvironment }; backHref?: string };
@@ -464,13 +464,13 @@ export function RoomExperience({ room, backHref = "/rooms" }: Props) {
       {/* ---------- top bar ---------- */}
       <header className="room-x__bar">
         <div className="room-x__start">
-          <Link className="room-x__pill room-x__home" href="/" aria-label="tadaima home">
+          <WipeLink className="room-x__pill room-x__home" href="/" aria-label="tadaima home">
             <Image src={mark} alt="" className="room-x__mark" priority />
-          </Link>
-          <a className="room-x__pill room-x__back" href={backHref} aria-label="Back to rooms">
+          </WipeLink>
+          <WipeLink className="room-x__pill room-x__back" href={backHref} aria-label="Back to rooms">
             {Icon.back}
             <span className="room-x__back-text">Rooms</span>
-          </a>
+          </WipeLink>
         </div>
 
         <h1 className="room-x__title">{room.label}</h1>

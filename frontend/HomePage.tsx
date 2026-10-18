@@ -1,30 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { Inter, Inter_Tight, Klee_One, Reenie_Beanie } from "next/font/google";
 import { toDataURL } from "qrcode";
-import Image from "next/image";
+import gsap from "gsap";
+import { useCallback, useLayoutEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type FormEvent } from "react";
 import mark from "@/spatial/assets/tadaima-mark.png";
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type FormEvent } from "react";
+import { WipeLink, useWipe, wipeInProgress } from "@/spatial/components/PageWipe";
 import { DappledLight } from "./DappledLight";
 import "./styles/hero.css";
-
-const hand = Reenie_Beanie({ weight: "400", subsets: ["latin"], variable: "--font-hand" });
-const kana = Klee_One({ weight: "600", preload: false, variable: "--font-kana" });
-const display = Inter_Tight({ subsets: ["latin"], variable: "--font-display" });
-const body = Inter({ subsets: ["latin"], variable: "--font-body" });
-
-// The headline types itself three ways: handwriting, kana, then the modern face.
-const PHASES = [
-  { text: "tadaima", cls: "hand", lang: "en", hold: 1600 },
-  { text: "ただいま", cls: "kana", lang: "ja", hold: 1600 },
-  { text: "tadaima", cls: "modern", lang: "en", hold: 4000 },
-] as const;
-const TYPE_MS = 120;
-const TYPE_JITTER = 90;
-const ERASE_MS = 70;
-const SWAP_PAUSE = 350;
 
 const subscribeToMotion = (notify: () => void) => {
   const media = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -33,96 +16,111 @@ const subscribeToMotion = (notify: () => void) => {
 };
 const readMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-const NIGHT = { backgroundColor: "#2B1A10", shadowColor: "#5A3A1A", shadowStrength: 1 };
-const DAY = { backgroundColor: "#EFE4D2", shadowColor: "#A98B66", shadowStrength: 0.75 };
+// The loader, as one timeline: the word sets in wide, swaps to the display face,
+// counts to 100 with a small overshoot, then the panel lifts off the hero.
+function Loader({ onLift, onDone, reduced }: { onLift: () => void; onDone: () => void; reduced: boolean }) {
+  const el = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    const root = el.current;
+    if (!root) return;
+    const q = gsap.utils.selector(root);
+    const word = q(".hero-loader__word")[0] as HTMLElement;
+    const pct = q(".hero-loader__pct")[0] as HTMLElement;
+    const frame = q(".hero-loader__frame");
+    const ctx = gsap.context(() => {
+      if (reduced) {
+        word.classList.add("is-display");
+        pct.textContent = "100%";
+        gsap.set(q(".hero-loader__meta"), { opacity: 1 });
+        gsap.to(root, { autoAlpha: 0, duration: 0.3, delay: 0.25, onStart: onLift, onComplete: onDone });
+        return;
+      }
+      const count = { v: 0 };
+      gsap
+        .timeline({ onComplete: onDone })
+        .fromTo(frame, { width: 180, height: 72 }, { width: 222, height: 92, duration: 0.55, ease: "power3.out" })
+        .fromTo(word, { yPercent: 35, autoAlpha: 0 }, { yPercent: 0, autoAlpha: 1, duration: 0.5, ease: "power3.out" }, 0)
+        .to(q(".hero-loader__meta"), { opacity: 1, duration: 0.2 }, 0.35)
+        .add(() => word.classList.add("is-display"), 0.55)
+        .to(frame, { width: 236, height: 122, duration: 0.5, ease: "power3.out" }, 0.55)
+        .to(count, { v: 100, duration: 0.7, ease: "back.out(1.7)", onUpdate: () => (pct.textContent = `${Math.max(0, Math.round(count.v))}%`) }, 0.6)
+        .to(frame, { height: 152, duration: 0.4, ease: "power3.out" }, 1.3)
+        .add(onLift, 1.55)
+        .to(root, { yPercent: -100, duration: 0.75, ease: "power3.inOut" }, 1.55)
+        .to(q(".hero-loader__stack"), { yPercent: -80, duration: 0.75, ease: "power3.inOut" }, 1.55);
+    }, root);
+    return () => ctx.revert();
+  }, [onLift, onDone, reduced]);
+
+  return (
+    <div className="hero-loader" ref={el} aria-hidden="true">
+      <div className="hero-loader__frame">
+        <span className="hero-loader__corner tl" />
+        <span className="hero-loader__corner tr" />
+        <span className="hero-loader__corner bl" />
+        <span className="hero-loader__corner br" />
+        <div className="hero-loader__stack">
+          <p className="hero-loader__word">tadaima</p>
+          <p className="hero-loader__meta">
+            <span>Loading</span>
+            <span className="hero-loader__pct">0%</span>
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+type Row = { key: "scan" | "type" | "demo"; label: string; note: string };
+const ROWS: Row[] = [
+  { key: "scan", label: "Scan room", note: "Pro phone" },
+  { key: "type", label: "Type address", note: "Anywhere" },
+  { key: "demo", label: "Explore demo rooms", note: "Walk in" },
+];
 
 export default function Home() {
-  const router = useRouter();
-  const [day, setDay] = useState(false);
-  const [phase, setPhase] = useState(0);
-  const [typed, setTyped] = useState("tadaima");
-  const [cordPulling, setCordPulling] = useState(false);
-  const [flash, setFlash] = useState<{ opacity: number; ms: number }>({ opacity: 0, ms: 0 });
+  const wipe = useWipe();
+  const reduced = useSyncExternalStore(subscribeToMotion, readMotion, () => false);
+  const root = useRef<HTMLElement>(null);
+  // arriving by a page wipe means the wipe already covered the screen, so skip the loader
+  const [revealed, setRevealed] = useState(() => typeof window !== "undefined" && wipeInProgress());
+  const [loaderGone, setLoaderGone] = useState(revealed);
   const [open, setOpen] = useState<"scan" | "type" | null>(null);
   const [qr, setQr] = useState<string | null>(null);
   const [captureUrl, setCaptureUrl] = useState("/capture");
   const [address, setAddress] = useState("");
-  const busy = useRef(false);
   const addressRef = useRef<HTMLInputElement>(null);
-  const reduced = useSyncExternalStore(subscribeToMotion, readMotion, () => false);
+  const reveal = useCallback(() => setRevealed(true), []);
+  const finishLoading = useCallback(() => setLoaderGone(true), []);
 
-  // typing loop. with reduced motion the headline just shows the final face.
-  useEffect(() => {
+  // The hero sets in as the loader lifts: letters rise out of the floor, then the rows and nav.
+  useLayoutEffect(() => {
+    if (!revealed || !root.current) return;
     if (reduced) return;
-    let timer = 0;
-    let alive = true;
-    const wait = (ms: number, next: () => void) => {
-      timer = window.setTimeout(() => {
-        if (alive) next();
-      }, ms);
-    };
-    const run = (i: number) => {
-      const p = PHASES[i];
-      const chars = Array.from(p.text);
-      setPhase(i);
-      const type = (n: number) => {
-        setTyped(chars.slice(0, n).join(""));
-        if (n < chars.length) wait(TYPE_MS + Math.random() * TYPE_JITTER, () => type(n + 1));
-        else wait(p.hold, () => erase(chars.length));
-      };
-      const erase = (n: number) => {
-        setTyped(chars.slice(0, n).join(""));
-        if (n > 0) wait(ERASE_MS, () => erase(n - 1));
-        else wait(SWAP_PAUSE, () => run((i + 1) % PHASES.length));
-      };
-      type(0);
-    };
-    const start = () => run(0);
-    if (document.fonts?.ready) document.fonts.ready.then(() => alive && start());
-    else wait(0, start);
-    return () => {
-      alive = false;
-      window.clearTimeout(timer);
-    };
-  }, [reduced]);
-
-  // "enter your home": pull the cord, glow, switch the room to day
-  const enter = useCallback(() => {
-    if (busy.current) return;
-    busy.current = true;
-    setCordPulling(false);
-    requestAnimationFrame(() => setCordPulling(true));
-    window.setTimeout(() => {
-      setFlash({ opacity: 0.72, ms: 450 });
-      window.setTimeout(() => {
-        setDay(true);
-        window.setTimeout(() => setFlash({ opacity: 0, ms: 1300 }), 140);
-      }, 460);
-    }, 190);
-  }, []);
-
-  // the mark on the choices screen turns the light back off, back to the hero
-  const backToHero = useCallback(() => {
-    setOpen(null);
-    setDay(false);
-    busy.current = false;
-  }, []);
+    const ctx = gsap.context(() => {
+      gsap.fromTo(".hero-word__char", { yPercent: 105 }, { yPercent: 0, duration: 1.15, ease: "power4.out", stagger: 0.05, delay: 0.1 });
+      gsap.fromTo(".hero-row", { y: 10, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: 0.7, ease: "power3.out", stagger: 0.08, delay: 0.45 });
+      gsap.fromTo([".hero-mark", ".hero-nav__link"], { autoAlpha: 0, y: -6 }, { autoAlpha: 1, y: 0, duration: 0.6, ease: "power3.out", stagger: 0.05, delay: 0.35 });
+    }, root);
+    return () => ctx.revert();
+  }, [revealed, reduced]);
 
   const showScan = useCallback(() => {
-    setOpen("scan");
+    // on a phone the camera is right here, so skip the code
+    if (window.matchMedia("(pointer: coarse)").matches) {
+      wipe("/capture");
+      return;
+    }
+    setOpen((o) => (o === "scan" ? null : "scan"));
     const url = `${window.location.origin}/capture`;
     setCaptureUrl(url);
     if (!qr) {
-      toDataURL(url, {
-        width: 296,
-        margin: 1,
-        color: { dark: "#2B1A10", light: "#FBF5EA" },
-        errorCorrectionLevel: "M",
-      })
+      toDataURL(url, { width: 296, margin: 1, color: { dark: "#2B1A10", light: "#F6EBD9" }, errorCorrectionLevel: "M" })
         .then(setQr)
         .catch(() => setQr(null));
     }
-  }, [qr]);
+  }, [qr, wipe]);
 
   const showType = useCallback(() => {
     setOpen("type");
@@ -133,15 +131,13 @@ export default function Home() {
     e.preventDefault();
     const v = address.trim();
     if (!v) return;
-    router.push(`/room?address=${encodeURIComponent(v)}`);
+    wipe(`/room?address=${encodeURIComponent(v)}`);
   };
 
-  const room = day ? DAY : NIGHT;
-  const current = reduced ? PHASES[PHASES.length - 1] : PHASES[phase];
-  const shown = reduced ? current.text : typed;
+  const markStyle = { WebkitMaskImage: `url(${mark.src})`, maskImage: `url(${mark.src})` } as CSSProperties;
 
   return (
-    <main className={`tadaima-hero ${day ? "is-day" : ""} ${hand.variable} ${kana.variable} ${display.variable} ${body.variable}`}>
+    <main ref={root} className={`tadaima-hero ${revealed ? "is-revealed" : ""}`}>
       <DappledLight
         plant="olive"
         placement="top-right"
@@ -149,9 +145,9 @@ export default function Home() {
         windowAngle={28}
         windowSize={0.52}
         lightColor="#F0B64C"
-        shadowColor={room.shadowColor}
-        backgroundColor={room.backgroundColor}
-        shadowStrength={room.shadowStrength}
+        shadowColor="#5A3A1A"
+        backgroundColor="#2B1A10"
+        shadowStrength={1}
         intensity={0.9}
         bloom={0.6}
         wind={0.6}
@@ -159,88 +155,31 @@ export default function Home() {
         grain={0.25}
         className="h-full"
       >
-        <div
-          className={`hero-cord ${cordPulling ? "pulling" : ""}`}
-          aria-hidden="true"
-          onAnimationEnd={(e) => {
-            if (e.animationName === "tadaima-pull") setCordPulling(false);
-          }}
-        >
-          <span className="line" />
-          <span className="knot" />
-          <span className="pull" />
-        </div>
+        <header className="hero-top">
+          <Link href="/" className="hero-mark" aria-label="tadaima home">
+            <span className="hero-mark__img" style={markStyle} />
+          </Link>
+          <nav className="hero-nav" aria-label="Main">
+            <Link href="/" className="hero-nav__link n1">
+              Home
+            </Link>
+            <WipeLink href="/rooms" className="hero-nav__link n2">
+              Rooms
+            </WipeLink>
+            <WipeLink href="/capture" className="hero-nav__link n3">
+              Scan
+            </WipeLink>
+            <WipeLink href="/dev" className="hero-nav__link n4">
+              Basket
+            </WipeLink>
+          </nav>
+        </header>
 
-        <div
-          className="hero-flash"
-          aria-hidden="true"
-          style={{ opacity: flash.opacity, transition: `opacity ${flash.ms}ms ${flash.opacity ? "ease-in-out" : "ease-out"}` }}
-        />
-
-        <div className="hero-inner" aria-hidden={day}>
-          <div className="hero-copy">
-            <div className="hero-eyebrow">Your room, rebuilt in 3D</div>
-            <h1 className={`hero-word ${current.cls}`} lang={current.lang} aria-label="tadaima">
-              <span className="txt">{shown}</span>
-              <span className="hero-caret" aria-hidden="true" />
-            </h1>
-            <div className="hero-actions">
-              <button type="button" className="hero-enter" onClick={enter} disabled={day}>
-                enter your home
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <div className="hero-choices" aria-hidden={!day}>
-          <button type="button" className="hero-mark" onClick={backToHero} aria-label="Back to the start" tabIndex={day ? 0 : -1}>
-            <Image src={mark} alt="" priority />
-          </button>
-          <div className="hero-choice">
-            <button
-              type="button"
-              className="hero-tile"
-              onClick={showScan}
-              aria-expanded={open === "scan"}
-              aria-controls="hero-qr"
-              tabIndex={day ? 0 : -1}
-            >
-              <span className="t">Use your phone to scan</span>
-              <span className="d">Scan your space using a mobile phone (Pro phone required)</span>
-            </button>
-            {open === "scan" && (
-              <div className="hero-qr" id="hero-qr">
-                {qr ? (
-                  <div className="code">
-                    {/* data URL, so next/image has nothing to optimize */}
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={qr} alt="QR code that opens the capture page on your phone" />
-                  </div>
-                ) : null}
-                <small>
-                  Opens capture on your phone, or <a href={captureUrl}>open it on this device</a>.
-                </small>
-              </div>
-            )}
-          </div>
-          <div className="hero-or" aria-hidden="true">
-            or
-          </div>
-          <div className="hero-choice">
-            <button
-              type="button"
-              className="hero-tile"
-              onClick={showType}
-              aria-expanded={open === "type"}
-              aria-controls="hero-addr"
-              tabIndex={day ? 0 : -1}
-            >
-              <span className="t">Type in an address</span>
-              <span className="d">We&apos;ll find the place and set the room up from there.</span>
-            </button>
-            {open === "type" && (
-              <form className="hero-addr" id="hero-addr" onSubmit={submitAddress}>
-                <div className="row">
+        <ul className="hero-list">
+          {ROWS.map((row, i) => (
+            <li key={row.key} className="hero-row">
+              {row.key === "type" && open === "type" ? (
+                <form className="hero-row__inner is-form" onSubmit={submitAddress}>
                   <label htmlFor="hero-address" hidden>
                     Address
                   </label>
@@ -253,25 +192,72 @@ export default function Home() {
                     placeholder="580 Gayley Ave, Los Angeles"
                     value={address}
                     onChange={(e) => setAddress(e.target.value)}
+                    onKeyDown={(e) => e.key === "Escape" && setOpen(null)}
                   />
-                  <button className="go" type="submit">
-                    Go
+                  <button type="submit" className="hero-row__go">
+                    [Go]
                   </button>
-                </div>
-              </form>
-            )}
+                </form>
+              ) : row.key === "demo" ? (
+                <WipeLink href="/rooms" className="hero-row__inner">
+                  <RowText row={row} index={i + 1} />
+                </WipeLink>
+              ) : (
+                <button
+                  type="button"
+                  className="hero-row__inner"
+                  onClick={row.key === "scan" ? showScan : showType}
+                  aria-expanded={row.key === "scan" ? open === "scan" : undefined}
+                >
+                  <RowText row={row} index={i + 1} />
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+
+        {open === "scan" && (
+          <div className="hero-qr">
+            {qr ? (
+              <div className="code">
+                {/* data URL, so next/image has nothing to optimize */}
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={qr} alt="QR code that opens the capture page on your phone" />
+              </div>
+            ) : null}
+            <small>
+              Point your phone here, or <a href={captureUrl}>open capture on this device</a>.
+            </small>
           </div>
-          <div className="hero-or" aria-hidden="true">
-            or
-          </div>
-          <div className="hero-choice">
-            <Link className="hero-tile" href="/rooms" tabIndex={day ? 0 : -1} style={{ textDecoration: "none", color: "inherit" }}>
-              <span className="t">Walk through a demo room</span>
-              <span className="d">Step into rooms we already built and try them with real furniture.</span>
-            </Link>
-          </div>
-        </div>
+        )}
+
+        <h1 className="hero-word" aria-label="tadaima">
+          <span className="hero-word__line" aria-hidden="true">
+            {Array.from("tadaima").map((c, i) => (
+              <span key={i} className="hero-word__char">
+                {c}
+              </span>
+            ))}
+          </span>
+        </h1>
       </DappledLight>
+
+      {!loaderGone && <Loader onLift={reveal} onDone={finishLoading} reduced={reduced} />}
     </main>
+  );
+}
+
+function RowText({ row, index }: { row: Row; index: number }) {
+  return (
+    <>
+      <span className="hero-row__label">{row.label}</span>
+      <span className="hero-row__cue" aria-hidden="true">
+        [Open]
+      </span>
+      <span className="hero-row__index" aria-hidden="true">
+        [{index}]
+      </span>
+      <span className="hero-row__note">{row.note}</span>
+    </>
   );
 }

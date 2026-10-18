@@ -51,7 +51,7 @@
   border: 1px solid var(--line);
   border-radius: 5px;
   color: var(--muted);
-  font-family: var(--font-mono), ui-monospace, monospace;
+  font-family: var(--font-body), system-ui, sans-serif;
   font-size: 10.5px;
   line-height: 1;
 }
