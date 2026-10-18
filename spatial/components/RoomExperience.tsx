@@ -745,6 +745,28 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
     cancelProduct();
     await shopping.place(result.product.id, job.output.request.spot, session.plan.revision, job.id);
   };
+  // a shopping pick the shopper rejects is gone; their own piece goes to inventory
+  const removeByVoice = async (itemId: string) => {
+    const item = shoppingRef.current.session?.plan.items.find((i) => i.id === itemId);
+    if (!item) throw new Error("That piece isn't in the room.");
+    if (item.origin === "proposed_purchase") await shopping.removeItem(itemId);
+    else await shopping.storeAgentItem(itemId, true);
+  };
+  const replaceByVoice = async (result: ShopResult, job: Job<ShopJobOutput>, itemId: string) => {
+    const session = shoppingRef.current.session;
+    const item = session?.plan.items.find((i) => i.id === itemId);
+    if (!session || !item || !job.output) throw new Error("The room isn't connected.");
+    cancelProduct();
+    if (item.locked) await shopping.unlockItem(itemId);
+    const fresh = shoppingRef.current.session!.plan;
+    await shopping.place(result.product.id, { roomId: item.roomId, position: [...item.position], rotationY: item.rotationY }, fresh.revision, job.id, itemId);
+  };
+  const undoByVoice = async () => {
+    const engine = api();
+    if (!engine || !canUndo) return false;
+    engine.undo();
+    return true;
+  };
   const previewFromFetch = async (job: Job<ShopJobOutput>, productId: string) => {
     const owner = shopping.session?.plan.projectId;
     if (blocked || !owner || job.projectId !== owner || !job.output) return false;
@@ -1016,6 +1038,7 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
             onApply={applyByVoice} getProposal={() => agentProposalRef.current} onSetBudget={shopping.setBudget}
             onSearch={assistantSearch} onPreview={(result) => addProduct(result.product)} onPlace={placeByVoice}
             onMove={shopping.moveAgentItem} onStore={shopping.storeAgentItem}
+            onRemove={removeByVoice} onReplace={replaceByVoice} onUndo={undoByVoice}
             onControls={registerVoiceControls} onStateChange={setVoiceState}
           />
           <button
@@ -1069,7 +1092,8 @@ export function RoomExperience({ room, backHref = "/rooms", onPlanChange }: Prop
           <button type="button" className="room-x__tool" onClick={() => safely(() => { unlockFor(selected); api()?.rotate(selected.id, ROTATE_STEP); })} aria-label="Rotate" title="Rotate (R)">
             {Icon.rotate}<span className="room-x__key">R</span>
           </button>
-          <button type="button" className="room-x__tool" onClick={() => safely(() => { unlockFor(selected); putAway(selected); })} aria-label="Put away in inventory" title="Put away (Del)">
+          <button type="button" className="room-x__tool" onClick={() => safely(() => { unlockFor(selected); if (selected.origin === "proposed_purchase") remove(selected); else putAway(selected); })}
+            aria-label={selected.origin === "proposed_purchase" ? "Remove from the room and basket" : "Put away in inventory"} title={selected.origin === "proposed_purchase" ? "Remove (Del)" : "Put away (Del)"}>
             {Icon.close}<span className="room-x__key">Del</span>
           </button>
         </div>

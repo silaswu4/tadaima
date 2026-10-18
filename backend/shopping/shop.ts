@@ -177,7 +177,9 @@ export async function placeProduct(
     if (replacing?.locked) return { ok: false, reason: "locked", message: `${replacing.label} is locked. Unlock it to replace it.` };
     if (replacing?.stored) throw new Unprocessable("Bring a stored piece into the room before replacing it.");
     const replacementSpot = replacing ? { position: replacing.position, rotationY: replacing.rotationY, roomId: replacing.roomId } : body.spot;
-    const fit = placeAt(plan, product, replacementSpot, replacing ? { ignoreItemId: replacing.id, maxShiftM: 0, fallback: false } : undefined);
+    // a swap takes the old piece's spot exactly when it can, else shifts a little (a bigger sofa, say)
+    const exact = replacing ? placeAt(plan, product, replacementSpot, { ignoreItemId: replacing.id, maxShiftM: 0, fallback: false }) : null;
+    const fit = exact?.ok ? exact : placeAt(plan, product, replacementSpot, replacing ? { ignoreItemId: replacing.id, maxShiftM: 0.8, fallback: false } : undefined);
     if (!fit.ok) {
       if (fit.reason === "off_floor") throw new Unprocessable(fit.message);
       return { ok: false, reason: "no_fit", message: fit.message, nearest: fit.nearest };

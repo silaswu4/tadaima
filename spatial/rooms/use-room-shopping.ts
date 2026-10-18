@@ -176,5 +176,20 @@ export function useRoomShopping(options: Options) {
     return result.plan;
   }), [mutate, apply]);
 
-  return { session, busy, connecting, error, job, connect, disconnect, sync, refresh, search, stopSearch, showJob, place, propose, applyProposal, moveAgentItem, storeAgentItem, setBudget };
+  /** Remove a piece outright (a rejected shopping pick); the server checks it like any change. */
+  const removeItem = useCallback((itemId: string) => mutate(async (active) => {
+    const plan = active.session.plan;
+    const result = await roomClient(plan.projectId).change(plan.revision, [{ kind: "remove", itemId }]);
+    if (!result.ok) throw new Error(mutationMessage(result));
+    await apply(result.plan, active.epoch);
+  }), [mutate, apply]);
+
+  const unlockItem = useCallback((itemId: string) => mutate(async (active) => {
+    const plan = active.session.plan;
+    const result = await roomClient(plan.projectId).change(plan.revision, [{ kind: "lock", itemId, locked: false }]);
+    if (!result.ok) throw new Error(mutationMessage(result));
+    await apply(result.plan, active.epoch);
+  }), [mutate, apply]);
+
+  return { session, busy, connecting, error, job, connect, disconnect, sync, refresh, search, stopSearch, showJob, place, propose, applyProposal, moveAgentItem, storeAgentItem, setBudget, removeItem, unlockItem };
 }
