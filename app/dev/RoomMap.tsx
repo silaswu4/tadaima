@@ -1,6 +1,8 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import type { FloorSpot, PlacedItem, RoomPlan, Vector3Meters } from "@/backend/contracts";
+import { dragCheck, turned, type DragCheck } from "@/backend/shopping/drag";
 
 type Pt = readonly [number, number];
 
@@ -44,6 +46,20 @@ function changed(a: PlacedItem, b: PlacedItem) {
   );
 }
 
+interface Drag {
+  id: string;
+  pointerId: number;
+  /** Grab point minus item center, so the piece doesn't jump to the cursor. */
+  offset: [number, number];
+  startClient: [number, number];
+  at: [number, number];
+  rotationY: number;
+  moved: boolean;
+  check: DragCheck | null;
+}
+
+const DRAG_PX = 4;
+
 export function RoomMap({
   plan,
   basePlan,
@@ -53,6 +69,7 @@ export function RoomMap({
   spot,
   onSpot,
   ghost,
+  onDrop,
 }: {
   plan: RoomPlan;
   /** When showing a proposal: the current plan, so changed/removed items can be marked. */
@@ -66,7 +83,52 @@ export function RoomMap({
   onSpot?: (spot: FloorSpot) => void;
   /** A product previewed where it would go, not yet in the plan. */
   ghost?: { label: string; dimensions: Vector3Meters; position: Vector3Meters; rotationY: number } | null;
+  /** Dragging is on when set: called on release with the pose `dragCheck` found. */
+  onDrop?: (item: PlacedItem, pose: DragCheck["pose"]) => void;
 }) {
+  const svgRef = useRef<SVGSVGElement>(null);
+  const [drag, setDrag] = useState<Drag | null>(null);
+  // the click that ends a drag shouldn't also select or pick a spot
+  const swallowClick = useRef(false);
+
+  const toWorld = (clientX: number, clientY: number) => {
+    const ctm = svgRef.current?.getScreenCTM();
+    if (!ctm) return null;
+    const p = new DOMPoint(clientX, clientY).matrixTransform(ctm.inverse());
+    return [p.x, p.y] as [number, number];
+  };
+
+  /** Run the same fit rules the server will, for the piece held at `at`. */
+  const check = (id: string, at: [number, number], offset: [number, number], rotationY: number): DragCheck => {
+    const item = plan.items.find((i) => i.id === id)!;
+    const position: Vector3Meters = [at[0] - offset[0], 0, at[1] - offset[1]];
+    if (item.locked) return { fits: false, pose: { position, rotationY }, snapped: false, droppable: false, problems: ["Locked. Unlock it to move it."] };
+    try {
+      return dragCheck(plan, id, position, rotationY);
+    } catch (e) {
+      return { fits: false, pose: { position, rotationY }, snapped: false, droppable: false, problems: [(e as Error).message] };
+    }
+  };
+
+  // R turns the held piece a quarter
+  const dragging = drag?.moved ? drag.id : null;
+  useEffect(() => {
+    if (!dragging) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "r" && e.key !== "R") return;
+      e.preventDefault();
+      setDrag((d) => {
+        if (!d) return d;
+        const rotationY = turned(d.rotationY, e.shiftKey ? -1 : 1);
+        return { ...d, rotationY, check: check(d.id, d.at, d.offset, rotationY) };
+      });
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // check reads the latest plan through the closure at keypress time
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dragging]);
+
   const g = plan.geometry;
   const all: Pt[] = [...g.rooms.flatMap((r) => r.floorPolygon), ...g.walls.flatMap((w) => [w.start, w.end])];
   const xs = all.map((p) => p[0]);
@@ -80,13 +142,39 @@ export function RoomMap({
   const baseById = new Map(basePlan?.items.map((i) => [i.id, i]) ?? []);
   const removed = basePlan ? basePlan.items.filter((i) => !plan.items.some((p) => p.id === i.id)) : [];
 
-  // draw rugs first so furniture sits on top
-  const items = [...plan.items].sort((a, b) => Number(b.category === "rug") - Number(a.category === "rug"));
+  // draw rugs first so furniture sits on top; stored pieces are in inventory, not on the floor
+  const items = plan.items.filter((i) => !i.stored).sort((a, b) => Number(b.category === "rug") - Number(a.category === "rug"));
+  const held = drag?.moved ? plan.items.find((i) => i.id === drag.id) : undefined;
 
   return (
     <svg
+      ref={svgRef}
       viewBox={`${minX} ${minZ} ${w} ${h}`}
-      className="block h-auto w-full select-none"
+      className="block h-auto w-full touch-none select-none"
+      onPointerMove={(e) => {
+        if (!drag || e.pointerId !== drag.pointerId) return;
+        const moved = drag.moved || Math.hypot(e.clientX - drag.startClient[0], e.clientY - drag.startClient[1]) > DRAG_PX;
+        if (!moved) return;
+        const at = toWorld(e.clientX, e.clientY);
+        if (!at) return;
+        setDrag({ ...drag, moved, at, check: check(drag.id, at, drag.offset, drag.rotationY) });
+      }}
+      onPointerUp={(e) => {
+        if (!drag || e.pointerId !== drag.pointerId) return;
+        const d = drag;
+        setDrag(null);
+        // pointer capture retargets the click to the svg, so a plain click selects here
+        swallowClick.current = true;
+        if (!d.moved) return onSelect(d.id);
+        const item = plan.items.find((i) => i.id === d.id);
+        if (item && d.check?.droppable) onDrop?.(item, d.check.pose);
+      }}
+      onPointerCancel={() => setDrag(null)}
+      onClickCapture={(e) => {
+        if (!swallowClick.current) return;
+        swallowClick.current = false;
+        e.stopPropagation();
+      }}
       onClick={(e) => {
         const ctm = e.currentTarget.getScreenCTM();
         // screen to world: the viewBox is in meters, x right, z down the page
@@ -187,7 +275,24 @@ export function RoomMap({
         return (
           <g
             key={i.id}
-            className="cursor-pointer"
+            className={onDrop ? "cursor-grab" : "cursor-pointer"}
+            opacity={held?.id === i.id ? 0.3 : 1}
+            onPointerDown={(e) => {
+              if (!onDrop || e.button !== 0) return;
+              const at = toWorld(e.clientX, e.clientY);
+              if (!at) return;
+              svgRef.current?.setPointerCapture(e.pointerId);
+              setDrag({
+                id: i.id,
+                pointerId: e.pointerId,
+                offset: [at[0] - i.position[0], at[1] - i.position[2]],
+                startClient: [e.clientX, e.clientY],
+                at,
+                rotationY: i.rotationY,
+                moved: false,
+                check: null,
+              });
+            }}
             onClick={(e) => {
               e.stopPropagation();
               onSelect(i.id);
@@ -247,6 +352,9 @@ export function RoomMap({
         );
       })}
       {ghost && <Ghost ghost={ghost} />}
+      {held && drag?.check && (
+        <Held item={held} check={drag.check} hand={[drag.at[0] - drag.offset[0], 0, drag.at[1] - drag.offset[1]]} />
+      )}
 
       {spot && (
         <g pointerEvents="none" transform={`translate(${spot.position[0]} ${spot.position[2]})`}>
@@ -274,6 +382,46 @@ function Ghost({ ghost }: { ghost: { label: string; dimensions: Vector3Meters; p
       <line x1={back[0]} y1={back[1]} x2={tip[0]} y2={tip[1]} stroke="#2563eb" strokeWidth="0.025" markerEnd="url(#front)" />
       <text x={cx} y={cz} fontSize="0.09" fill="#1d4ed8" textAnchor="middle" dominantBaseline="middle" fontWeight={600}>
         {short(ghost.label)}
+      </text>
+    </g>
+  );
+}
+
+/** The piece in the shopper's hand: green fits, amber snaps to the nearest fit, red can't drop. */
+function Held({ item, check, hand }: { item: PlacedItem; check: DragCheck; hand: Vector3Meters }) {
+  const color = check.fits ? "#059669" : check.droppable ? "#d97706" : "#dc2626";
+  const fill = check.fits ? "rgba(16,185,129,0.22)" : check.droppable ? "rgba(245,158,11,0.20)" : "rgba(239,68,68,0.18)";
+  const shown = { ...item, ...check.pose };
+  const corners = footprint(shown);
+  const [cx, , cz] = check.pose.position;
+  const d = item.dimensions?.[2] ?? 0.3;
+  const fx = Math.sin(check.pose.rotationY);
+  const fz = Math.cos(check.pose.rotationY);
+  const zs = corners.map((c) => c[1]);
+  const note = check.fits ? null : check.droppable ? "snaps here" : (check.problems[0] ?? "doesn't fit");
+  return (
+    <g pointerEvents="none">
+      {/* where the hand actually is, when the drop snaps elsewhere */}
+      {check.snapped && (
+        <polygon points={pts(footprint({ ...item, position: hand, rotationY: check.pose.rotationY }))} fill="none" stroke="#a1a1aa" strokeWidth="0.015" strokeDasharray="0.05 0.04" />
+      )}
+      <polygon points={pts(corners)} fill={fill} stroke={color} strokeWidth="0.035" />
+      <line x1={cx + fx * (d / 2)} y1={cz + fz * (d / 2)} x2={cx + fx * (d / 2 + 0.12)} y2={cz + fz * (d / 2 + 0.12)} stroke={color} strokeWidth="0.025" />
+      {(() => {
+        const { lines, fs } = fitLabel(short(item.label), corners);
+        return lines.map((line, k) => (
+          <text key={k} x={cx} y={cz + fs * 1.15 * (k - (lines.length - 1) / 2)} fontSize={fs} fill="#18181b" textAnchor="middle" dominantBaseline="middle" fontWeight={600}>
+            {line}
+          </text>
+        ));
+      })()}
+      {note && (
+        <text x={cx} y={Math.max(...zs) + 0.12} fontSize="0.085" fill={color} textAnchor="middle" dominantBaseline="middle" fontWeight={600}>
+          {note.length > 60 ? note.slice(0, 59) + "..." : note}
+        </text>
+      )}
+      <text x={cx} y={Math.min(...zs) - 0.08} fontSize="0.07" fill="#71717a" textAnchor="middle" dominantBaseline="middle">
+        R to turn
       </text>
     </g>
   );

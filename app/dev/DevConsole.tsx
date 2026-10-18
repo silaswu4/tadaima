@@ -7,6 +7,8 @@ import { RoomMap } from "./RoomMap";
 import { VoicePanel } from "./VoicePanel";
 import { CheckoutPanel } from "./CheckoutPanel";
 import { ShopPanel, type Ghost } from "./ShopPanel";
+import { InventoryCard } from "./InventoryCard";
+import { dropChange, type DragCheck } from "@/backend/shopping/drag";
 
 interface LogEntry {
   id: number;
@@ -130,6 +132,14 @@ export function DevConsole() {
     setNotice(applyMessage(r, error));
   }
 
+  /** A piece let go on the map: save the pose dragCheck found (a stored piece comes out of inventory). */
+  async function onDrop(item: { id: string; stored?: boolean }, pose: DragCheck["pose"]) {
+    if (!plan) return;
+    const r = await api<ApplyResult>("POST", `${base}/changes`, { expectedRevision: plan.revision, changes: [dropChange(item, pose)] });
+    if (!r.data?.ok) onApply(r.data, r.error);
+    await refresh();
+  }
+
   return (
     <div className="dev-console">
       <header className="sticky top-0 z-10 border-b border-zinc-200 bg-white/90 backdrop-blur">
@@ -209,6 +219,7 @@ export function DevConsole() {
                     spot={spot}
                     onSpot={setSpot}
                     ghost={ghost}
+                    onDrop={showProposal ? undefined : onDrop}
                   />
                 </div>
               ) : (
@@ -254,6 +265,7 @@ export function DevConsole() {
                 onResearchDone={refresh}
               />
             )}
+            {plan && <InventoryCard key={`inv:${base}`} base={base} plan={plan} spot={spot} onChanged={refresh} />}
             <ShopPanel
               key={`shop:${base}`}
               base={base}
@@ -384,6 +396,7 @@ function ItemCard({
   const [merchant, setMerchant] = useState<"IKEA" | "Target">("IKEA");
   const [job, setJob] = useState<Job<ResearchJobOutput> | null>(null);
   const [jobErr, setJobErr] = useState<string | null>(null);
+  const [storeMsg, setStoreMsg] = useState<{ text: string; locked: boolean } | null>(null);
 
   useEffect(() => {
     if (!inLive) return;
@@ -443,6 +456,14 @@ function ItemCard({
     await onChanged(r.data, r.error);
   }
 
+  async function putAway(unlock = false) {
+    setStoreMsg(null);
+    const r = await api<ApplyResult | { ok: false; reason: "locked"; message: string }>("POST", `${base}/items/${encodeURIComponent(itemId)}/store`, { unlock });
+    const res = r.data;
+    if (res && !res.ok && res.reason === "locked") return setStoreMsg({ text: res.message, locked: true });
+    await onChanged(res as ApplyResult | null, r.error);
+  }
+
   async function shop() {
     setJobErr(null);
     setJob(null);
@@ -496,9 +517,29 @@ function ItemCard({
       )}
 
       {inLive ? (
-        <button className="btn mb-3" onClick={toggleLock}>
-          {livePlan.items.find((i) => i.id === itemId)?.locked ? "Unlock" : "Lock"}
-        </button>
+        <div className="mb-3">
+          <div className="flex gap-2">
+            <button className="btn" onClick={toggleLock}>
+              {livePlan.items.find((i) => i.id === itemId)?.locked ? "Unlock" : "Lock"}
+            </button>
+            {!livePlan.items.find((i) => i.id === itemId)?.stored && (
+              <button className="btn" onClick={() => putAway()}>
+                Put away
+              </button>
+            )}
+          </div>
+          {storeMsg && (
+            <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-red-700">
+              <span>{storeMsg.text}</span>
+              {storeMsg.locked && (
+                <button className="btn" onClick={() => putAway(true)}>
+                  Put away anyway (unlock)
+                </button>
+              )}
+            </div>
+          )}
+          {livePlan.items.find((i) => i.id === itemId)?.stored && <p className="mt-1.5 text-xs text-zinc-500">In inventory. Take it out from the Inventory card.</p>}
+        </div>
       ) : (
         <p className="mb-3 text-xs text-violet-700">Only in the proposal. Apply it to edit or shop for this item.</p>
       )}
